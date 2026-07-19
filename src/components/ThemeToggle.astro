@@ -38,10 +38,29 @@
 </button>
 
 <script>
-  document.getElementById('theme-toggle')?.addEventListener('click', () => {
+  const button = document.getElementById('theme-toggle');
+  const syncPressed = () => {
+    button?.setAttribute(
+      'aria-pressed',
+      String(document.documentElement.classList.contains('dark')),
+    );
+  };
+  syncPressed();
+
+  button?.addEventListener('click', () => {
     const dark = document.documentElement.classList.toggle('dark');
     try {
       localStorage.setItem('theme', dark ? 'dark' : 'light');
     } catch {}
+    syncPressed();
+  });
+
+  // follow live system changes while the visitor hasn't chosen explicitly
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    try {
+      if (localStorage.getItem('theme')) return;
+    } catch {}
+    document.documentElement.classList.toggle('dark', e.matches);
+    syncPressed();
   });
 </script>

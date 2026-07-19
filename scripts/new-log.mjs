@@ -7,7 +7,7 @@
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { makePrompter, slugify, today, yamlQuote, promptCategory } from './lib.mjs';
+import { makePrompter, slugify, promptDate, yamlQuote, promptCategory } from './lib.mjs';
 
 const KINDS = ['workshop', 'short-course', 'talk', 'certification', 'milestone', 'other'];
 
@@ -24,9 +24,9 @@ if (!KINDS.includes(kind)) {
   console.log(`Unknown kind "${kind}" — using "other".`);
   kind = 'other';
 }
+const date = await promptDate(rl);
 rl.close();
 
-const date = today();
 const slug = `${date}-${slugify(title) || 'log'}`;
 const dir = new URL(`../src/content/logs/${slug}/`, import.meta.url);
 if (existsSync(dir)) {

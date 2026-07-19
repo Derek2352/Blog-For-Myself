@@ -197,7 +197,19 @@ export async function allTags(): Promise<string[]> {
  * Hrefs. A log with no body is a terminal card — no dead detail page.
  * ------------------------------------------------------------------ */
 export const logHasBody = (log: Log): boolean =>
-  !!log.body && log.body.trim().length > 0;
+  !!log.body && log.body.replace(/<!--[\s\S]*?-->/g, '').trim().length > 0;
+
+/**
+ * True once an entry's reflection has real prose — i.e. the body contains
+ * more than the four template headings and comments. Unwritten reflections
+ * get a graceful placeholder instead of four bare headings.
+ */
+export const reflectionWritten = (entry: Entry): boolean =>
+  !!entry.body &&
+  entry.body
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/^##\s.*$/gm, '')
+    .trim().length > 0;
 
 export const entryHref = (entry: Entry): string => `/entry/${entry.id}/`;
 export const logHref = (log: Log): string | undefined =>

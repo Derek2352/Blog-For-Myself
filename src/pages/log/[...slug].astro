@@ -52,7 +52,7 @@ const texture = resolveTexture(category ?? { slug: log.data.category });
       <p class="rail mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <span>{isoDay(log.data.date)}</span>
         <KindBadge kind={log.data.kind} />
-        <a href="/monthly/" class="hover:text-accent">{period.label}</a>
+        <a href={`/monthly/#period-${period.id}`} class="hover:text-accent">{period.label}</a>
         {
           category && (
             <a href={categoryHref(category.slug)} class="hover:text-accent">

@@ -76,6 +76,16 @@ export const slugify = (s) =>
 
 export const today = () => new Date().toISOString().slice(0, 10);
 
+/** Optional date prompt (for backfilling); defaults to today, validates YYYY-MM-DD. */
+export async function promptDate(rl) {
+  for (;;) {
+    const input = (await rl.question(`Date [${today()}]: `)).trim();
+    if (!input) return today();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(input) && !Number.isNaN(Date.parse(input))) return input;
+    console.log('Use YYYY-MM-DD (or press Enter for today).');
+  }
+}
+
 const xmlEscape = (s) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 

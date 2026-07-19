@@ -9,7 +9,11 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
   site: 'https://blog-for-myself.pages.dev',
   output: 'static',
-  integrations: [mdx(), sitemap()],
+  integrations: [
+    mdx(),
+    // OG-card image endpoints are routes, not pages — keep them out of the sitemap
+    sitemap({ filter: (page) => !page.includes('/og/') }),
+  ],
   vite: {
     plugins: [tailwindcss()],
   },

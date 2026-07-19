@@ -14,6 +14,7 @@ import {
   categoryHref,
   entryHref,
   sortForCategory,
+  reflectionWritten,
   type Entry,
 } from '@/lib/content';
 import { categoryBySlug } from '@/data/categories';
@@ -30,6 +31,7 @@ interface Props {
 
 const { entry } = Astro.props;
 const { Content } = await render(entry);
+const hasReflection = reflectionWritten(entry);
 const code = await entryCode(entry);
 const category = categoryBySlug(entry.data.category);
 const related = await relatedEntries(entry);
@@ -105,9 +107,30 @@ const nextCode = next ? await entryCode(next) : '';
 
     <div class="mt-10 grid gap-10 lg:grid-cols-[16rem_1fr] lg:gap-14">
       <MetadataRail entry={entry} />
-      <div class="prose-reflection min-w-0">
-        <Content />
-      </div>
+      {
+        hasReflection ? (
+          <div class="prose-reflection min-w-0">
+            <Content />
+          </div>
+        ) : (
+          <div class="min-w-0 self-start border-t border-line pt-6">
+            <p class="font-display text-2xl italic leading-snug">
+              The full reflection is still being written.
+            </p>
+            <p class="mt-3 max-w-prose text-sm leading-relaxed text-muted">
+              Every entry here ends the same way — what it was, what I did, what I learned,
+              and how it felt. This one's words are coming; the rail alongside has the facts
+              meanwhile.
+            </p>
+            {import.meta.env.DEV && (
+              <p class="rail mt-4 text-signal-text">
+                dev note: write the four sections in this entry's index.md and this
+                placeholder disappears
+              </p>
+            )}
+          </div>
+        )
+      }
     </div>
 
     {

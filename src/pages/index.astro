@@ -111,7 +111,8 @@ const catIndex = (await getCategoryIndex()).filter((c) => c.entryCount + c.logCo
             </div>
             <figcaption class="rail mt-3 flex flex-wrap justify-between gap-x-4 gap-y-1">
               <span>
-                {heroCode} · {monthKey(hero.data.date)} · {hero.data.category}
+                {heroCode} · {monthKey(hero.data.date)} ·{' '}
+                {categoryBySlug(hero.data.category)?.label ?? hero.data.category}
               </span>
               <span class="transition-colors group-hover:text-accent">{hero.data.title} →</span>
             </figcaption>

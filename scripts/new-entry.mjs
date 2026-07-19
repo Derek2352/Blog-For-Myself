@@ -11,7 +11,7 @@
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { makePrompter, slugify, today, yamlQuote, promptCategory, placeholderSVG } from './lib.mjs';
+import { makePrompter, slugify, promptDate, yamlQuote, promptCategory, placeholderSVG } from './lib.mjs';
 import { photoPlan } from './photo-rules.mjs';
 
 const rl = makePrompter();
@@ -22,9 +22,9 @@ if (!title) {
   process.exit(1);
 }
 const category = await promptCategory(rl);
+const date = await promptDate(rl);
 rl.close();
 
-const date = today();
 const slug = slugify(title) || `entry-${date}`;
 const dir = new URL(`../src/content/entries/${slug}/`, import.meta.url);
 if (existsSync(dir)) {
@@ -38,6 +38,7 @@ title: ${yamlQuote(title)}
 category: ${yamlQuote(category)}
 date: ${date}
 # endDate: ${date}
+# updated: ${date}  # set when you write/revise the reflection
 # role: ""
 # organization: ""
 # location: ""

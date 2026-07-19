@@ -3,11 +3,11 @@ import ThemeToggle from './ThemeToggle.astro';
 import TabBar from './TabBar.astro';
 import { site } from '@/data/site';
 
-const utility = [
+const utility: { href: string; label: string; title?: string }[] = [
   { href: '/monthly/', label: 'Monthly' },
   { href: '/timeline/', label: 'Timeline' },
   { href: '/about/', label: 'About' },
-  { href: '/search/', label: 'Search' },
+  { href: '/search/', label: 'Search', title: 'Press / to search' },
 ];
 const path = Astro.url.pathname.replace(/\/?$/, '/');
 ---
@@ -25,6 +25,7 @@ const path = Astro.url.pathname.replace(/\/?$/, '/');
         utility.map((item) => (
           <a
             href={item.href}
+            title={item.title}
             aria-current={path === item.href ? 'page' : undefined}
             class:list={[
               'py-1 transition-colors hover:text-accent',
@@ -44,3 +45,20 @@ const path = Astro.url.pathname.replace(/\/?$/, '/');
 </header>
 
 <p class="sr-only">{site.tagline}</p>
+
+<script>
+  // "/" jumps to search from anywhere (unless you're typing somewhere)
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+    const target = e.target as HTMLElement | null;
+    if (
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target?.isContentEditable
+    ) {
+      return;
+    }
+    e.preventDefault();
+    window.location.href = '/search/';
+  });
+</script>

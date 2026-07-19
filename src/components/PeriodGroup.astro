@@ -29,10 +29,17 @@ const headingId = `period-${group.ref.id}`;
       }
       {group.count === 1 ? 'item' : 'items'}
     </p>
-    <Heading id={headingId} class="mt-1 font-display text-3xl sm:text-4xl">
+    {/* named periods get the full reel treatment; fallback months stay quieter */}
+    <Heading
+      id={headingId}
+      class:list={[
+        'mt-1 font-display',
+        group.ref.kind === 'period' ? 'text-3xl sm:text-4xl' : 'text-2xl',
+      ]}
+    >
       {group.ref.label}
     </Heading>
-    <div class="reel-ticks mt-3" aria-hidden="true"></div>
+    {group.ref.kind === 'period' && <div class="reel-ticks mt-3" aria-hidden="true" />}
   </header>
 
   {

@@ -6,10 +6,11 @@
  * Items missing the most come first. Nothing here blocks the build —
  * it's a gentle monthly nudge, not a gate.
  */
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { photoPlan } from './photo-rules.mjs';
 
 const ROOT = new URL('../src/content/', import.meta.url);
+const OVERSIZE_BYTES = 2 * 1024 * 1024; // resize anything bigger before committing
 
 const frontmatter = (src) => src.match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1] ?? '';
 const str = (fm, key) => fm.match(new RegExp(`^${key}:\\s*"(.*)"`, 'm'))?.[1];
@@ -81,6 +82,38 @@ for (const r of rows) {
     );
     console.log(`   ideas: ${r.plan.shots.join(' · ')}`);
   }
+}
+
+// oversized images sneak in from phone camera rolls — flag them
+const oversized = [];
+for (const kind of ['entries', 'logs']) {
+  const base = new URL(`${kind}/`, ROOT);
+  for (const dirent of await readdir(base, { withFileTypes: true })) {
+    if (!dirent.isDirectory()) continue;
+    for (const sub of ['', 'images/']) {
+      let files;
+      try {
+        files = await readdir(new URL(`${dirent.name}/${sub}`, base));
+      } catch {
+        continue;
+      }
+      for (const f of files) {
+        if (!/\.(jpe?g|png|webp|avif|gif|svg)$/i.test(f)) continue;
+        const s = await stat(new URL(`${dirent.name}/${sub}${f}`, base));
+        if (s.size > OVERSIZE_BYTES) {
+          oversized.push({
+            path: `src/content/${kind}/${dirent.name}/${sub}${f}`,
+            mb: (s.size / 1024 / 1024).toFixed(1),
+          });
+        }
+      }
+    }
+  }
+}
+if (oversized.length > 0) {
+  console.log('\n' + '─'.repeat(56));
+  console.log('OVERSIZED IMAGES — resize to ~2000px on the long edge first:');
+  for (const o of oversized) console.log(`   ${o.mb} MB  ${o.path}`);
 }
 
 const done = rows.filter((r) => r.missing === 0).length;

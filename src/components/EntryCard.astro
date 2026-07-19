@@ -75,7 +75,9 @@ const range = railRange(entry.data.date, entry.data.endDate);
           {entry.data.role && (
             <>
               <span aria-hidden="true">·</span>
-              <span>{entry.data.role}</span>
+              <span class="inline-block max-w-[26ch] truncate align-bottom" title={entry.data.role}>
+                {entry.data.role}
+              </span>
             </>
           )}
           {entry.data.draft && <span class="text-signal-text">· draft</span>}

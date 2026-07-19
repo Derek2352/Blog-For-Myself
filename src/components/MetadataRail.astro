@@ -8,7 +8,7 @@ import type { Entry } from '@/lib/content';
 import { entryCode, categoryHref } from '@/lib/content';
 import { categoryBySlug } from '@/data/categories';
 import { resolvePeriod } from '@/lib/periods';
-import { railRange, humanRange } from '@/lib/format';
+import { railRange, humanRange, monthKey } from '@/lib/format';
 import TagChip from './TagChip.astro';
 import LinkPill from './LinkPill.astro';
 
@@ -39,9 +39,19 @@ const period = resolvePeriod(d.date);
     <div class="py-3">
       <dt class="rail">Period</dt>
       <dd class="mt-1">
-        <a href="/monthly/" class="transition-colors hover:text-accent">{period.label}</a>
+        <a href={`/monthly/#period-${period.id}`} class="transition-colors hover:text-accent">
+          {period.label}
+        </a>
       </dd>
     </div>
+    {
+      d.updated && (
+        <div class="py-3">
+          <dt class="rail">Reflection updated</dt>
+          <dd class="mt-1 font-mono text-sm tracking-wide">{monthKey(d.updated)}</dd>
+        </div>
+      )
+    }
     {
       category && (
         <div class="py-3">

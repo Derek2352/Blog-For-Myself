@@ -136,6 +136,22 @@ passages you can wrap them: `<span lang="zh-Hant">…</span>`.
 - **CI:** `.github/workflows/ci.yml` runs the full build on every push — a bad
   frontmatter edit fails there instead of breaking a deploy.
 
+## Small details worth knowing
+
+- Both `new-entry` and `new-log` ask for a **date** (Enter = today) so backfilling old
+  items needs no hand-editing; entries also take an optional `updated:` date shown on the
+  rail once you write the reflection.
+- Entries whose reflection is still the template show a graceful **"still being
+  written"** note publicly instead of four empty headings — write the sections and it
+  disappears.
+- Press **`/`** anywhere to jump to search. Entry pages **print cleanly** (chrome and
+  patterns drop out) for anyone who PDFs them. `public/_headers` ships immutable caching
+  for build assets + basic security headers on Cloudflare/Netlify.
+- `npm run photos` also flags **images over 2 MB** — resize to ~2000px on the long edge
+  before committing.
+- Draft-preview builds (`build:drafts`) emit `noindex` so a leaked preview URL never gets
+  into search engines.
+
 ## Personal touches
 
 - **`note` field (entries):** an optional one-line aside in your own voice

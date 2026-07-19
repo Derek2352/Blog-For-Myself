@@ -35,6 +35,8 @@ const entries = defineCollection({
       category: categoryField, // drives the tab
       date: z.coerce.date(), // start date (sorting + timeline + period)
       endDate: z.coerce.date().optional(),
+      /** When you wrote/last revised the reflection — shown on the rail. */
+      updated: z.coerce.date().optional(),
       role: z.string().optional(), // "Individual Champion", "Selected Delegate", …
       organization: z.string().optional(),
       location: z.string().optional(),

@@ -290,6 +290,31 @@
   .prose-reflection hr { border: 0; border-top: 1px solid var(--color-line); }
 }
 
+/* ---- print: entries as clean handouts (recruiters print things) ---- */
+@media print {
+  :root, .dark {
+    --color-ground: #ffffff;
+    --color-surface: #ffffff;
+    --color-ink: #111111;
+    --color-muted: #444444;
+    --color-line: #dddddd;
+    --color-accent: #1a3a99;
+    --color-signal-text: #7a4d0e;
+  }
+  .page-bg,
+  header nav,
+  .tabbar,
+  footer,
+  dialog,
+  [data-pagefind-ignore],
+  [data-video-play] {
+    display: none !important;
+  }
+  .reveal, .reveal-2, .reveal-3 { animation: none !important; opacity: 1 !important; }
+  a { text-decoration: none; color: inherit; }
+  .prose-reflection a { color: var(--color-accent); text-decoration: underline; }
+}
+
 /* ---- motion: one hero reveal + gentle hovers; both opt-out aware ---- */
 @media (prefers-reduced-motion: no-preference) {
   .reveal, .reveal-2, .reveal-3 {

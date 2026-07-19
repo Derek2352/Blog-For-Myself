@@ -59,6 +59,8 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
       href={new URL('rss.xml', Astro.site)}
     />
     <meta name="color-scheme" content="light dark" />
+    {/* Draft-preview deploys must never be indexed if the URL leaks */}
+    {isDraftPreviewBuild && <meta name="robots" content="noindex, nofollow" />}
 
     <meta property="og:title" content={title ?? pageTitle} />
     <meta property="og:description" content={description} />
