@@ -1,0 +1,308 @@
+---
+/**
+ * The site cat — a small ink-silhouette companion that wanders the bottom
+ * edge of the page. It walks, pauses to sway its tail, sometimes slips off
+ * one side and returns from the other, occasionally climbs a little way up
+ * a side edge, and scampers if you tap it. It persists across client-side
+ * page transitions, so it's one cat for the whole visit.
+ *
+ * Decorative only: aria-hidden, pointer-events limited to its own body,
+ * and under prefers-reduced-motion it simply sits still in the corner.
+ * To retire the cat, remove <SiteCat /> from Base.astro.
+ */
+---
+
+<div id="site-cat" transition:persist="site-cat" aria-hidden="true">
+  <span class="cat-flip">
+    <svg viewBox="0 0 64 40" width="48" height="30" fill="currentColor" class="cat-svg">
+      <g class="cat-tail">
+        <path
+          d="M11 23 C4 21 1.5 13 7 7"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="3.4"
+          stroke-linecap="round"></path>
+      </g>
+      <g class="cat-legs">
+        <rect class="cat-leg leg-a" x="16" y="27" width="3.6" height="11" rx="1.8"></rect>
+        <rect class="cat-leg leg-b" x="23" y="27" width="3.6" height="11" rx="1.8"></rect>
+        <rect class="cat-leg leg-a" x="38" y="27" width="3.6" height="11" rx="1.8"></rect>
+        <rect class="cat-leg leg-b" x="45" y="27" width="3.6" height="11" rx="1.8"></rect>
+      </g>
+      <path
+        class="cat-body"
+        d="M14 29.5 C10 28.5 9.5 20 16 16.4 C18.5 15.3 21 15 24 15 L45 15 C52 15.5 55 19 55 23.5 L55 26.5 C55 28.5 53.5 29.5 51.5 29.5 Z">
+      </path>
+      <g class="cat-head">
+        <path class="cat-ear ear-far" d="M48 9 L49.5 1.5 L54 6.5 Z"></path>
+        <path class="cat-ear ear-near" d="M56.5 6.5 L61 1.5 L62.5 9 Z"></path>
+        <circle cx="55" cy="13" r="7.6"></circle>
+        <circle class="cat-eye" cx="57.5" cy="11.5" r="1.15"></circle>
+      </g>
+    </svg>
+  </span>
+</div>
+
+<style>
+  #site-cat {
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    z-index: 40;
+    width: 48px;
+    height: 30px;
+    pointer-events: none;
+    will-change: transform;
+    color: var(--color-ink);
+    opacity: 0.9;
+    /* soft paper halo so the silhouette stays readable over dark covers */
+    filter: drop-shadow(0 0 2.5px var(--color-ground));
+    /* parked off-screen until the script places it */
+    transform: translateX(-80px);
+  }
+  .cat-svg {
+    display: block;
+    pointer-events: auto;
+    cursor: pointer;
+  }
+  .cat-flip {
+    display: block;
+  }
+  #site-cat.face-left .cat-flip {
+    transform: scaleX(-1);
+  }
+  .cat-eye {
+    fill: var(--color-ground);
+  }
+  .cat-leg,
+  .cat-tail,
+  .cat-ear {
+    transform-box: fill-box;
+  }
+  .cat-leg {
+    transform-origin: center top;
+  }
+  .cat-tail {
+    transform-origin: right bottom;
+  }
+  .cat-ear {
+    transform-origin: center bottom;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    #site-cat.walking .leg-a {
+      animation: cat-step 0.38s ease-in-out infinite;
+    }
+    #site-cat.walking .leg-b {
+      animation: cat-step 0.38s ease-in-out infinite;
+      animation-delay: -0.19s;
+    }
+    #site-cat.walking .cat-svg {
+      animation: cat-bob 0.38s ease-in-out infinite;
+    }
+    #site-cat .cat-tail {
+      animation: cat-sway 2.6s ease-in-out infinite;
+    }
+    #site-cat.walking .cat-tail {
+      animation-duration: 1.1s;
+    }
+    #site-cat.idle .ear-near {
+      animation: cat-ear 5.5s ease-in-out infinite;
+    }
+    #site-cat.startled .cat-svg {
+      animation: cat-hop 0.35s cubic-bezier(0.2, 0.6, 0.2, 1);
+    }
+  }
+
+  @keyframes cat-step {
+    0%, 100% { transform: rotate(16deg); }
+    50% { transform: rotate(-16deg); }
+  }
+  @keyframes cat-bob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-1px); }
+  }
+  @keyframes cat-sway {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(14deg); }
+  }
+  @keyframes cat-ear {
+    0%, 90%, 100% { transform: rotate(0deg); }
+    93% { transform: rotate(-18deg); }
+    96% { transform: rotate(4deg); }
+  }
+  @keyframes cat-hop {
+    0%, 100% { transform: translateY(0) scale(1, 1); }
+    35% { transform: translateY(-9px) scale(0.96, 1.05); }
+    75% { transform: translateY(0) scale(1.04, 0.94); }
+  }
+</style>
+
+<script>
+  const CAT_W = 48;
+  const CAT_H = 30;
+
+  interface CatState {
+    x: number;
+    dir: 1 | -1;
+    speed: number;
+    mode: 'walk' | 'idle' | 'away' | 'climb';
+    until: number;
+    climbY: number;
+    climbSide: 1 | -1;
+    climbPhase: 'up' | 'rest' | 'down';
+  }
+
+  function initCat(root: HTMLElement): void {
+    if (root.dataset.init) return;
+    root.dataset.init = '1';
+
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      // a still cat, sitting quietly in the corner
+      root.classList.add('idle');
+      root.style.transform = `translateX(${Math.max(0, window.innerWidth - CAT_W - 20)}px)`;
+      return;
+    }
+
+    const s: CatState = {
+      x: Math.min(140, window.innerWidth * 0.2),
+      dir: 1,
+      speed: 42,
+      mode: 'walk',
+      until: performance.now() + 4000,
+      climbY: 0,
+      climbSide: 1,
+      climbPhase: 'up',
+    };
+    const rand = (a: number, b: number) => a + Math.random() * (b - a);
+    const maxX = () => window.innerWidth - CAT_W;
+
+    const setClasses = () => {
+      root.classList.toggle('walking', s.mode === 'walk' || s.mode === 'away' || s.mode === 'climb');
+      root.classList.toggle('idle', s.mode === 'idle');
+      root.classList.toggle('face-left', s.dir === -1);
+    };
+
+    const chooseNext = (now: number) => {
+      if (s.mode === 'walk') {
+        s.mode = 'idle';
+        s.until = now + rand(1600, 4200);
+      } else {
+        s.mode = 'walk';
+        s.speed = rand(34, 58);
+        if (Math.random() < 0.45) s.dir = s.dir === 1 ? -1 : 1;
+        s.until = now + rand(2600, 7000);
+      }
+      setClasses();
+    };
+
+    const render = () => {
+      if (s.mode === 'climb') {
+        // a short scramble up the side edge: rotate to vertical, feet on the wall
+        const rot = s.climbSide === 1 ? -90 : 90;
+        const cx = s.climbSide === 1 ? window.innerWidth - CAT_W / 2 - CAT_H / 2 : CAT_H / 2 - CAT_W / 2;
+        root.style.transform = `translate(${cx}px, ${-s.climbY}px) rotate(${rot}deg)`;
+      } else {
+        root.style.transform = `translateX(${s.x}px)`;
+      }
+    };
+
+    let last = performance.now();
+    const tick = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+
+      if (s.mode === 'walk' || s.mode === 'away') {
+        s.x += s.dir * s.speed * dt;
+        if (s.mode === 'walk') {
+          if ((s.dir === 1 && s.x >= maxX() - 4) || (s.dir === -1 && s.x <= 4)) {
+            const roll = Math.random();
+            if (roll < 0.3) {
+              // climb a little way up this edge
+              s.mode = 'climb';
+              s.climbSide = s.dir === 1 ? 1 : -1;
+              s.climbPhase = 'up';
+              s.climbY = 0;
+              s.until = now + 12000;
+              // face "up" the wall
+              s.dir = s.climbSide === 1 ? -1 : 1;
+            } else if (roll < 0.55) {
+              // slip out of the room, come back from the other side
+              s.mode = 'away';
+              s.until = now + rand(2800, 7000);
+            } else {
+              s.dir = s.dir === 1 ? -1 : 1;
+            }
+            setClasses();
+          }
+          if (now > s.until) chooseNext(now);
+        } else {
+          // away: keep walking off-screen, then re-enter from the other side
+          if (s.x > window.innerWidth + CAT_W || s.x < -CAT_W * 2) {
+            if (now > s.until) {
+              s.dir = s.dir === 1 ? -1 : 1;
+              s.x = s.dir === 1 ? -CAT_W : window.innerWidth;
+              s.mode = 'walk';
+              s.speed = rand(34, 58);
+              s.until = now + rand(3000, 7000);
+              setClasses();
+            }
+          }
+        }
+      } else if (s.mode === 'climb') {
+        const climbSpeed = 30;
+        if (s.climbPhase === 'up') {
+          s.climbY += climbSpeed * dt;
+          if (s.climbY >= rand(70, 120)) {
+            s.climbPhase = 'rest';
+            s.until = now + rand(1200, 2600);
+            root.classList.remove('walking');
+            root.classList.add('idle');
+          }
+        } else if (s.climbPhase === 'rest') {
+          if (now > s.until) {
+            s.climbPhase = 'down';
+            s.dir = s.dir === 1 ? -1 : 1; // turn to head back down
+            root.classList.add('walking');
+            root.classList.remove('idle');
+          }
+        } else {
+          s.climbY -= climbSpeed * dt;
+          if (s.climbY <= 0) {
+            s.climbY = 0;
+            s.mode = 'walk';
+            s.x = s.climbSide === 1 ? maxX() - 6 : 6;
+            s.dir = s.climbSide === 1 ? -1 : 1; // walk back into the room
+            s.until = now + rand(3000, 6500);
+            setClasses();
+          }
+        }
+      } else if (now > s.until) {
+        chooseNext(now);
+      }
+
+      render();
+      requestAnimationFrame(tick);
+    };
+
+    // tap the cat → startled hop, then it scampers off
+    root.querySelector('.cat-svg')?.addEventListener('click', () => {
+      if (s.mode === 'climb') return;
+      root.classList.add('startled');
+      setTimeout(() => root.classList.remove('startled'), 380);
+      s.mode = 'away';
+      s.dir = s.x > window.innerWidth / 2 ? 1 : -1;
+      s.speed = 150;
+      s.until = performance.now() + rand(4000, 9000);
+      setClasses();
+    });
+
+    setClasses();
+    requestAnimationFrame(tick);
+  }
+
+  document.addEventListener('astro:page-load', () => {
+    const el = document.getElementById('site-cat');
+    if (el) initCat(el);
+  });
+</script>

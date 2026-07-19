@@ -162,6 +162,11 @@ passages you can wrap them: `<span lang="zh-Hant">…</span>`.
 - **Scrapbook galleries:** gallery prints rest at slight angles (straightening on hover)
   with italic serif captions — write captions like you'd caption a photo album, not a
   report.
+- **The site cat:** an ink-silhouette companion wanders the bottom edge — walks, pauses,
+  flicks an ear, sometimes leaves and comes back, climbs a little way up the sides, and
+  scampers if tapped. It persists across page transitions (one cat per visit), is
+  `aria-hidden`, and sits still under reduced motion. To retire it, remove `<SiteCat />`
+  from `Base.astro`.
 
 ---
 
