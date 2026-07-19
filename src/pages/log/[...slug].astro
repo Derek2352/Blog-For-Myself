@@ -44,6 +44,8 @@ const texture = resolveTexture(category ?? { slug: log.data.category });
   hue={texture.hue}
 >
   <article class="wrap max-w-3xl py-10" data-pagefind-body>
+    <span class="sr-only" data-pagefind-filter="type">Log</span>
+    <span class="sr-only" data-pagefind-filter="kind">{log.data.kind}</span>
     <header>
       <p class="kicker">
         Log · {code}
@@ -56,7 +58,11 @@ const texture = resolveTexture(category ?? { slug: log.data.category });
         <a href={`/monthly/#period-${period.id}`} class="hover:text-accent">{period.label}</a>
         {
           category && (
-            <a href={categoryHref(category.slug)} class="hover:text-accent">
+            <a
+              href={categoryHref(category.slug)}
+              class="hover:text-accent"
+              data-pagefind-filter="category"
+            >
               {category.label}
             </a>
           )

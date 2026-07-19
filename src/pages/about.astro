@@ -2,6 +2,7 @@
 import { Image } from 'astro:assets';
 import Base from '@/layouts/Base.astro';
 import { site } from '@/data/site';
+import { personSchema } from '@/lib/schema';
 import portrait from '@/assets/portrait.svg';
 
 const linkedin: string = site.linkedin;
@@ -38,6 +39,7 @@ const tools = [
   description="Who I am — YUNG Ming Yin (Derek): Financial Analysis & FinTech undergraduate in Hong Kong, AI-creative practitioner."
   pattern="contours"
   hue={35}
+  schema={personSchema(Astro.site)}
 >
   <div class="wrap py-10" data-pagefind-body>
     <header class="max-w-3xl">

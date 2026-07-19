@@ -25,6 +25,8 @@ interface Props {
   /** Soft page texture (see src/lib/patterns.ts). Category pages pass their own. */
   pattern?: PatternName;
   hue?: number;
+  /** Optional JSON-LD structured data (Person, Article, …). */
+  schema?: Record<string, unknown>;
 }
 
 const {
@@ -34,6 +36,7 @@ const {
   ogType = 'website',
   pattern = 'plus',
   hue = 35,
+  schema,
 } = Astro.props;
 const pageTitle = title ? `${title} — ${site.title}` : `${site.title} — Portfolio & Log`;
 const canonical = new URL(Astro.url.pathname, Astro.site);
@@ -49,6 +52,10 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <meta name="author" content={site.name} />
     <link rel="canonical" href={canonical} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f9f4ea" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1c1814" />
     <!-- Preload the three critical faces so text paints in its real metrics (no swap shift). -->
     <link rel="preload" as="font" type="font/woff2" href={interWoff2} crossorigin />
     <link rel="preload" as="font" type="font/woff2" href={instrumentWoff2} crossorigin />
@@ -74,6 +81,16 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <meta name="twitter:title" content={title ?? pageTitle} />
     <meta name="twitter:description" content={description} />
     {ogImage && <meta name="twitter:image" content={ogImage} />}
+
+    {
+      schema && (
+        <script
+          type="application/ld+json"
+          is:inline
+          set:html={JSON.stringify(schema).replace(/</g, '\\u003c')}
+        />
+      )
+    }
 
     <!-- Soft page-to-page transitions (covers morph, tabs slide). -->
     <ClientRouter />

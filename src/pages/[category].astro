@@ -42,6 +42,7 @@ const texture = resolveTexture(category);
 <Base
   title={category.label}
   description={category.blurb || undefined}
+  ogImage={new URL(`/og/category/${category.slug}.png`, Astro.site).toString()}
   pattern={texture.pattern}
   hue={texture.hue}
 >

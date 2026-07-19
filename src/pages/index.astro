@@ -17,6 +17,7 @@ import {
 import { categoryBySlug } from '@/data/categories';
 import { resolveTexture } from '@/lib/patterns';
 import { orientation } from '@/lib/images';
+import { personSchema } from '@/lib/schema';
 import { now } from '@/data/now';
 import { isoDay, monthKey } from '@/lib/format';
 
@@ -55,7 +56,7 @@ const lately = await Promise.all(
 const catIndex = (await getCategoryIndex()).filter((c) => c.entryCount + c.logCount > 0);
 ---
 
-<Base>
+<Base schema={personSchema(Astro.site)}>
   <!-- Hero: photography leads; the rail annotates. -->
   <section class="wrap grid items-center gap-10 py-12 sm:py-16 lg:grid-cols-[1fr_1.05fr]">
     <div class="reveal">

@@ -1,6 +1,10 @@
 import { defineCollection, z } from 'astro:content';
 import { glob } from 'astro/loaders';
 import { categorySlugs } from './data/categories';
+import { validateData } from './lib/validate-data';
+
+// fail fast on bad hand-edited data (categories/periods) before anything builds
+validateData();
 
 /**
  * Two collections, one content model:
@@ -17,6 +21,11 @@ import { categorySlugs } from './data/categories';
 const categoryField = z.string().refine((s) => categorySlugs.includes(s), {
   message: `Unknown category. Use one of [${categorySlugs.join(', ')}] or add a new one in src/data/categories.ts`,
 });
+
+/** Tags become /tags/<tag>/ URLs, so they must be lowercase kebab-case. */
+const tagField = z
+  .string()
+  .regex(/^[a-z0-9][a-z0-9-]*$/, 'Tags must be lowercase kebab-case (e.g. "ai-film")');
 
 const contentGlob = (base: string) =>
   glob({
@@ -58,13 +67,29 @@ const entries = defineCollection({
           }),
         )
         .default([]),
-      tags: z.array(z.string()).default([]),
+      tags: z.array(tagField).default([]),
       links: z
         .array(z.object({ label: z.string(), url: z.string().url() }))
         .default([]),
       featured: z.boolean().default(false),
       draft: z.boolean().default(false),
       order: z.number().optional(),
+    })
+    .superRefine((data, ctx) => {
+      if (data.endDate && data.endDate < data.date) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['endDate'],
+          message: `endDate (${data.endDate.toISOString().slice(0, 10)}) is before date (${data.date.toISOString().slice(0, 10)}) — swap them`,
+        });
+      }
+      if (data.updated && data.updated < data.date) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['updated'],
+          message: 'updated is before the entry date — check the year',
+        });
+      }
     }),
 });
 
@@ -82,7 +107,7 @@ const logs = defineCollection({
       summary: z.string().optional(),
       image: image().optional(),
       link: z.string().url().optional(),
-      tags: z.array(z.string()).default([]),
+      tags: z.array(tagField).default([]),
       draft: z.boolean().default(false),
     }),
 });

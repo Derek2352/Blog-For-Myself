@@ -135,6 +135,17 @@ passages you can wrap them: `<span lang="zh-Hant">…</span>`.
   `loadFonts` in `src/lib/og.ts`.
 - **CI:** `.github/workflows/ci.yml` runs the full build on every push — a bad
   frontmatter edit fails there instead of breaking a deploy.
+- **Data integrity:** the build fails loudly (with fix-it messages) on bad hand-edited
+  data — duplicate/malformed category slugs, reserved-slug collisions, periods that end
+  before they start, malformed period dates, entries whose `endDate` precedes `date`, and
+  non-kebab-case tags (they become URLs). Overlapping periods and duplicate tab orders
+  warn without failing.
+- **SEO plumbing:** JSON-LD structured data ships on key pages (Person on home/about,
+  Article on every entry with dates/keywords/section); category pages get their own OG
+  share cards (`/og/category/<slug>.png`); a web manifest + PNG app icons + theme-color
+  metas cover pinned tabs and homescreen saves.
+- **Search facets:** `/search` results can be filtered by type (Entry/Log), category, and
+  log kind — Pagefind picks these up from the pages automatically.
 
 ## Small details worth knowing
 
