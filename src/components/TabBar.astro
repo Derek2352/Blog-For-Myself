@@ -1,0 +1,33 @@
+---
+/**
+ * Category tabs — derived entirely from src/data/categories.ts + content.
+ * A category appears the moment it has one visible entry or log.
+ * Wraps on wide screens, scrolls horizontally on narrow ones.
+ */
+import { getNavCategories, categoryHref } from '@/lib/content';
+
+const tabs = await getNavCategories();
+const path = Astro.url.pathname.replace(/\/?$/, '/');
+---
+
+<nav aria-label="Categories" class="tabbar">
+  {
+    tabs.map((tab) => {
+      const active = path === categoryHref(tab.slug);
+      return (
+        <a
+          href={categoryHref(tab.slug)}
+          aria-current={active ? 'page' : undefined}
+          class:list={[
+            'whitespace-nowrap border-b-2 px-3 py-2.5 text-sm transition-colors first:pl-0',
+            active
+              ? 'border-accent font-medium text-ink'
+              : 'border-transparent text-muted hover:border-line hover:text-ink',
+          ]}
+        >
+          {tab.label}
+        </a>
+      );
+    })
+  }
+</nav>

@@ -1,0 +1,22 @@
+---
+import Base from '@/layouts/Base.astro';
+import TagChip from '@/components/TagChip.astro';
+import { allTags } from '@/lib/content';
+
+const tags = await allTags();
+---
+
+<Base title="Tags" description="Every tag across entries and logs.">
+  <div class="wrap max-w-3xl py-10">
+    <header>
+      <p class="kicker">tags</p>
+      <h1 class="mt-2 font-display text-4xl sm:text-5xl">Threads that run through</h1>
+      <p class="mt-3 text-muted">
+        The same interests keep surfacing across categories. Pull a thread:
+      </p>
+    </header>
+    <div class="mt-8 flex flex-wrap gap-2">
+      {tags.map((tag) => <TagChip tag={tag} />)}
+    </div>
+  </div>
+</Base>

@@ -1,0 +1,106 @@
+---
+/**
+ * The index rail for an entry: archival code, timecode-style dates, role,
+ * organization, location, tags, links. Mono labels, quiet values — the
+ * signature element in its full form.
+ */
+import type { Entry } from '@/lib/content';
+import { entryCode, categoryHref } from '@/lib/content';
+import { categoryBySlug } from '@/data/categories';
+import { resolvePeriod } from '@/lib/periods';
+import { railRange, humanRange } from '@/lib/format';
+import TagChip from './TagChip.astro';
+import LinkPill from './LinkPill.astro';
+
+interface Props {
+  entry: Entry;
+}
+
+const { entry } = Astro.props;
+const d = entry.data;
+const code = await entryCode(entry);
+const category = categoryBySlug(d.category);
+const period = resolvePeriod(d.date);
+---
+
+<aside class="self-start border-t border-line lg:sticky lg:top-6" aria-label="Entry metadata">
+  <dl class="divide-y divide-line text-sm">
+    <div class="py-3">
+      <dt class="rail">Index</dt>
+      <dd class="mt-1 font-mono text-sm tracking-wide">{code}</dd>
+    </div>
+    <div class="py-3">
+      <dt class="rail">Date</dt>
+      <dd class="mt-1 font-mono text-sm tracking-wide">
+        {railRange(d.date, d.endDate)}
+      </dd>
+      <dd class="mt-0.5 text-muted">{humanRange(d.date, d.endDate)}</dd>
+    </div>
+    <div class="py-3">
+      <dt class="rail">Period</dt>
+      <dd class="mt-1">
+        <a href="/monthly/" class="transition-colors hover:text-accent">{period.label}</a>
+      </dd>
+    </div>
+    {
+      category && (
+        <div class="py-3">
+          <dt class="rail">Category</dt>
+          <dd class="mt-1">
+            <a href={categoryHref(category.slug)} class="transition-colors hover:text-accent">
+              {category.label}
+            </a>
+          </dd>
+        </div>
+      )
+    }
+    {
+      d.role && (
+        <div class="py-3">
+          <dt class="rail">Role</dt>
+          <dd class="mt-1">{d.role}</dd>
+        </div>
+      )
+    }
+    {
+      d.organization && (
+        <div class="py-3">
+          <dt class="rail">Organization</dt>
+          <dd class="mt-1">{d.organization}</dd>
+        </div>
+      )
+    }
+    {
+      d.location && (
+        <div class="py-3">
+          <dt class="rail">Location</dt>
+          <dd class="mt-1">{d.location}</dd>
+        </div>
+      )
+    }
+    {
+      d.tags.length > 0 && (
+        <div class="py-3">
+          <dt class="rail">Tags</dt>
+          <dd class="mt-1.5 flex flex-wrap gap-1.5">
+            {d.tags.map((tag) => (
+              <TagChip tag={tag} />
+            ))}
+          </dd>
+        </div>
+      )
+    }
+    {
+      d.links.length > 0 && (
+        <div class="py-3">
+          <dt class="rail">Links</dt>
+          <dd class="mt-1.5 flex flex-wrap gap-1.5">
+            {d.links.map((link) => (
+              <LinkPill label={link.label} url={link.url} />
+            ))}
+          </dd>
+        </div>
+      )
+    }
+  </dl>
+</aside>

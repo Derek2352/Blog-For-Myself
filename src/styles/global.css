@@ -1,0 +1,224 @@
+@import "tailwindcss";
+
+/* Dark mode is class-driven (persisted toggle), not media-only. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ------------------------------------------------------------------ *
+ * Design tokens — the single source of truth.
+ * "Contact sheet, annotated" system: warm gallery-white ground, soft
+ * rounded frames, archival cobalt stamp, photo-chemical amber signal,
+ * and a quiet mono index rail. Comfortable first, precise underneath.
+ * All components consume these; no ad-hoc hex in markup.
+ * ------------------------------------------------------------------ */
+@theme {
+  /* color */
+  --color-ground: #f7f6f2;   /* page — warm gallery white (not the AI-default cream) */
+  --color-surface: #fdfcf9;  /* cards, panels */
+  --color-ink: #1e2126;      /* primary text — soft blue-black */
+  --color-muted: #66655e;    /* secondary text — warm grey, AA on ground */
+  --color-line: #e7e4dc;     /* hairlines, frames, ticks */
+  --color-accent: #2a4fc4;   /* archival stamp cobalt — links, active, focus */
+  --color-accent-ink: #ffffff; /* text on accent */
+  --color-signal: #e8a13a;   /* photo-chemical amber — markers, badges (bg use) */
+  --color-signal-text: #8a5a14; /* amber legible as text on light ground */
+
+  /* type */
+  --font-display: "Instrument Serif", "Iowan Old Style", Georgia, "Noto Serif TC", "Songti TC", serif;
+  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", monospace;
+
+  /* shape — soft, unhurried corners */
+  --radius-card: 0.75rem;
+  --radius-chip: 0.5rem;
+}
+
+/* Dark theme: same tokens re-graded warm, utilities restyle themselves. */
+.dark {
+  --color-ground: #191917;
+  --color-surface: #222220;
+  --color-ink: #ebe9e3;
+  --color-muted: #a3a198;
+  --color-line: #34332e;
+  --color-accent: #93a7ff;
+  --color-accent-ink: #15161a;
+  --color-signal: #e8a13a;
+  --color-signal-text: #e8a13a;
+}
+
+@layer base {
+  :root { color-scheme: light; }
+  .dark { color-scheme: dark; }
+
+  html {
+    background-color: var(--color-ground);
+    scroll-padding-top: 5rem;
+  }
+
+  body {
+    background-color: var(--color-ground);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  img { max-width: 100%; height: auto; }
+}
+
+@layer components {
+  /* page gutter */
+  .wrap {
+    margin-inline: auto;
+    width: 100%;
+    max-width: 72rem;
+    padding-inline: 1rem;
+  }
+  @media (min-width: 640px) { .wrap { padding-inline: 1.5rem; } }
+
+  /* soft panel: the default resting place for cards */
+  .panel {
+    border: 1px solid var(--color-line);
+    background: var(--color-surface);
+    border-radius: var(--radius-card);
+  }
+
+  /* covers sit in soft frames, like prints resting on a table */
+  .frame {
+    border: 1px solid var(--color-line);
+    background: var(--color-surface);
+    border-radius: var(--radius-card);
+  }
+
+  /* ---- signature: the index rail (timecode / ticker margin notes) ---- */
+  .rail {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    line-height: 1.6;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .rail a { color: inherit; }
+  .rail a:hover { color: var(--color-accent); }
+
+  /* section kickers: lowercase mono — casual, hand-labelled */
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    text-transform: lowercase;
+    color: var(--color-accent);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---- signature: reel ticks (ruler strip under period/timeline heads) ---- */
+  .reel-ticks {
+    height: 10px;
+    background-image:
+      repeating-linear-gradient(to right, var(--color-muted) 0 2px, transparent 2px 48px),
+      repeating-linear-gradient(to right, var(--color-line) 0 1.5px, transparent 1.5px 8px);
+  }
+  .reel-ticks-v {
+    width: 10px;
+    background-image:
+      repeating-linear-gradient(to bottom, var(--color-muted) 0 2px, transparent 2px 48px),
+      repeating-linear-gradient(to bottom, var(--color-line) 0 1.5px, transparent 1.5px 8px);
+  }
+
+  /* category tab strip: wraps on wide screens, scrolls on narrow */
+  .tabbar {
+    display: flex;
+    gap: 0.25rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .tabbar::-webkit-scrollbar { display: none; }
+  @media (min-width: 768px) { .tabbar { flex-wrap: wrap; overflow-x: visible; } }
+
+  /* ---- reflection prose (markdown bodies) ---- */
+  .prose-reflection {
+    max-width: 65ch;
+    font-size: 1.0625rem;
+    line-height: 1.8;
+  }
+  .prose-reflection > * + * { margin-top: 1.1em; }
+  .prose-reflection h2 {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-weight: 400;
+    font-size: 1.75rem;
+    line-height: 1.2;
+    margin-top: 2.4em;
+    color: var(--color-ink);
+  }
+  .prose-reflection h3 {
+    font-weight: 600;
+    font-size: 1.125rem;
+    margin-top: 1.8em;
+  }
+  .prose-reflection a {
+    color: var(--color-accent);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .prose-reflection ul, .prose-reflection ol { padding-left: 1.4em; }
+  .prose-reflection ul { list-style: disc; }
+  .prose-reflection ol { list-style: decimal; }
+  .prose-reflection li + li { margin-top: 0.4em; }
+  .prose-reflection blockquote {
+    border-left: 2px solid var(--color-accent);
+    padding-left: 1em;
+    color: var(--color-muted);
+  }
+  .prose-reflection code {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    padding: 0.1em 0.35em;
+    border-radius: 0.3em;
+  }
+  .prose-reflection pre {
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-chip);
+    padding: 1em;
+    overflow-x: auto;
+  }
+  .prose-reflection pre code { border: 0; background: transparent; padding: 0; }
+  .prose-reflection img {
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-chip);
+  }
+  .prose-reflection hr { border: 0; border-top: 1px solid var(--color-line); }
+}
+
+/* ---- motion: one hero reveal + gentle hovers; both opt-out aware ---- */
+@media (prefers-reduced-motion: no-preference) {
+  .reveal, .reveal-2, .reveal-3 {
+    animation: rise 0.6s cubic-bezier(0.2, 0.6, 0.2, 1) both;
+  }
+  .reveal-2 { animation-delay: 0.1s; }
+  .reveal-3 { animation-delay: 0.2s; }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  @media (hover: hover) {
+    .card-cover img { transition: transform 0.35s cubic-bezier(0.2, 0.6, 0.2, 1); }
+    .card:hover .card-cover img { transform: scale(1.02); }
+  }
+}

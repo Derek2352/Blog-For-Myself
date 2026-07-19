@@ -1,0 +1,45 @@
+---
+import ThemeToggle from './ThemeToggle.astro';
+import TabBar from './TabBar.astro';
+import { site } from '@/data/site';
+
+const utility = [
+  { href: '/monthly/', label: 'Monthly' },
+  { href: '/timeline/', label: 'Timeline' },
+  { href: '/about/', label: 'About' },
+];
+const path = Astro.url.pathname.replace(/\/?$/, '/');
+---
+
+<header class="border-b border-line">
+  <div class="wrap flex flex-wrap items-center gap-x-6 gap-y-2 pb-2 pt-4">
+    <a href="/" class="group mr-auto no-underline">
+      <span class="block font-display text-[1.55rem] leading-none group-hover:text-accent transition-colors">
+        Derek Yung
+      </span>
+      <span class="rail mt-1 block">Portfolio &amp; Log</span>
+    </a>
+    <nav aria-label="Site" class="flex items-center gap-x-5 text-sm">
+      {
+        utility.map((item) => (
+          <a
+            href={item.href}
+            aria-current={path === item.href ? 'page' : undefined}
+            class:list={[
+              'py-1 transition-colors hover:text-accent',
+              path === item.href ? 'text-accent' : 'text-ink',
+            ]}
+          >
+            {item.label}
+          </a>
+        ))
+      }
+      <ThemeToggle />
+    </nav>
+  </div>
+  <div class="wrap">
+    <TabBar />
+  </div>
+</header>
+
+<p class="sr-only">{site.tagline}</p>

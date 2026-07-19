@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# Update the domain when you deploy (see "site" in astro.config.mjs)
+Sitemap: https://blog-for-myself.pages.dev/sitemap-index.xml

@@ -1,0 +1,138 @@
+---
+import { Image } from 'astro:assets';
+import Base from '@/layouts/Base.astro';
+import { site } from '@/data/site';
+import portrait from '@/assets/portrait.svg';
+
+const linkedin: string = site.linkedin;
+
+const education = {
+  school: 'The Hang Seng University of Hong Kong (HSUHK)',
+  degree: 'BBA (Hons) in Financial Analysis and FinTech',
+  dates: 'Sept 2025 – Expected Aug 2029',
+  gpa: 'GPA 3.89 / 4.00',
+};
+
+const certifications = [
+  'AWS Certified AI Practitioner',
+  'AWS Certified Cloud Practitioner',
+  'Alibaba Cloud Associate – Cloud Computing',
+  'Google Cloud — Gemini Academy for Students',
+];
+
+const languages = [
+  'Cantonese — native',
+  'Mandarin — intermediate (PSC 3A)',
+  'English — fluent (IELTS 7.5)',
+  'Korean — basic',
+];
+
+const tools = [
+  'Tableau', 'Excel', 'PowerPoint', 'Canva', 'Adobe Photoshop', 'Figma', 'CapCut',
+  'AWS & Alibaba Cloud', 'Generative AI + local LLMs',
+];
+---
+
+<Base
+  title="About"
+  description="Who I am — YUNG Ming Yin (Derek): Financial Analysis & FinTech undergraduate in Hong Kong, AI-creative practitioner."
+>
+  <div class="wrap py-10">
+    <header class="max-w-3xl">
+      <p class="kicker">about</p>
+      <h1 class="mt-2 font-display text-4xl sm:text-5xl">Hi, I’m Derek.</h1>
+      <p class="mt-3 text-lg leading-relaxed text-muted">
+        {site.name} — {site.tagline}.
+      </p>
+    </header>
+
+    <div class="mt-10 grid gap-12 lg:grid-cols-[1fr_18rem] lg:gap-16">
+      <div class="prose-reflection min-w-0">
+        <p>
+          I’m an undergraduate in Financial Analysis and FinTech at the Hang Seng University of
+          Hong Kong, and I’m also the person who stays up rendering AI-animated film frames and
+          sorting photographs from the last study trip. Two registers, one habit: reading
+          numbers carefully and composing frames deliberately.
+        </p>
+        <p>
+          The finance side and the creative side aren’t rival careers — they feed each other.
+          The research pipelines I build for competitions borrow the discipline of financial
+          analysis; the way I present data borrows the eye I trained on film. Along the way
+          that mix has picked up cloud certifications, awards in global AI competitions, and
+          seats on cross-border innovation study tours between Hong Kong and the mainland.
+        </p>
+        <p>
+          Honestly, though — the entries on this site say it better than a bio can. Each one
+          ends with a written reflection: what it was, what I did, what I learned, and how it
+          felt. That’s the part a CV can’t hold, and the reason this site exists.
+        </p>
+
+        <h2>Education</h2>
+        <p>
+          {education.school}<br />
+          {education.degree}<br />
+          <span class="rail">{education.dates} · {education.gpa}</span>
+        </p>
+
+        <h2>Certifications</h2>
+        <ul>
+          {certifications.map((c) => <li>{c}</li>)}
+        </ul>
+
+        <h2>Languages</h2>
+        <ul>
+          {languages.map((l) => <li>{l}</li>)}
+        </ul>
+
+        <h2>Tools</h2>
+        <p>{tools.join(' · ')}</p>
+
+        <h2>Say hello</h2>
+        <p>
+          The easiest way to reach me is email:
+          <a href={`mailto:${site.email}`}>{site.email}</a>. I’m also on
+          <a href={site.github} target="_blank" rel="noopener">GitHub</a>{linkedin && (
+            <>
+              {' '}and <a href={linkedin} target="_blank" rel="noopener">LinkedIn</a>
+            </>
+          )}.
+        </p>
+      </div>
+
+      <aside class="self-start lg:sticky lg:top-6">
+        <figure class="frame overflow-hidden">
+          <Image
+            src={portrait}
+            alt="Portrait of Derek Yung (placeholder — photo coming)"
+            width={576}
+            height={720}
+            class="w-full object-cover"
+            loading="eager"
+          />
+        </figure>
+        <dl class="mt-5 divide-y divide-line border-t border-line text-sm">
+          <div class="py-3">
+            <dt class="rail">Based in</dt>
+            <dd class="mt-1">Hong Kong</dd>
+          </div>
+          <div class="py-3">
+            <dt class="rail">Studying</dt>
+            <dd class="mt-1">Financial Analysis &amp; FinTech (Hons), HSUHK</dd>
+          </div>
+          <div class="py-3">
+            <dt class="rail">Making</dt>
+            <dd class="mt-1">AI-animated film · photography · writing</dd>
+          </div>
+        </dl>
+        <a
+          href={site.cvPath}
+          download
+          class="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-(--radius-chip) bg-accent px-4 py-2.5 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90"
+        >
+          Download CV (PDF)
+        </a>
+        <p class="rail mt-2 text-center">the short version, for printers</p>
+      </aside>
+    </div>
+  </div>
+</Base>

@@ -1,0 +1,205 @@
+---
+/**
+ * Photo gallery with lightbox.
+ * - Thumbnails are optimized; full-res variants load only when the lightbox
+ *   opens (src is swapped in from JSON on demand).
+ * - Native <dialog> gives a real focus trap, Esc-to-close, and focus
+ *   restoration. Arrow keys navigate. Backdrop click closes.
+ * - The frame counter doubles as the timecode nod: "FRAME 02 / 05".
+ */
+import { Image, getImage } from 'astro:assets';
+
+interface GalleryImage {
+  src: ImageMetadata;
+  alt: string;
+  caption?: string | undefined;
+}
+
+interface Props {
+  images: GalleryImage[];
+  /** Stable id (e.g. the entry id) so multiple galleries can coexist. */
+  id: string;
+}
+
+const { images, id } = Astro.props;
+
+const items = await Promise.all(
+  images.map(async (img) => {
+    const full = await getImage({ src: img.src, width: 1800 });
+    return { alt: img.alt, caption: img.caption ?? '', full: full.src, thumb: img.src };
+  }),
+);
+
+const total = String(items.length).padStart(2, '0');
+const payload = JSON.stringify(
+  items.map((i) => ({ src: i.full, alt: i.alt, caption: i.caption })),
+).replace(/</g, '\\u003c');
+---
+
+<div class="gallery" data-gallery={id}>
+  <ul class="grid list-none grid-cols-2 gap-3 p-0 md:grid-cols-3">
+    {
+      items.map((img, i) => (
+        <li>
+          <button
+            type="button"
+            class="frame block w-full cursor-zoom-in overflow-hidden"
+            data-lb-open
+            data-index={i}
+            aria-label={`Open image ${i + 1} of ${items.length}: ${img.alt}`}
+          >
+            <Image
+              src={img.thumb}
+              alt={img.alt}
+              widths={[400, 700]}
+              sizes="(min-width: 768px) 30vw, 45vw"
+              class="aspect-[4/3] w-full object-cover"
+              loading="lazy"
+            />
+          </button>
+          {img.caption && <p class="rail mt-1.5">{img.caption}</p>}
+        </li>
+      ))
+    }
+  </ul>
+
+  <dialog data-lb-dialog class="lightbox" aria-label="Image viewer">
+    <div class="lightbox-bar">
+      <p class="rail" data-lb-counter>FRAME 01 / {total}</p>
+      <button type="button" class="rail lightbox-btn" data-lb-close>Close ✕</button>
+    </div>
+    <figure class="lightbox-stage">
+      <img data-lb-img src="" alt="" />
+      <figcaption class="rail mt-3 text-center" data-lb-caption hidden></figcaption>
+    </figure>
+    <div class="lightbox-bar">
+      <button type="button" class="rail lightbox-btn" data-lb-prev aria-label="Previous image">
+        ← Prev
+      </button>
+      <button type="button" class="rail lightbox-btn" data-lb-next aria-label="Next image">
+        Next →
+      </button>
+    </div>
+  </dialog>
+
+  <script type="application/json" data-lb-data is:inline set:html={payload} />
+</div>
+
+<style>
+  .lightbox {
+    width: min(96vw, 90rem);
+    max-height: 94vh;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    background: var(--color-ground);
+    color: var(--color-ink);
+    padding: 0;
+    margin: auto;
+  }
+  .lightbox::backdrop {
+    background: rgb(8 10 14 / 0.9);
+  }
+  .lightbox-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+  }
+  .lightbox-btn {
+    border: 1px solid var(--color-line);
+    padding: 0.35rem 0.7rem;
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .lightbox-btn:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+  }
+  .lightbox-stage {
+    padding: 0 1rem;
+  }
+  .lightbox-stage img {
+    display: block;
+    margin-inline: auto;
+    max-height: 72vh;
+    max-width: 100%;
+    object-fit: contain;
+    border: 1px solid var(--color-line);
+    background: var(--color-surface);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .lightbox[open] {
+      animation: lb-fade 0.18s ease-out;
+    }
+    @keyframes lb-fade {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+  }
+</style>
+
+<script>
+  interface LightboxItem {
+    src: string;
+    alt: string;
+    caption: string;
+  }
+
+  function setupGallery(root: HTMLElement): void {
+    const dialog = root.querySelector<HTMLDialogElement>('[data-lb-dialog]');
+    const dataEl = root.querySelector('[data-lb-data]');
+    const img = root.querySelector<HTMLImageElement>('[data-lb-img]');
+    const caption = root.querySelector<HTMLElement>('[data-lb-caption]');
+    const counter = root.querySelector<HTMLElement>('[data-lb-counter]');
+    if (!dialog || !dataEl || !img || !caption || !counter) return;
+
+    const items: LightboxItem[] = JSON.parse(dataEl.textContent ?? '[]');
+    if (items.length === 0) return;
+    const total = String(items.length).padStart(2, '0');
+    let index = 0;
+
+    const show = (i: number): void => {
+      index = (i + items.length) % items.length;
+      const item = items[index]!;
+      img.src = item.src;
+      img.alt = item.alt;
+      caption.textContent = item.caption;
+      caption.hidden = item.caption.length === 0;
+      counter.textContent = `FRAME ${String(index + 1).padStart(2, '0')} / ${total}`;
+    };
+
+    root.querySelectorAll<HTMLButtonElement>('[data-lb-open]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        show(Number(btn.dataset.index ?? 0));
+        dialog.showModal();
+        document.body.style.overflow = 'hidden';
+      });
+    });
+
+    dialog.querySelector('[data-lb-close]')?.addEventListener('click', () => dialog.close());
+    dialog.querySelector('[data-lb-prev]')?.addEventListener('click', () => show(index - 1));
+    dialog.querySelector('[data-lb-next]')?.addEventListener('click', () => show(index + 1));
+
+    dialog.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft') show(index - 1);
+      if (e.key === 'ArrowRight') show(index + 1);
+    });
+
+    // click on the backdrop (the dialog element itself) closes
+    dialog.addEventListener('click', (e) => {
+      if (e.target === dialog) dialog.close();
+    });
+
+    dialog.addEventListener('close', () => {
+      document.body.style.overflow = '';
+    });
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-gallery]').forEach(setupGallery);
+</script>

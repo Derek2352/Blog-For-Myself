@@ -1,0 +1,55 @@
+---
+/**
+ * /timeline — every entry across all categories in one chronological reel,
+ * newest first, with year markers. The one place the numbering/reel
+ * treatment runs at full strength.
+ */
+import Base from '@/layouts/Base.astro';
+import TimelineItem from '@/components/TimelineItem.astro';
+import { getEntries, type Entry } from '@/lib/content';
+
+const entries = await getEntries();
+
+type Row = { type: 'year'; year: number } | { type: 'entry'; entry: Entry };
+const rows: Row[] = [];
+let currentYear: number | null = null;
+for (const entry of entries) {
+  const year = entry.data.date.getUTCFullYear();
+  if (year !== currentYear) {
+    rows.push({ type: 'year', year });
+    currentYear = year;
+  }
+  rows.push({ type: 'entry', entry });
+}
+---
+
+<Base
+  title="Timeline"
+  description="Every entry across all categories, in one chronological reel."
+>
+  <div class="wrap py-10">
+    <header class="max-w-3xl">
+      <p class="kicker">All categories · {entries.length} entries · newest first</p>
+      <h1 class="mt-2 font-display text-4xl sm:text-5xl">Timeline</h1>
+    </header>
+
+    <div class="relative mt-10 pl-6 sm:pl-9">
+      <div class="reel-ticks-v absolute bottom-0 left-0 top-0" aria-hidden="true"></div>
+      <ol class="list-none p-0">
+        {
+          rows.map((row) =>
+            row.type === 'year' ? (
+              <li class="pb-1 pt-8 first:pt-0">
+                <p class="font-display text-3xl text-muted" aria-label={`Year ${row.year}`}>
+                  {row.year}
+                </p>
+              </li>
+            ) : (
+              <TimelineItem entry={row.entry} />
+            ),
+          )
+        }
+      </ol>
+    </div>
+  </div>
+</Base>

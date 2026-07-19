@@ -1,0 +1,31 @@
+{
+  "name": "blog-for-myself",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Derek Yung — portfolio & reflections blog. Content-driven: add files, not code.",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro check && astro build",
+    "preview": "astro preview",
+    "new-entry": "node scripts/new-entry.mjs",
+    "new-log": "node scripts/new-log.mjs"
+  },
+  "dependencies": {
+    "@astrojs/mdx": "^4.3.0",
+    "@astrojs/rss": "^4.0.11",
+    "@astrojs/sitemap": "^3.4.0",
+    "@fontsource-variable/inter": "^5.2.5",
+    "@fontsource/ibm-plex-mono": "^5.2.5",
+    "@fontsource/instrument-serif": "^5.2.5",
+    "@tailwindcss/vite": "^4.1.0",
+    "astro": "^5.12.0",
+    "sharp": "^0.34.0",
+    "tailwindcss": "^4.1.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.4",
+    "playwright-core": "^1.61.1",
+    "typescript": "^5.7.0"
+  }
+}

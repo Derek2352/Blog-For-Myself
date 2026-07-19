@@ -1,0 +1,196 @@
+---
+import { Image, getImage } from 'astro:assets';
+import Base from '@/layouts/Base.astro';
+import EntryCard from '@/components/EntryCard.astro';
+import KindBadge from '@/components/KindBadge.astro';
+import {
+  getEntries,
+  getLogs,
+  getCategoryIndex,
+  toFeed,
+  entryCode,
+  logCode,
+  entryHref,
+  logHref,
+  categoryHref,
+} from '@/lib/content';
+import { categoryBySlug } from '@/data/categories';
+import { isoDay, monthKey } from '@/lib/format';
+
+const entries = await getEntries();
+const logs = await getLogs();
+
+const featured = entries.filter((e) => e.data.featured);
+const hero = featured[0] ?? entries[0];
+const heroCode = hero ? await entryCode(hero) : '';
+const strip = (featured.length > 1 ? featured : entries).filter((e) => e !== hero).slice(0, 3);
+
+const lately = await Promise.all(
+  toFeed(entries, logs)
+    .slice(0, 7)
+    .map(async (item) =>
+      item.type === 'entry'
+        ? {
+            code: await entryCode(item.entry),
+            date: item.date,
+            title: item.entry.data.title,
+            href: entryHref(item.entry) as string | undefined,
+            kind: undefined as string | undefined,
+            categoryLabel: categoryBySlug(item.entry.data.category)?.label,
+          }
+        : {
+            code: await logCode(item.log),
+            date: item.date,
+            title: item.log.data.title,
+            href: logHref(item.log),
+            kind: item.log.data.kind,
+            categoryLabel: categoryBySlug(item.log.data.category)?.label,
+          },
+    ),
+);
+
+const catIndex = (await getCategoryIndex()).filter((c) => c.entryCount + c.logCount > 0);
+
+const ogImage = hero
+  ? new URL((await getImage({ src: hero.data.cover, width: 1200 })).src, Astro.site).toString()
+  : undefined;
+---
+
+<Base ogImage={ogImage}>
+  <!-- Hero: photography leads; the rail annotates. -->
+  <section class="wrap grid items-center gap-10 py-12 sm:py-16 lg:grid-cols-[1fr_1.05fr]">
+    <div class="reveal">
+      <p class="kicker">portfolio &amp; reflections · hong kong</p>
+      <h1 class="mt-3 font-display text-4xl leading-[1.05] sm:text-5xl lg:text-[3.4rem]">
+        Hi — I’m Derek.
+      </h1>
+      <p class="mt-4 text-lg leading-relaxed text-muted">
+        I study financial analysis &amp; FinTech, and I make AI-animated film and photographs.
+        Numbers by day, frames by night — usually both at once.
+      </p>
+      <p class="mt-4 max-w-prose text-[0.95rem] leading-relaxed">
+        A CV squeezes each of these into one line. This site is where the full stories live —
+        what each project or trip actually was, what I did, what it taught me, and how it felt.
+        Plus the small monthly things a CV never has room for.
+      </p>
+      <div class="mt-7 flex flex-wrap gap-3">
+        <a
+          href="/about/"
+          class="rounded-(--radius-chip) bg-accent px-4 py-2 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90"
+        >
+          More about me
+        </a>
+        <a
+          href="/monthly/"
+          class="rounded-(--radius-chip) border border-line px-4 py-2 text-sm transition-colors hover:border-accent hover:text-accent"
+        >
+          The monthly log
+        </a>
+      </div>
+    </div>
+    {
+      hero && (
+        <figure class="reveal-2">
+          <a href={entryHref(hero)} class="card group block">
+            <div class="frame card-cover overflow-hidden">
+              <Image
+                src={hero.data.cover}
+                alt=""
+                widths={[640, 960, 1400]}
+                sizes="(min-width: 1024px) 48vw, 92vw"
+                class="aspect-[16/10] w-full object-cover"
+                loading="eager"
+                fetchpriority="high"
+              />
+            </div>
+            <figcaption class="rail mt-3 flex flex-wrap justify-between gap-x-4 gap-y-1">
+              <span>
+                {heroCode} · {monthKey(hero.data.date)} · {hero.data.category}
+              </span>
+              <span class="transition-colors group-hover:text-accent">{hero.data.title} →</span>
+            </figcaption>
+          </a>
+        </figure>
+      )
+    }
+  </section>
+
+  <!-- Featured entries -->
+  {
+    strip.length > 0 && (
+      <section class="wrap mt-6 reveal-3" aria-labelledby="featured-h">
+        <p class="kicker">worth your time</p>
+        <h2 id="featured-h" class="mt-1 font-display text-3xl">
+          Start with these
+        </h2>
+        <div class="mt-6 grid gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+          {strip.map((entry) => (
+            <EntryCard entry={entry} />
+          ))}
+        </div>
+      </section>
+    )
+  }
+
+  <!-- Lately: newest entries + logs, mixed, as ledger rows -->
+  {
+    lately.length > 0 && (
+      <section class="wrap mt-20" aria-labelledby="lately-h">
+        <p class="kicker">lately</p>
+        <h2 id="lately-h" class="mt-1 font-display text-3xl">
+          What the last few months looked like
+        </h2>
+        <ol class="mt-5 list-none border-t border-line p-0">
+          {lately.map((row) => (
+            <li class="border-b border-line">
+              <div class="grid grid-cols-[6.2rem_3.2rem_1fr] items-baseline gap-3 py-3 sm:grid-cols-[6.5rem_3.5rem_1fr_auto]">
+                <span class="rail">{isoDay(row.date)}</span>
+                <span class="rail text-accent">{row.code}</span>
+                <span class="min-w-0 text-[0.95rem] leading-snug">
+                  {row.href ? (
+                    <a href={row.href} class="transition-colors hover:text-accent">
+                      {row.title}
+                    </a>
+                  ) : (
+                    row.title
+                  )}
+                </span>
+                <span class="rail hidden sm:flex sm:items-center sm:gap-2">
+                  {row.kind && <KindBadge kind={row.kind} />}
+                  {row.categoryLabel}
+                </span>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </section>
+    )
+  }
+
+  <!-- Category index: every live tab, its blurb, its counts -->
+  <section class="wrap mb-4 mt-20" aria-labelledby="browse-h">
+    <p class="kicker">have a look around</p>
+    <h2 id="browse-h" class="mt-1 font-display text-3xl">Wander by category</h2>
+    <ul class="mt-6 grid list-none gap-4 p-0 sm:grid-cols-2 lg:grid-cols-3">
+      {
+        catIndex.map((c) => (
+          <li>
+            <a
+              href={categoryHref(c.slug)}
+              class="panel group block h-full p-5 transition-colors hover:border-accent"
+            >
+              <p class="rail">
+                {c.entryCount} {c.entryCount === 1 ? 'entry' : 'entries'} · {c.logCount}
+                {c.logCount === 1 ? ' log' : ' logs'}
+              </p>
+              <h3 class="mt-2 font-display text-2xl transition-colors group-hover:text-accent">
+                {c.label}
+              </h3>
+              <p class="mt-1.5 text-sm leading-relaxed text-muted">{c.blurb}</p>
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+</Base>

@@ -1,0 +1,15 @@
+---
+import { tagHref } from '@/lib/content';
+
+interface Props {
+  tag: string;
+}
+const { tag } = Astro.props;
+---
+
+<a
+  href={tagHref(tag)}
+  class="rail rounded-(--radius-chip) border border-line px-1.5 py-0.5 transition-colors hover:border-accent hover:text-accent"
+>
+  #{tag}
+</a>

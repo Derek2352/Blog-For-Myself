@@ -1,0 +1,73 @@
+---
+/**
+ * Card for a light monthly log. Deliberately quieter than EntryCard:
+ * smaller, sans-serif title, surface panel. A log with no body is a
+ * terminal card (no detail link) — no dead pages.
+ */
+import { Image } from 'astro:assets';
+import type { Log } from '@/lib/content';
+import { logCode, logHref } from '@/lib/content';
+import { categoryBySlug } from '@/data/categories';
+import KindBadge from './KindBadge.astro';
+import { isoDay } from '@/lib/format';
+
+interface Props {
+  log: Log;
+  showCategory?: boolean;
+}
+
+const { log, showCategory = false } = Astro.props;
+const code = await logCode(log);
+const href = logHref(log);
+const category = categoryBySlug(log.data.category);
+---
+
+<article class="panel flex gap-3 p-3">
+  {
+    log.data.image && (
+      <div class="size-14 shrink-0 overflow-hidden rounded-(--radius-chip) border border-line">
+        <Image
+          src={log.data.image}
+          alt=""
+          width={112}
+          height={112}
+          class="h-full w-full object-cover"
+          loading="lazy"
+        />
+      </div>
+    )
+  }
+  <div class="min-w-0 flex-1">
+    <p class="rail flex flex-wrap items-center gap-x-2 gap-y-1">
+      <span>{code}</span>
+      <span>{isoDay(log.data.date)}</span>
+      <KindBadge kind={log.data.kind} />
+      {showCategory && category && <span>{category.label}</span>}
+      {log.data.draft && <span class="text-signal-text">draft</span>}
+    </p>
+    <h3 class="mt-1 text-[0.95rem] font-medium leading-snug">
+      {
+        href ? (
+          <a href={href} class="transition-colors hover:text-accent">
+            {log.data.title}
+          </a>
+        ) : (
+          log.data.title
+        )
+      }
+    </h3>
+    {log.data.summary && <p class="mt-0.5 text-sm text-muted">{log.data.summary}</p>}
+    {
+      log.data.link && (
+        <a
+          href={log.data.link}
+          target="_blank"
+          rel="noopener"
+          class="rail mt-1.5 inline-block transition-colors hover:text-accent"
+        >
+          link ↗
+        </a>
+      )
+    }
+  </div>
+</article>

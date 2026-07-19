@@ -1,0 +1,91 @@
+---
+/**
+ * Card for a substantial entry. Two variants:
+ *  - default: cover-led grid card (category pages, featured, related)
+ *  - compact: horizontal row (monthly groupings, dense lists)
+ * Alt text on the card cover is intentionally empty: the adjacent title is the
+ * accessible name, so screen readers hear it once. Detail pages carry full alt.
+ */
+import { Image } from 'astro:assets';
+import type { Entry } from '@/lib/content';
+import { entryCode, entryHref } from '@/lib/content';
+import { categoryBySlug } from '@/data/categories';
+import { railRange } from '@/lib/format';
+
+interface Props {
+  entry: Entry;
+  compact?: boolean;
+  /** Show the category label (useful in mixed, cross-category contexts). */
+  showCategory?: boolean;
+  /** Eager-load the cover (above-the-fold cards only). */
+  eager?: boolean;
+}
+
+const { entry, compact = false, showCategory = false, eager = false } = Astro.props;
+const code = await entryCode(entry);
+const href = entryHref(entry);
+const category = categoryBySlug(entry.data.category);
+const range = railRange(entry.data.date, entry.data.endDate);
+---
+
+{
+  compact ? (
+    <article class="card panel group transition-colors hover:border-muted">
+      <a href={href} class="flex items-center gap-4 p-3">
+        <div class="card-cover h-16 w-24 shrink-0 overflow-hidden rounded-(--radius-chip) border border-line">
+          <Image
+            src={entry.data.cover}
+            alt=""
+            width={240}
+            height={160}
+            class="h-full w-full object-cover"
+            loading="lazy"
+          />
+        </div>
+        <div class="min-w-0">
+          <p class="rail">
+            {code} · {range}
+            {showCategory && category && ` · ${category.label}`}
+            {entry.data.draft && <span class="text-signal-text"> · draft</span>}
+          </p>
+          <h3 class="mt-0.5 font-display text-lg leading-snug transition-colors group-hover:text-accent">
+            {entry.data.title}
+          </h3>
+          <p class="mt-0.5 truncate text-sm text-muted">{entry.data.summary}</p>
+        </div>
+      </a>
+    </article>
+  ) : (
+    <article class="card group">
+      <a href={href} class="block">
+        <div class="frame card-cover overflow-hidden">
+          <Image
+            src={entry.data.cover}
+            alt=""
+            widths={[480, 800, 1200]}
+            sizes="(min-width: 1024px) 30vw, (min-width: 640px) 45vw, 92vw"
+            class="aspect-[16/10] w-full object-cover"
+            loading={eager ? 'eager' : 'lazy'}
+          />
+        </div>
+        <p class="rail mt-3 flex flex-wrap gap-x-2 gap-y-0.5">
+          <span>{code}</span>
+          <span aria-hidden="true">·</span>
+          <span>{range}</span>
+          {entry.data.role && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span>{entry.data.role}</span>
+            </>
+          )}
+          {entry.data.draft && <span class="text-signal-text">· draft</span>}
+        </p>
+        <h3 class="mt-1.5 font-display text-[1.35rem] leading-tight transition-colors group-hover:text-accent">
+          {entry.data.title}
+        </h3>
+        <p class="mt-1.5 text-sm leading-relaxed text-muted">{entry.data.summary}</p>
+        {showCategory && category && <p class="rail mt-2">{category.label}</p>}
+      </a>
+    </article>
+  )
+}

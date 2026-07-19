@@ -1,0 +1,27 @@
+---
+import { site } from '@/data/site';
+
+const year = new Date().getFullYear();
+const linkedin: string = site.linkedin;
+---
+
+<footer class="mt-24 border-t border-line">
+  <div class="wrap grid gap-8 py-10 text-sm sm:grid-cols-3">
+    <div>
+      <p class="font-display text-xl">Derek Yung</p>
+      <p class="mt-1 max-w-[28ch] text-muted">{site.tagline}</p>
+    </div>
+    <div class="rail flex flex-col items-start gap-2" aria-label="Contact">
+      <a href={`mailto:${site.email}`}>{site.email}</a>
+      <a href={site.github} target="_blank" rel="noopener">GitHub ↗</a>
+      {linkedin && <a href={linkedin} target="_blank" rel="noopener">LinkedIn ↗</a>}
+      <a href="/rss.xml">RSS</a>
+      <a href={site.cvPath} download>Download CV (PDF)</a>
+    </div>
+    <div class="rail sm:text-right">
+      <p>© {year} {site.name}</p>
+      <p class="mt-2"><a href="/colophon/">Colophon — how this site is made</a></p>
+      <p class="mt-2">Built with Astro — content is just files.</p>
+    </div>
+  </div>
+</footer>
