@@ -21,7 +21,7 @@ const MonthHeading = headingLevel === 'h2' ? 'h3' : 'h4';
 const headingId = `period-${group.ref.id}`;
 ---
 
-<section aria-labelledby={headingId}>
+<section aria-labelledby={headingId} data-io-reveal>
   <header>
     <p class="kicker">
       {group.ref.kind === 'period' ? 'Reel' : 'Month'} · {group.ref.start} → {group.ref.end} · {

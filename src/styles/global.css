@@ -315,7 +315,7 @@
   .prose-reflection a { color: var(--color-accent); text-decoration: underline; }
 }
 
-/* ---- motion: one hero reveal + gentle hovers; both opt-out aware ---- */
+/* ---- motion: linkage between pages and elements; all opt-out aware ---- */
 @media (prefers-reduced-motion: no-preference) {
   .reveal, .reveal-2, .reveal-3 {
     animation: rise 0.6s cubic-bezier(0.2, 0.6, 0.2, 1) both;
@@ -327,8 +327,61 @@
     to { opacity: 1; transform: none; }
   }
 
+  /* page-to-page: soft cross-fade with a small settle */
+  ::view-transition-old(root) {
+    animation: vt-out 0.18s ease both;
+  }
+  ::view-transition-new(root) {
+    animation: vt-in 0.26s cubic-bezier(0.2, 0.6, 0.2, 1) both;
+  }
+  @keyframes vt-out {
+    to { opacity: 0; }
+  }
+  @keyframes vt-in {
+    from { opacity: 0; transform: translateY(8px); }
+  }
+
+  /* scroll-reveal (elements carry data-io-reveal; .js gate = no-JS safe) */
+  .js [data-io-reveal] {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  .js [data-io-reveal].io-in {
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity 0.55s ease,
+      transform 0.55s cubic-bezier(0.2, 0.6, 0.2, 1);
+  }
+
   @media (hover: hover) {
     .card-cover img { transition: transform 0.35s cubic-bezier(0.2, 0.6, 0.2, 1); }
     .card:hover .card-cover img { transform: scale(1.02); }
+
+    /* cards rise to meet the cursor */
+    .lift { transition: transform 0.25s cubic-bezier(0.2, 0.6, 0.2, 1); }
+    .lift:hover { transform: translateY(-3px); }
+
+    /* ledger rows nudge forward */
+    .ledger-row > div { transition: transform 0.2s cubic-bezier(0.2, 0.6, 0.2, 1); }
+    .ledger-row:hover > div { transform: translateX(4px); }
+
+    /* the 404 plane leans into takeoff */
+    .fly-hint svg { transition: transform 0.3s cubic-bezier(0.2, 0.6, 0.2, 1); }
+    .fly-hint:hover svg { transform: translate(4px, -4px) rotate(-12deg); }
   }
+
+  /* theme toggle: a little press-tilt */
+  #theme-toggle svg { transition: transform 0.25s ease; }
+  #theme-toggle:active svg { transform: rotate(30deg) scale(0.9); }
+}
+
+/* the paper plane that carries you to the next entry */
+.paper-plane {
+  position: fixed;
+  z-index: 60;
+  margin: -13px 0 0 -13px;
+  color: var(--color-accent);
+  pointer-events: none;
+  filter: drop-shadow(0 2px 3px rgb(20 14 8 / 0.25));
 }

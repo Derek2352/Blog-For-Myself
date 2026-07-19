@@ -91,7 +91,7 @@ const player = resolvePlayer(url);
 }
 
 <script>
-  document.querySelectorAll<HTMLElement>('.video-embed').forEach((box) => {
+  function setupVideo(box: HTMLElement): void {
     box.querySelector('[data-video-play]')?.addEventListener('click', () => {
       const { videoKind, videoSrc, videoTitle } = box.dataset;
       if (!videoSrc) return;
@@ -113,5 +113,9 @@ const player = resolvePlayer(url);
         box.appendChild(iframe);
       }
     });
+  }
+
+  document.addEventListener('astro:page-load', () => {
+    document.querySelectorAll<HTMLElement>('.video-embed').forEach(setupVideo);
   });
 </script>

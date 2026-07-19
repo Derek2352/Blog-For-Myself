@@ -32,7 +32,10 @@ const range = railRange(entry.data.date, entry.data.endDate);
   compact ? (
     <article class="card panel group transition-colors hover:border-muted">
       <a href={href} class="flex items-center gap-4 p-3">
-        <div class="card-cover h-16 w-24 shrink-0 overflow-hidden rounded-(--radius-chip) border border-line">
+        <div
+          class="card-cover h-16 w-24 shrink-0 overflow-hidden rounded-(--radius-chip) border border-line"
+          transition:name={`cover-${entry.id}`}
+        >
           <Image
             src={entry.data.cover}
             alt=""
@@ -56,9 +59,9 @@ const range = railRange(entry.data.date, entry.data.endDate);
       </a>
     </article>
   ) : (
-    <article class="card group">
+    <article class="card lift group">
       <a href={href} class="block">
-        <div class="frame card-cover overflow-hidden">
+        <div class="frame card-cover overflow-hidden" transition:name={`cover-${entry.id}`}>
           <Image
             src={entry.data.cover}
             alt=""

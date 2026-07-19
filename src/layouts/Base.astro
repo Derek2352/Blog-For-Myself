@@ -8,6 +8,7 @@ import '@fontsource-variable/inter';
 import '@fontsource/ibm-plex-mono';
 import '@fontsource/ibm-plex-mono/500.css';
 import '@/styles/global.css';
+import { ClientRouter } from 'astro:transitions';
 import Header from '@/components/Header.astro';
 import Footer from '@/components/Footer.astro';
 import { site } from '@/data/site';
@@ -73,16 +74,26 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <meta name="twitter:description" content={description} />
     {ogImage && <meta name="twitter:image" content={ogImage} />}
 
-    <!-- Theme before first paint: stored choice wins, else system preference. -->
+    <!-- Soft page-to-page transitions (covers morph, tabs slide). -->
+    <ClientRouter />
+
+    <!-- Theme before first paint: stored choice wins, else system preference.
+         Re-applied after every client-side swap (the router replaces <html>
+         attributes), plus a .js flag that scroll-reveals key off. -->
     <script is:inline>
       (() => {
-        try {
-          const stored = localStorage.getItem('theme');
-          const dark = stored
-            ? stored === 'dark'
-            : matchMedia('(prefers-color-scheme: dark)').matches;
-          document.documentElement.classList.toggle('dark', dark);
-        } catch {}
+        const apply = () => {
+          try {
+            const stored = localStorage.getItem('theme');
+            const dark = stored
+              ? stored === 'dark'
+              : matchMedia('(prefers-color-scheme: dark)').matches;
+            document.documentElement.classList.toggle('dark', dark);
+          } catch {}
+          document.documentElement.classList.add('js');
+        };
+        apply();
+        document.addEventListener('astro:after-swap', apply);
       })();
     </script>
   </head>
@@ -111,5 +122,37 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
       <slot />
     </main>
     <Footer />
+
+    <script>
+      // Scroll-reveal for [data-io-reveal] elements (timeline frames, period
+      // reels). Reduced-motion or no-IO browsers just see everything.
+      const revealAll = () =>
+        document.querySelectorAll('[data-io-reveal]').forEach((el) => el.classList.add('io-in'));
+
+      function setupReveals(): void {
+        if (
+          matchMedia('(prefers-reduced-motion: reduce)').matches ||
+          !('IntersectionObserver' in window)
+        ) {
+          revealAll();
+          return;
+        }
+        const io = new IntersectionObserver(
+          (entries) => {
+            for (const e of entries) {
+              if (e.isIntersecting) {
+                e.target.classList.add('io-in');
+                io.unobserve(e.target);
+              }
+            }
+          },
+          { rootMargin: '0px 0px -8% 0px' },
+        );
+        document
+          .querySelectorAll('[data-io-reveal]:not(.io-in)')
+          .forEach((el) => io.observe(el));
+      }
+      document.addEventListener('astro:page-load', setupReveals);
+    </script>
   </body>
 </html>

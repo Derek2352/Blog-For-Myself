@@ -19,13 +19,18 @@ const path = Astro.url.pathname.replace(/\/?$/, '/');
           href={categoryHref(tab.slug)}
           aria-current={active ? 'page' : undefined}
           class:list={[
-            'whitespace-nowrap border-b-2 px-3 py-2.5 text-sm transition-colors first:pl-0',
-            active
-              ? 'border-accent font-medium text-ink'
-              : 'border-transparent text-muted hover:border-line hover:text-ink',
+            'relative whitespace-nowrap px-3 py-2.5 text-sm transition-colors',
+            active ? 'font-medium text-ink' : 'text-muted hover:text-ink',
           ]}
         >
           {tab.label}
+          {active && (
+            <span
+              class="absolute inset-x-3 bottom-0 h-[2px] bg-accent"
+              transition:name="active-tab"
+              aria-hidden="true"
+            />
+          )}
         </a>
       );
     })

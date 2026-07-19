@@ -200,7 +200,12 @@ site for the living design page (palette, type, the index-rail signature).
   self-hosted via Fontsource, with a Traditional-Chinese-safe fallback stack
   (PingFang TC / Microsoft JhengHei / Noto Sans TC).
 - Dark mode: class-driven, persisted, defaults to system preference, derived from the same
-  tokens. Motion respects `prefers-reduced-motion`.
+  tokens.
+- **Motion as linkage:** client-side page transitions (Astro ClientRouter) — pages glide,
+  a card's cover morphs into its entry page, the active tab underline slides between
+  tabs, timeline/monthly items fade in as they arrive, and prev/next launches a small
+  paper plane in the direction of travel. Everything stands down under
+  `prefers-reduced-motion`, and no interaction exceeds ~600ms.
 
 ## Deploy
 

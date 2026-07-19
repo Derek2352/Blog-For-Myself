@@ -149,7 +149,7 @@ const catIndex = (await getCategoryIndex()).filter((c) => c.entryCount + c.logCo
         </h2>
         <ol class="mt-5 list-none border-t border-line p-0">
           {lately.map((row) => (
-            <li class="border-b border-line">
+            <li class="ledger-row border-b border-line">
               <div class="grid grid-cols-[6.2rem_3.2rem_1fr] items-baseline gap-3 py-3 sm:grid-cols-[6.5rem_3.5rem_1fr_auto]">
                 <span class="rail">{isoDay(row.date)}</span>
                 <span class="rail text-accent">{row.code}</span>
@@ -185,7 +185,7 @@ const catIndex = (await getCategoryIndex()).filter((c) => c.entryCount + c.logCo
             <a
               href={categoryHref(c.slug)}
               class:list={[
-                'panel patterned group block h-full p-5 transition-colors hover:border-accent',
+                'panel patterned lift group block h-full p-5 transition-colors hover:border-accent',
                 `pat-${resolveTexture(c).pattern}`,
               ]}
               style={`--hue: ${resolveTexture(c).hue}`}
