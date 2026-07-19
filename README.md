@@ -164,7 +164,9 @@ passages you can wrap them: `<span lang="zh-Hant">…</span>`.
   report.
 - **The site cat:** an ink-silhouette companion wanders the bottom edge — walks, pauses,
   flicks an ear, sometimes leaves and comes back, climbs a little way up the sides, and
-  scampers if tapped. It persists across page transitions (one cat per visit), is
+  scampers if tapped. It also treats the visitor's pointer as a mouse: linger near the
+  bottom of the page and it will chase, pounce, and sit beside its catch until the
+  "mouse" moves again. It persists across page transitions (one cat per visit), is
   `aria-hidden`, and sits still under reduced motion. To retire it, remove `<SiteCat />`
   from `Base.astro`.
 

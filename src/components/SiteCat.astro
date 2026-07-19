@@ -112,6 +112,17 @@
     #site-cat.startled .cat-svg {
       animation: cat-hop 0.35s cubic-bezier(0.2, 0.6, 0.2, 1);
     }
+    #site-cat.chasing .leg-a,
+    #site-cat.chasing .leg-b,
+    #site-cat.chasing .cat-svg {
+      animation-duration: 0.22s;
+    }
+    #site-cat.chasing .cat-tail {
+      animation-duration: 0.55s;
+    }
+    #site-cat.pounce .cat-svg {
+      animation: cat-pounce 0.45s cubic-bezier(0.2, 0.6, 0.2, 1);
+    }
   }
 
   @keyframes cat-step {
@@ -136,6 +147,11 @@
     35% { transform: translateY(-9px) scale(0.96, 1.05); }
     75% { transform: translateY(0) scale(1.04, 0.94); }
   }
+  @keyframes cat-pounce {
+    0%, 100% { transform: none; }
+    30% { transform: translate(7px, -12px) rotate(-9deg) scale(0.97, 1.05); }
+    60% { transform: translate(11px, 0) scale(1.07, 0.9); }
+  }
 </style>
 
 <script>
@@ -146,11 +162,12 @@
     x: number;
     dir: 1 | -1;
     speed: number;
-    mode: 'walk' | 'idle' | 'away' | 'climb';
+    mode: 'walk' | 'idle' | 'away' | 'climb' | 'chase';
     until: number;
     climbY: number;
     climbSide: 1 | -1;
     climbPhase: 'up' | 'rest' | 'down';
+    pounceCooldown: number;
   }
 
   function initCat(root: HTMLElement): void {
@@ -173,14 +190,79 @@
       climbY: 0,
       climbSide: 1,
       climbPhase: 'up',
+      pounceCooldown: 0,
     };
     const rand = (a: number, b: number) => a + Math.random() * (b - a);
     const maxX = () => window.innerWidth - CAT_W;
 
+    // the visitor's pointer is, as far as the cat is concerned, a mouse
+    const prey = { x: -9999, y: -9999, t: 0 };
+    window.addEventListener(
+      'pointermove',
+      (e) => {
+        prey.x = e.clientX;
+        prey.y = e.clientY;
+        prey.t = performance.now();
+      },
+      { passive: true },
+    );
+
     const setClasses = () => {
-      root.classList.toggle('walking', s.mode === 'walk' || s.mode === 'away' || s.mode === 'climb');
+      root.classList.toggle(
+        'walking',
+        s.mode === 'walk' || s.mode === 'away' || s.mode === 'climb' || s.mode === 'chase',
+      );
+      root.classList.toggle('chasing', s.mode === 'chase');
       root.classList.toggle('idle', s.mode === 'idle');
       root.classList.toggle('face-left', s.dir === -1);
+    };
+
+    /**
+     * Hunt logic: if the pointer lingers near the floor, chase it; pounce on
+     * arrival, then sit beside it until it moves again. Returns true while
+     * the chase owns the cat this frame.
+     */
+    const hunt = (now: number, dt: number): boolean => {
+      const preyFresh = now - prey.t < 2500;
+      const preyLow = prey.y > window.innerHeight - 150;
+      const canHunt = s.mode === 'walk' || s.mode === 'idle' || s.mode === 'chase';
+
+      if (canHunt && preyFresh && preyLow) {
+        const target = Math.min(maxX(), Math.max(0, prey.x - CAT_W / 2));
+        const dx = target - s.x;
+        if (s.mode !== 'chase' && Math.abs(dx) > 34) {
+          s.mode = 'chase';
+          setClasses();
+        }
+        if (s.mode === 'chase') {
+          if (Math.abs(dx) <= 26) {
+            if (now > s.pounceCooldown) {
+              s.pounceCooldown = now + 2400;
+              root.classList.add('pounce');
+              setTimeout(() => root.classList.remove('pounce'), 470);
+            }
+            // caught it — sit proudly next to the prey
+            s.mode = 'idle';
+            s.until = now + 1500;
+            setClasses();
+            return false;
+          }
+          s.dir = dx > 0 ? 1 : -1;
+          const sprint = Math.min(175, 62 + Math.abs(dx) * 0.35);
+          s.x = Math.max(0, Math.min(maxX(), s.x + s.dir * sprint * dt));
+          root.classList.toggle('face-left', s.dir === -1);
+          return true;
+        }
+        return false;
+      }
+
+      if (s.mode === 'chase') {
+        // the mouse got away — look around for a moment, then move on
+        s.mode = 'idle';
+        s.until = now + rand(1200, 2400);
+        setClasses();
+      }
+      return false;
     };
 
     const chooseNext = (now: number) => {
@@ -211,6 +293,12 @@
     const tick = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
+
+      if (hunt(now, dt)) {
+        render();
+        requestAnimationFrame(tick);
+        return;
+      }
 
       if (s.mode === 'walk' || s.mode === 'away') {
         s.x += s.dir * s.speed * dt;
