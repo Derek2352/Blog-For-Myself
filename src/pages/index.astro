@@ -15,6 +15,7 @@ import {
   categoryHref,
 } from '@/lib/content';
 import { categoryBySlug } from '@/data/categories';
+import { resolveTexture } from '@/lib/patterns';
 import { isoDay, monthKey } from '@/lib/format';
 
 const entries = await getEntries();
@@ -177,7 +178,11 @@ const ogImage = hero
           <li>
             <a
               href={categoryHref(c.slug)}
-              class="panel group block h-full p-5 transition-colors hover:border-accent"
+              class:list={[
+                'panel patterned group block h-full p-5 transition-colors hover:border-accent',
+                `pat-${resolveTexture(c).pattern}`,
+              ]}
+              style={`--hue: ${resolveTexture(c).hue}`}
             >
               <p class="rail">
                 {c.entryCount} {c.entryCount === 1 ? 'entry' : 'entries'} · {c.logCount}

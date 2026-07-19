@@ -5,6 +5,10 @@
  * live design tokens, so this page always tells the truth.
  */
 import Base from '@/layouts/Base.astro';
+import { categories } from '@/data/categories';
+import { resolveTexture } from '@/lib/patterns';
+
+const textures = categories.map((c) => ({ label: c.label, ...resolveTexture(c) }));
 
 const swatches = [
   { name: 'ground', varName: '--color-ground', note: 'warm gallery white — the resting state' },
@@ -20,6 +24,8 @@ const swatches = [
 <Base
   title="Colophon"
   description="How this site is designed and built: palette, type, the index-rail signature, and the files-as-content model."
+  pattern="ledger"
+  hue={275}
 >
   <div class="wrap max-w-4xl py-10">
     <header>
@@ -73,6 +79,32 @@ const swatches = [
                 <span class="rail block">{s.varName}</span>
                 <span class="block text-sm text-muted">{s.note}</span>
               </span>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    <section class="mt-12" aria-labelledby="textures-h">
+      <p class="kicker">textures</p>
+      <h2 id="textures-h" class="mt-1 font-display text-2xl">Every tab has its own paper</h2>
+      <p class="mt-3 max-w-prose text-sm leading-relaxed text-muted">
+        Each category carries a soft background pattern and hue wash — graph paper for
+        experience, contour lines for study trips, halftone dots for creative work — declared
+        in the same data file that defines the tab, and kept faint enough that reading always
+        comes first. A new tab picks its own automatically.
+      </p>
+      <ul class="mt-5 grid list-none gap-3 p-0 sm:grid-cols-2">
+        {
+          textures.map((t) => (
+            <li
+              class:list={['panel patterned p-4', `pat-${t.pattern}`]}
+              style={`--hue: ${t.hue}; --pat-a: 1.6; --wash-a: 0.14;`}
+            >
+              <p class="rail">
+                {t.pattern} · hue {t.hue}
+              </p>
+              <p class="mt-1 font-display text-xl">{t.label}</p>
             </li>
           ))
         }

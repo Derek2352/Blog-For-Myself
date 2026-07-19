@@ -15,7 +15,12 @@ const logs = (await getLogs()).filter((l) => l.data.tags.includes(tag));
 const items = toFeed(entries, logs);
 ---
 
-<Base title={`#${tag}`} description={`Entries and logs tagged “${tag}”.`}>
+<Base
+  title={`#${tag}`}
+  description={`Entries and logs tagged “${tag}”.`}
+  pattern="halftone"
+  hue={175}
+>
   <div class="wrap py-10">
     <header>
       <p class="kicker">tag</p>
@@ -25,7 +30,8 @@ const items = toFeed(entries, logs);
         {items.length === 1 ? 'item' : 'items'} · <a href="/tags/">all tags</a>
       </p>
     </header>
-    <div class="mt-8 grid max-w-3xl gap-3">
+    <h2 class="sr-only">Tagged items</h2>
+    <div class="mt-8 grid max-w-3xl grid-cols-1 gap-3">
       {
         items.map((item) =>
           item.type === 'entry' ? (

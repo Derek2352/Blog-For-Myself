@@ -10,6 +10,7 @@ import EntryCard from '@/components/EntryCard.astro';
 import PeriodGroup from '@/components/PeriodGroup.astro';
 import { categories, RESERVED_SLUGS, type Category } from '@/data/categories';
 import { getEntries, getLogs, sortForCategory, toFeed, groupByPeriod } from '@/lib/content';
+import { resolveTexture } from '@/lib/patterns';
 
 export async function getStaticPaths() {
   for (const c of categories) {
@@ -35,9 +36,15 @@ const entries = sortForCategory(
 );
 const logs = (await getLogs()).filter((l) => l.data.category === category.slug);
 const logGroups = groupByPeriod(toFeed([], logs));
+const texture = resolveTexture(category);
 ---
 
-<Base title={category.label} description={category.blurb || undefined}>
+<Base
+  title={category.label}
+  description={category.blurb || undefined}
+  pattern={texture.pattern}
+  hue={texture.hue}
+>
   <div class="wrap py-10">
     <header class="max-w-3xl">
       <p class="kicker">Index / {category.slug}</p>
@@ -49,7 +56,8 @@ const logGroups = groupByPeriod(toFeed([], logs));
       </p>
     </header>
 
-    <section class="mt-10" aria-label="Entries">
+    <section class="mt-10" aria-labelledby="entries-h">
+      <h2 id="entries-h" class="sr-only">Entries</h2>
       {
         entries.length > 0 ? (
           <div class="grid gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">

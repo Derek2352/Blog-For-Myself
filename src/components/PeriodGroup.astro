@@ -43,7 +43,7 @@ const headingId = `period-${group.ref.id}`;
             {month.key} · {month.label}
           </MonthHeading>
         )}
-        <div class="mt-3 grid gap-3">
+        <div class="mt-3 grid grid-cols-1 gap-3">
           {month.items.map((item) =>
             item.type === 'entry' ? (
               <EntryCard entry={item.entry} compact showCategory={showCategory} />

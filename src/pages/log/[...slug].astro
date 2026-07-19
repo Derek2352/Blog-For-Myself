@@ -10,6 +10,7 @@ import KindBadge from '@/components/KindBadge.astro';
 import TagChip from '@/components/TagChip.astro';
 import { getLogs, logCode, logHasBody, categoryHref, type Log } from '@/lib/content';
 import { categoryBySlug } from '@/data/categories';
+import { resolveTexture } from '@/lib/patterns';
 import { resolvePeriod } from '@/lib/periods';
 import { isoDay } from '@/lib/format';
 
@@ -30,9 +31,17 @@ const period = resolvePeriod(log.data.date);
 const ogImage = log.data.image
   ? new URL((await getImage({ src: log.data.image, width: 1200 })).src, Astro.site).toString()
   : undefined;
+const texture = resolveTexture(category ?? { slug: log.data.category });
 ---
 
-<Base title={log.data.title} description={log.data.summary} ogImage={ogImage} ogType="article">
+<Base
+  title={log.data.title}
+  description={log.data.summary}
+  ogImage={ogImage}
+  ogType="article"
+  pattern={texture.pattern}
+  hue={texture.hue}
+>
   <article class="wrap max-w-3xl py-10">
     <header>
       <p class="kicker">
