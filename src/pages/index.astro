@@ -1,5 +1,5 @@
 ---
-import { Image, getImage } from 'astro:assets';
+import { Image } from 'astro:assets';
 import Base from '@/layouts/Base.astro';
 import EntryCard from '@/components/EntryCard.astro';
 import KindBadge from '@/components/KindBadge.astro';
@@ -52,13 +52,9 @@ const lately = await Promise.all(
 );
 
 const catIndex = (await getCategoryIndex()).filter((c) => c.entryCount + c.logCount > 0);
-
-const ogImage = hero
-  ? new URL((await getImage({ src: hero.data.cover, width: 1200 })).src, Astro.site).toString()
-  : undefined;
 ---
 
-<Base ogImage={ogImage}>
+<Base>
   <!-- Hero: photography leads; the rail annotates. -->
   <section class="wrap grid items-center gap-10 py-12 sm:py-16 lg:grid-cols-[1fr_1.05fr]">
     <div class="reveal">
@@ -79,7 +75,7 @@ const ogImage = hero
         now.items.length > 0 && (
           <p class="mt-5 font-mono text-xs lowercase tracking-wide text-muted">
             <span class="text-signal-text">now →</span> {now.items.join(' · ')}
-            <span class="opacity-70"> · {now.updated}</span>
+            <span> · {now.updated}</span>
           </p>
         )
       }

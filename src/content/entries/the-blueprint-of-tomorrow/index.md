@@ -8,6 +8,7 @@ organization: "CGDFF · supported by HKIoD & HSUHK"
 summary: "An AI-animated short film that won Individual Champion of the “What is Corporate Governance?” Creative Video Contest 2026, showcased at the HKIoD Annual Dinner cum Award Ceremony."
 cover: "./images/cover.svg"
 gallery: []
+# video: ""  # paste the film link — it will screen here in place of the cover
 tags: ["ai-film", "corporate-governance", "champion"]
 links: []
 featured: true

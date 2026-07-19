@@ -42,6 +42,10 @@ const entries = defineCollection({
       /** Optional one-line personal aside, shown as a margin note on the
        *  entry page — your voice, not the CV's. */
       note: z.string().optional(),
+      /** Optional video URL (YouTube / Vimeo / Bilibili / direct .mp4).
+       *  When set, the entry page screens the film where the cover would
+       *  sit — click-to-play, so pages stay fast. */
+      video: z.string().url().optional(),
       cover: image(),
       gallery: z
         .array(

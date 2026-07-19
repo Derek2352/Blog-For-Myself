@@ -1,0 +1,68 @@
+---
+/**
+ * /search — client-side full-text search over entries and logs, powered by
+ * Pagefind. The index is generated after `astro build` (see the build
+ * script), so in `npm run dev` this page shows a friendly fallback instead.
+ */
+import Base from '@/layouts/Base.astro';
+---
+
+<Base
+  title="Search"
+  description="Search every entry and log on this site."
+  pattern="ledger"
+  hue={175}
+>
+  <div class="wrap max-w-3xl py-10">
+    <header>
+      <p class="kicker">search</p>
+      <h1 class="mt-2 font-display text-4xl sm:text-5xl">Find it again</h1>
+      <p class="mt-3 text-muted">
+        Every entry and log, searchable — competitions, trips, tools, places.
+      </p>
+    </header>
+
+    <div id="search" class="mt-8"></div>
+    <p id="search-fallback" class="mt-8 text-muted" hidden>
+      Search is generated at build time — run <code class="font-mono text-sm">npm run build</code>
+      &amp; <code class="font-mono text-sm">npm run preview</code> to try it locally. It works on
+      the deployed site.
+    </p>
+  </div>
+</Base>
+
+<link rel="stylesheet" href="/pagefind/pagefind-ui.css" />
+<script is:inline>
+  (async () => {
+    try {
+      await import('/pagefind/pagefind-ui.js');
+      new window.PagefindUI({
+        element: '#search',
+        showSubResults: true,
+        showImages: false,
+        autofocus: true,
+      });
+    } catch {
+      document.getElementById('search-fallback').hidden = false;
+    }
+  })();
+</script>
+
+<style is:global>
+  /* Theme Pagefind's UI with the site tokens */
+  #search {
+    --pagefind-ui-scale: 0.9;
+    --pagefind-ui-primary: var(--color-accent);
+    --pagefind-ui-text: var(--color-ink);
+    --pagefind-ui-background: var(--color-surface);
+    --pagefind-ui-border: var(--color-line);
+    --pagefind-ui-tag: var(--color-line);
+    --pagefind-ui-border-width: 1px;
+    --pagefind-ui-border-radius: var(--radius-chip);
+    --pagefind-ui-font: var(--font-sans);
+  }
+  #search .pagefind-ui__result-title {
+    font-family: var(--font-display);
+    font-weight: 400;
+  }
+</style>

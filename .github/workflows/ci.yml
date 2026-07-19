@@ -1,0 +1,20 @@
+# Safety net for the monthly file-drop workflow: every push gets a full
+# type/schema check + static build (+ search index). A typo'd category or
+# broken frontmatter shows up here instead of silently breaking a deploy.
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build

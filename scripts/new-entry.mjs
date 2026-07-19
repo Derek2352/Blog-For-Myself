@@ -43,6 +43,7 @@ date: ${date}
 # location: ""
 summary: ""
 # note: ""  # one-line personal aside in your voice — shows as a margin note
+# video: ""  # YouTube/Vimeo/Bilibili or .mp4 — screens on the page, click-to-play
 cover: "./images/cover.svg"
 gallery: []
 # gallery:

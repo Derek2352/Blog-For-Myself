@@ -10,8 +10,15 @@ export type Log = CollectionEntry<'logs'>;
  * Draft policy: drafts render in `npm run dev` (with a DRAFT badge) so you
  * can preview them, and are excluded from production builds. Publishing =
  * setting `draft: false`.
+ *
+ * `npm run build:drafts` (SHOW_DRAFTS=1) builds a preview that keeps
+ * drafts in — for a second, private deploy to review on your phone.
+ * Preview builds carry a visible watermark strip (see Base.astro).
  */
-const showDrafts = import.meta.env.DEV;
+const showDrafts = import.meta.env.DEV || process.env.SHOW_DRAFTS === '1';
+
+/** True on a drafts-included production build — used for the watermark. */
+export const isDraftPreviewBuild = !import.meta.env.DEV && process.env.SHOW_DRAFTS === '1';
 
 const dateDesc = <T extends { date: Date }>(a: T, b: T) =>
   b.date.getTime() - a.date.getTime();

@@ -103,6 +103,9 @@ export const RESERVED_SLUGS = [
   "timeline",
   "about",
   "tags",
+  "search",
+  "colophon",
+  "og",
   "rss.xml",
   "404",
 ] as const;

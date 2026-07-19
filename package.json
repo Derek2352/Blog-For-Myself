@@ -6,7 +6,8 @@
   "description": "Derek Yung — portfolio & reflections blog. Content-driven: add files, not code.",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro check && astro build",
+    "build": "astro check && astro build && pagefind --site dist",
+    "build:drafts": "SHOW_DRAFTS=1 npm run build",
     "preview": "astro preview",
     "new-entry": "node scripts/new-entry.mjs",
     "new-log": "node scripts/new-log.mjs",
@@ -19,13 +20,17 @@
     "@fontsource-variable/inter": "^5.2.5",
     "@fontsource/ibm-plex-mono": "^5.2.5",
     "@fontsource/instrument-serif": "^5.2.5",
+    "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/vite": "^4.1.0",
     "astro": "^5.12.0",
+    "satori": "^0.28.0",
     "sharp": "^0.34.0",
     "tailwindcss": "^4.1.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.4",
+    "@types/node": "^26.1.1",
+    "pagefind": "^1.5.2",
     "playwright-core": "^1.61.1",
     "typescript": "^5.7.0"
   }

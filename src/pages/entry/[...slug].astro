@@ -1,12 +1,21 @@
 ---
 import { render } from 'astro:content';
-import { Image, getImage } from 'astro:assets';
+import { Image } from 'astro:assets';
 import Base from '@/layouts/Base.astro';
 import MetadataRail from '@/components/MetadataRail.astro';
 import Gallery from '@/components/Gallery.astro';
 import EntryCard from '@/components/EntryCard.astro';
 import PhotoPlan from '@/components/PhotoPlan.astro';
-import { getEntries, entryCode, relatedEntries, categoryHref, type Entry } from '@/lib/content';
+import VideoEmbed from '@/components/VideoEmbed.astro';
+import {
+  getEntries,
+  entryCode,
+  relatedEntries,
+  categoryHref,
+  entryHref,
+  sortForCategory,
+  type Entry,
+} from '@/lib/content';
 import { categoryBySlug } from '@/data/categories';
 import { resolveTexture } from '@/lib/patterns';
 
@@ -24,11 +33,18 @@ const { Content } = await render(entry);
 const code = await entryCode(entry);
 const category = categoryBySlug(entry.data.category);
 const related = await relatedEntries(entry);
-const ogImage = new URL(
-  (await getImage({ src: entry.data.cover, width: 1200 })).src,
-  Astro.site,
-).toString();
+const ogImage = new URL(`/og/${entry.id}.png`, Astro.site).toString();
 const texture = resolveTexture(category ?? { slug: entry.data.category });
+
+// prev/next within this category, same order as the category grid
+const siblings = sortForCategory(
+  (await getEntries()).filter((e) => e.data.category === entry.data.category),
+);
+const index = siblings.findIndex((e) => e.id === entry.id);
+const prev = index > 0 ? siblings[index - 1] : undefined;
+const next = index >= 0 && index < siblings.length - 1 ? siblings[index + 1] : undefined;
+const prevCode = prev ? await entryCode(prev) : '';
+const nextCode = next ? await entryCode(next) : '';
 ---
 
 <Base
@@ -39,7 +55,7 @@ const texture = resolveTexture(category ?? { slug: entry.data.category });
   pattern={texture.pattern}
   hue={texture.hue}
 >
-  <article class="wrap py-10">
+  <article class="wrap py-10" data-pagefind-body>
     <header class="max-w-3xl">
       <p class="kicker">
         {
@@ -67,17 +83,25 @@ const texture = resolveTexture(category ?? { slug: entry.data.category });
     </header>
     <PhotoPlan entry={entry} />
 
-    <figure class="frame mt-8 overflow-hidden">
-      <Image
-        src={entry.data.cover}
-        alt={`${entry.data.title} — cover image`}
-        widths={[720, 1100, 1600]}
-        sizes="(min-width: 1280px) 72rem, 94vw"
-        class="w-full"
-        loading="eager"
-        fetchpriority="high"
-      />
-    </figure>
+    {
+      entry.data.video ? (
+        <div class="mt-8">
+          <VideoEmbed url={entry.data.video} title={entry.data.title} poster={entry.data.cover} />
+        </div>
+      ) : (
+        <figure class="frame mt-8 overflow-hidden">
+          <Image
+            src={entry.data.cover}
+            alt={`${entry.data.title} — cover image`}
+            widths={[720, 1100, 1600]}
+            sizes="(min-width: 1280px) 72rem, 94vw"
+            class="w-full"
+            loading="eager"
+            fetchpriority="high"
+          />
+        </figure>
+      )
+    }
 
     <div class="mt-10 grid gap-10 lg:grid-cols-[16rem_1fr] lg:gap-14">
       <MetadataRail entry={entry} />
@@ -101,8 +125,44 @@ const texture = resolveTexture(category ?? { slug: entry.data.category });
     }
 
     {
+      (prev || next) && (
+        <nav
+          class="mt-16 grid gap-3 sm:grid-cols-2"
+          aria-label={`More in ${category?.label ?? entry.data.category}`}
+          data-pagefind-ignore
+        >
+          {prev ? (
+            <a href={entryHref(prev)} class="panel group block p-4 transition-colors hover:border-accent">
+              <p class="rail">← previous · {prevCode}</p>
+              <p class="mt-1 font-display text-lg leading-snug transition-colors group-hover:text-accent">
+                {prev.data.title}
+              </p>
+            </a>
+          ) : (
+            <span class="hidden sm:block" />
+          )}
+          {next && (
+            <a
+              href={entryHref(next)}
+              class="panel group block p-4 text-right transition-colors hover:border-accent"
+            >
+              <p class="rail">{nextCode} · next →</p>
+              <p class="mt-1 font-display text-lg leading-snug transition-colors group-hover:text-accent">
+                {next.data.title}
+              </p>
+            </a>
+          )}
+        </nav>
+      )
+    }
+
+    {
       related.length > 0 && (
-        <section class="mt-20 border-t border-line pt-10" aria-labelledby="related-h">
+        <section
+          class="mt-16 border-t border-line pt-10"
+          aria-labelledby="related-h"
+          data-pagefind-ignore
+        >
           <p class="kicker">Related</p>
           <h2 id="related-h" class="mt-1 font-display text-2xl">
             Nearby frames

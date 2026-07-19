@@ -8,6 +8,7 @@ organization: "Alibaba Cloud — 2025 AI Video for Business Competition"
 summary: "An award-winning AI video that took third place globally for business storytelling, built with Alibaba Cloud Qwen3.5 and Wan 2.5."
 cover: "./images/cover.svg"
 gallery: []
+# video: ""  # paste the YouTube/Vimeo/Bilibili link — the film plays on this page
 tags: ["ai-film", "award", "prompt-engineering"]
 links: []
 featured: true
