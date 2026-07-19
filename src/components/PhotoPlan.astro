@@ -1,0 +1,43 @@
+---
+/**
+ * Dev-only photo nudge on entry pages: when an entry still runs on the
+ * placeholder cover or has fewer gallery shots than the rules suggest,
+ * this panel says what to gather and how many. Never rendered in
+ * production builds — visitors only ever see finished pages.
+ */
+import { photoPlan } from '../../scripts/photo-rules.mjs';
+import type { Entry } from '@/lib/content';
+
+interface Props {
+  entry: Entry;
+}
+
+const { entry } = Astro.props;
+const dev = import.meta.env.DEV;
+
+const plan = photoPlan({ category: entry.data.category, featured: entry.data.featured });
+const placeholderCover = entry.data.cover.src.endsWith('.svg');
+const missing = Math.max(0, plan.targetGallery - entry.data.gallery.length);
+const show = dev && (placeholderCover || missing > 0);
+---
+
+{
+  show && (
+    <aside
+      class="mt-8 rounded-(--radius-card) border border-dashed border-signal/70 bg-surface p-4"
+      aria-label="Photo plan (dev preview only)"
+    >
+      <p class="rail text-signal-text">photo plan · dev preview only</p>
+      <ul class="mt-2 list-none space-y-1 p-0 text-sm text-muted">
+        {placeholderCover && <li>Cover is still the placeholder — swap in a real frame.</li>}
+        {missing > 0 && (
+          <li>
+            Gallery: {entry.data.gallery.length}/{plan.targetGallery} — add {missing} more.
+          </li>
+        )}
+        <li>Ideas: {plan.shots.join(' · ')}</li>
+        <li class="rail pt-1">full report: npm run photos</li>
+      </ul>
+    </aside>
+  )
+}

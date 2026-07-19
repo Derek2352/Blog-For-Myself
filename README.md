@@ -57,6 +57,21 @@ The 60-second path for small monthly things (a workshop, a talk, a certificate).
 A log **with a body** gets a small detail page; a log **without one** stays a terminal
 card — no dead pages.
 
+### The photo plan — `npm run photos`
+
+The repo tells you **what pictures to paste and how many**. Rules per category live in
+`scripts/photo-rules.mjs` (e.g. study trips want ~6 shots — arrival, venue, you in the
+room, a surprising detail, the group, one quiet frame; featured entries earn a couple
+extra). Three surfaces, one source of truth:
+
+- `npm run photos` — the full report: every entry/log still missing images, sorted by
+  most-missing, with shot ideas and a total count to gather.
+- `npm run new-entry` — prints the plan for the category you just picked.
+- **Dev-only page hint** — entries running on a placeholder cover or a light gallery show
+  an amber dashed "photo plan" panel in `npm run dev`. Production visitors never see it.
+
+Tune counts and shot lists freely in `photo-rules.mjs` — it's a nudge, never a build gate.
+
 ### C. New tab (category)
 
 Append one object to `src/data/categories.ts`:
@@ -96,6 +111,17 @@ Every entry's body uses the same four headings, so future-me stays consistent:
 Write them as prose, not bullet lists. "How it felt" is the reason this site exists —
 keep it honest. Traditional Chinese renders inline anywhere (夾單, 組長); for long CJK
 passages you can wrap them: `<span lang="zh-Hant">…</span>`.
+
+## Personal touches
+
+- **`note` field (entries):** an optional one-line aside in your own voice
+  (`note: "the night before the deadline was something else"`) — renders as an italic
+  margin note under the summary. Use it where the CV voice isn't enough.
+- **"now →" line (homepage):** edit `src/data/now.ts` when you do your monthly logs —
+  three or four short, honest items about what you're up to.
+- **Scrapbook galleries:** gallery prints rest at slight angles (straightening on hover)
+  with italic serif captions — write captions like you'd caption a photo album, not a
+  report.
 
 ---
 

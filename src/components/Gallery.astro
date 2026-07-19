@@ -57,7 +57,7 @@ const payload = JSON.stringify(
               loading="lazy"
             />
           </button>
-          {img.caption && <p class="rail mt-1.5">{img.caption}</p>}
+          {img.caption && <p class="mt-2 font-display text-sm italic text-muted">{img.caption}</p>}
         </li>
       ))
     }
@@ -86,6 +86,20 @@ const payload = JSON.stringify(
 </div>
 
 <style>
+  /* scrapbook touch: prints rest at slight angles, straighten on hover */
+  li:nth-child(3n + 1) [data-lb-open] { rotate: -1.2deg; }
+  li:nth-child(3n + 2) [data-lb-open] { rotate: 0.9deg; }
+  li:nth-child(3n) [data-lb-open] { rotate: -0.5deg; }
+  [data-lb-open] {
+    box-shadow:
+      0 1px 2px rgb(20 18 12 / 0.05),
+      0 8px 18px -10px rgb(20 18 12 / 0.14);
+  }
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    [data-lb-open] { transition: rotate 0.25s ease; }
+    li:hover [data-lb-open] { rotate: 0deg; }
+  }
+
   .lightbox {
     width: min(96vw, 90rem);
     max-height: 94vh;

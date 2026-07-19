@@ -16,6 +16,7 @@ import {
 } from '@/lib/content';
 import { categoryBySlug } from '@/data/categories';
 import { resolveTexture } from '@/lib/patterns';
+import { now } from '@/data/now';
 import { isoDay, monthKey } from '@/lib/format';
 
 const entries = await getEntries();
@@ -74,6 +75,14 @@ const ogImage = hero
         what each project or trip actually was, what I did, what it taught me, and how it felt.
         Plus the small monthly things a CV never has room for.
       </p>
+      {
+        now.items.length > 0 && (
+          <p class="mt-5 font-mono text-xs lowercase tracking-wide text-muted">
+            <span class="text-signal-text">now →</span> {now.items.join(' · ')}
+            <span class="opacity-70"> · {now.updated}</span>
+          </p>
+        )
+      }
       <div class="mt-7 flex flex-wrap gap-3">
         <a
           href="/about/"

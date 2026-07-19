@@ -9,7 +9,8 @@
     "build": "astro check && astro build",
     "preview": "astro preview",
     "new-entry": "node scripts/new-entry.mjs",
-    "new-log": "node scripts/new-log.mjs"
+    "new-log": "node scripts/new-log.mjs",
+    "photos": "node scripts/photo-plan.mjs"
   },
   "dependencies": {
     "@astrojs/mdx": "^4.3.0",

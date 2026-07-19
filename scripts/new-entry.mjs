@@ -12,6 +12,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { makePrompter, slugify, today, yamlQuote, promptCategory, placeholderSVG } from './lib.mjs';
+import { photoPlan } from './photo-rules.mjs';
 
 const rl = makePrompter();
 
@@ -41,6 +42,7 @@ date: ${date}
 # organization: ""
 # location: ""
 summary: ""
+# note: ""  # one-line personal aside in your voice — shows as a margin note
 cover: "./images/cover.svg"
 gallery: []
 # gallery:
@@ -80,12 +82,18 @@ await writeFile(
   placeholderSVG({ bottom: slug, seed: slug }),
 );
 
+const plan = photoPlan({ category });
+
 console.log(`
 Created src/content/entries/${slug}/
 
+Photo plan for "${category}": a real cover + ~${plan.targetGallery} gallery shots
+  ideas: ${plan.shots.join(' · ')}
+  (featured entries earn a couple extra — run "npm run photos" for the full list)
+
 Next steps:
   1. Fill in summary (and role/organization/location if relevant) in index.md
-  2. Write the four reflection sections
+  2. Write the four reflection sections — and maybe a one-line "note"
   3. Drop photos into images/ — replace cover.svg (update the "cover:" path)
      and list gallery images with alt text
   4. Set draft: false to publish — it appears in its tab, /timeline,

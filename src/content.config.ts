@@ -39,6 +39,9 @@ const entries = defineCollection({
       organization: z.string().optional(),
       location: z.string().optional(),
       summary: z.string(), // 1–2 sentence card blurb
+      /** Optional one-line personal aside, shown as a margin note on the
+       *  entry page — your voice, not the CV's. */
+      note: z.string().optional(),
       cover: image(),
       gallery: z
         .array(

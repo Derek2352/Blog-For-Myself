@@ -5,6 +5,7 @@ import Base from '@/layouts/Base.astro';
 import MetadataRail from '@/components/MetadataRail.astro';
 import Gallery from '@/components/Gallery.astro';
 import EntryCard from '@/components/EntryCard.astro';
+import PhotoPlan from '@/components/PhotoPlan.astro';
 import { getEntries, entryCode, relatedEntries, categoryHref, type Entry } from '@/lib/content';
 import { categoryBySlug } from '@/data/categories';
 import { resolveTexture } from '@/lib/patterns';
@@ -53,7 +54,18 @@ const texture = resolveTexture(category ?? { slug: entry.data.category });
       </p>
       <h1 class="mt-2 font-display text-4xl leading-[1.08] sm:text-5xl">{entry.data.title}</h1>
       <p class="mt-4 text-lg leading-relaxed text-muted">{entry.data.summary}</p>
+      {
+        entry.data.note && (
+          <p class="mt-4 font-display text-xl italic leading-snug">
+            <span class="text-signal-text" aria-hidden="true">
+              ~{' '}
+            </span>
+            {entry.data.note}
+          </p>
+        )
+      }
     </header>
+    <PhotoPlan entry={entry} />
 
     <figure class="frame mt-8 overflow-hidden">
       <Image

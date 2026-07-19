@@ -7,6 +7,7 @@ endDate: 2026-06-30
 role: "Semi-Finalist"
 organization: "AlipayHK × Seed Foundation"
 location: "Hong Kong"
+# note: ""  # one-line personal aside in your voice — shows as an italic margin note
 summary: "An AI-powered post-payment ledger concept for the AlipayHK Super App — a public-discourse research pipeline distilled into two evidence-anchored personas, 30+ Figma frames, and a 12-screen interactive prototype, built solo in a one-month sprint."
 cover: "./images/cover.svg"
 gallery:
