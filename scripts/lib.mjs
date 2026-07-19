@@ -158,12 +158,12 @@ export async function promptCategory(rl) {
  * Tint varies with the seed so grids don't look like wallpaper.
  */
 export function placeholderSVG({ top = 'COVER · PENDING', bottom = '', seed = '', width = 1600, height = 1000 }) {
-  const tints = ['#242833', '#2a2f28', '#33292d', '#273234', '#2f2a34', '#343026'];
+  const tints = ['#342a21', '#3b2b27', '#2f2c1e', '#372532', '#302a22', '#3a3226'];
   let hash = 0;
   for (const ch of seed) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
   const bg = tints[hash % tints.length];
-  const lineCol = '#8b95a6';
-  const textCol = '#aab3bf';
+  const lineCol = '#a5937d';
+  const textCol = '#b7a58f';
   const t = xmlEscape(top.toUpperCase());
   const b = xmlEscape(bottom.toUpperCase());
   const midY = height / 2;

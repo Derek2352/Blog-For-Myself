@@ -31,7 +31,7 @@ const {
   ogImage = new URL('/og/site.png', Astro.site).toString(),
   ogType = 'website',
   pattern = 'plus',
-  hue = 222,
+  hue = 35,
 } = Astro.props;
 const pageTitle = title ? `${title} — ${site.title}` : `${site.title} — Portfolio & Log`;
 const canonical = new URL(Astro.url.pathname, Astro.site);

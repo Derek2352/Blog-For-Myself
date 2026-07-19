@@ -5,19 +5,19 @@
 
 /* ------------------------------------------------------------------ *
  * Design tokens — the single source of truth.
- * "Contact sheet, annotated" system: warm gallery-white ground, soft
- * rounded frames, archival cobalt stamp, photo-chemical amber signal,
- * and a quiet mono index rail. Comfortable first, precise underneath.
+ * "Contact sheet, annotated" system, graded warm: ivory paper, espresso
+ * ink, a ledger-wine stamp (deliberately not terracotta), photo-chemical
+ * amber, and a quiet mono index rail. Afternoon light, not gallery glare.
  * All components consume these; no ad-hoc hex in markup.
  * ------------------------------------------------------------------ */
 @theme {
   /* color */
-  --color-ground: #f7f6f2;   /* page — warm gallery white (not the AI-default cream) */
-  --color-surface: #fdfcf9;  /* cards, panels */
-  --color-ink: #1e2126;      /* primary text — soft blue-black */
-  --color-muted: #66655e;    /* secondary text — warm grey, AA on ground */
-  --color-line: #e7e4dc;     /* hairlines, frames, ticks */
-  --color-accent: #2a4fc4;   /* archival stamp cobalt — links, active, focus */
+  --color-ground: #f9f4ea;   /* page — warm ivory, afternoon paper */
+  --color-surface: #fffcf5;  /* cards, panels — cream white */
+  --color-ink: #2a241e;      /* primary text — espresso */
+  --color-muted: #6e6257;    /* secondary text — warm taupe, AA on ground */
+  --color-line: #e8e0d2;     /* hairlines, frames, ticks — sand */
+  --color-accent: #8e2f45;   /* ledger wine — links, active, focus */
   --color-accent-ink: #ffffff; /* text on accent */
   --color-signal: #e8a13a;   /* photo-chemical amber — markers, badges (bg use) */
   --color-signal-text: #8a5a14; /* amber legible as text on light ground */
@@ -28,19 +28,19 @@
   --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", monospace;
 
   /* shape — soft, unhurried corners */
-  --radius-card: 0.75rem;
+  --radius-card: 0.875rem;
   --radius-chip: 0.5rem;
 }
 
-/* Dark theme: same tokens re-graded warm, utilities restyle themselves. */
+/* Dark theme: candlelit versions of the same tokens. */
 .dark {
-  --color-ground: #191917;
-  --color-surface: #222220;
-  --color-ink: #ebe9e3;
-  --color-muted: #a3a198;
-  --color-line: #34332e;
-  --color-accent: #93a7ff;
-  --color-accent-ink: #15161a;
+  --color-ground: #1c1814;
+  --color-surface: #272119;
+  --color-ink: #ece4d6;
+  --color-muted: #a89b89;
+  --color-line: #382f24;
+  --color-accent: #efa397;
+  --color-accent-ink: #211a13;
   --color-signal: #e8a13a;
   --color-signal-text: #e8a13a;
 }
@@ -51,7 +51,7 @@
     /* page-texture knobs: pattern ink + wash strength (kept whisper-quiet
        so text contrast stays untouched — readability first) */
     --pattern-color: color-mix(in srgb, var(--color-ink) 15%, transparent);
-    --wash-a: 0.1;
+    --wash-a: 0.12;
     --pat-a: 1;
   }
   .dark {

@@ -185,11 +185,11 @@ radii; every component consumes them, no ad-hoc hex in markup. See **`/colophon`
 site for the living design page (palette, type, the index-rail signature).
 
 - The three deliberately avoided "AI-default" looks (cream + serif + terracotta;
-  near-black + acid green; broadsheet hairline columns) are avoided on purpose: this system
-  is a **warm gallery white + archival cobalt + photo-chemical amber**, soft radii,
-  photography-forward, with one bold element — the mono **index rail** (`E-014 ·
-  2026-04 → 2026-06 · SEMI-FINALIST`) and its reel-tick ruler on `/timeline` and period
-  headers.
+  near-black + acid green; broadsheet hairline columns) stay avoided: this system is
+  **warm ivory + espresso ink + a ledger-wine accent + photo-chemical amber** — warm like
+  afternoon light, but the accent is wine-red (not terracotta/clay) and the identity comes
+  from the mono **index rail** (`E-014 · 2026-04 → 2026-06 · SEMI-FINALIST`) and its
+  reel-tick ruler on `/timeline` and period headers. Dark mode is candlelit, not cold.
 - **Per-tab textures:** every page carries a soft background pattern + faint hue wash
   (never a flat white). Each category declares `pattern`/`hue` in
   `src/data/categories.ts` (halftone · ledger · contours · hatch · weave · plus · waves);

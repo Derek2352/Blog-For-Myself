@@ -38,7 +38,7 @@ export const categories: Category[] = [
     blurb:
       "Competitive work across finance and AI storytelling — from Bloomberg terminals and pitch stages to award-winning film briefs.",
     pattern: "hatch",
-    hue: 222,
+    hue: 8,
   },
   {
     slug: "creative-ai",
@@ -47,7 +47,7 @@ export const categories: Category[] = [
     blurb:
       "AI-animated film, photography, and self-built pipelines — where the analyst and the animator share a desk.",
     pattern: "halftone",
-    hue: 275,
+    hue: 285,
   },
   {
     slug: "study-trips",
@@ -56,7 +56,7 @@ export const categories: Category[] = [
     blurb:
       "Cross-border programmes between Hong Kong, the mainland, and beyond — innovation ecosystems seen first-hand.",
     pattern: "contours",
-    hue: 175,
+    hue: 150,
   },
   {
     slug: "experience",
@@ -65,7 +65,7 @@ export const categories: Category[] = [
     blurb:
       "Roles and internships — applied work in design operations, data, and banking.",
     pattern: "ledger",
-    hue: 215,
+    hue: 45,
   },
   {
     slug: "leadership",
@@ -74,7 +74,7 @@ export const categories: Category[] = [
     blurb:
       "Ambassador programmes and campus leadership — translating AI fluency into shared, usable knowledge.",
     pattern: "plus",
-    hue: 35,
+    hue: 25,
   },
   {
     slug: "community",
@@ -83,7 +83,7 @@ export const categories: Category[] = [
     blurb:
       "Volunteering that keeps me grounded — books, food, and street-level fundraising in Hong Kong.",
     pattern: "weave",
-    hue: 130,
+    hue: 95,
   },
   {
     slug: "career",
@@ -91,7 +91,7 @@ export const categories: Category[] = [
     order: 7,
     blurb: "Mentors and advisors shaping the road ahead.",
     pattern: "waves",
-    hue: 345,
+    hue: 340,
   },
 ];
 

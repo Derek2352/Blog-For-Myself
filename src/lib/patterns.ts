@@ -19,7 +19,7 @@ export const PATTERN_NAMES = [
 export type PatternName = (typeof PATTERN_NAMES)[number];
 
 /** Muted hue wheel (degrees) for the top-of-page wash. */
-export const HUE_WHEEL = [222, 275, 175, 215, 35, 130, 345] as const;
+export const HUE_WHEEL = [35, 8, 285, 150, 45, 95, 340] as const;
 
 export interface PageTexture {
   pattern: PatternName;

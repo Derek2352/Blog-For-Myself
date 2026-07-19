@@ -11,12 +11,12 @@ import { resolveTexture } from '@/lib/patterns';
 const textures = categories.map((c) => ({ label: c.label, ...resolveTexture(c) }));
 
 const swatches = [
-  { name: 'ground', varName: '--color-ground', note: 'warm gallery white — the resting state' },
-  { name: 'surface', varName: '--color-surface', note: 'panels and cards' },
-  { name: 'ink', varName: '--color-ink', note: 'soft blue-black text' },
+  { name: 'ground', varName: '--color-ground', note: 'warm ivory — afternoon paper' },
+  { name: 'surface', varName: '--color-surface', note: 'cream panels and cards' },
+  { name: 'ink', varName: '--color-ink', note: 'espresso text' },
   { name: 'muted', varName: '--color-muted', note: 'margin notes, secondary text' },
-  { name: 'line', varName: '--color-line', note: 'hairlines, frames, ticks' },
-  { name: 'accent', varName: '--color-accent', note: 'archival stamp cobalt — links, focus' },
+  { name: 'line', varName: '--color-line', note: 'sand hairlines, frames, ticks' },
+  { name: 'accent', varName: '--color-accent', note: 'ledger wine — links, focus' },
   { name: 'signal', varName: '--color-signal', note: 'photo-chemical amber — small markers' },
 ];
 ---
@@ -25,7 +25,7 @@ const swatches = [
   title="Colophon"
   description="How this site is designed and built: palette, type, the index-rail signature, and the files-as-content model."
   pattern="ledger"
-  hue={275}
+  hue={285}
 >
   <div class="wrap max-w-4xl py-10">
     <header>
@@ -63,8 +63,9 @@ const swatches = [
       <h2 id="palette-h" class="mt-1 font-display text-2xl">Colour, from the darkroom</h2>
       <p class="mt-3 max-w-prose text-sm leading-relaxed text-muted">
         Rendered live from the design tokens — flip the theme toggle and this page re-grades
-        itself. Cobalt is the stamp on the back of an archival print; amber is photo-chemical.
-        (Deliberately not the default cream-and-terracotta or black-and-acid-green looks.)
+        itself. Ivory paper like afternoon light, espresso ink, a wine-red librarian's stamp,
+        photo-chemical amber. Warm on purpose — and deliberately not the default
+        cream-and-terracotta or black-and-acid-green looks.
       </p>
       <ul class="mt-5 grid list-none gap-3 p-0 sm:grid-cols-2">
         {

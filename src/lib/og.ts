@@ -15,14 +15,15 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 
-// mirror of the light design tokens (satori can't read CSS variables)
+// mirror of the light design tokens (satori can't read CSS variables) —
+// keep in sync with the @theme block in src/styles/global.css
 const T = {
-  ground: '#f7f6f2',
-  surface: '#fdfcf9',
-  ink: '#1e2126',
-  muted: '#66655e',
-  line: '#e7e4dc',
-  accent: '#2a4fc4',
+  ground: '#f9f4ea',
+  surface: '#fffcf5',
+  ink: '#2a241e',
+  muted: '#6e6257',
+  line: '#e8e0d2',
+  accent: '#8e2f45',
   signal: '#e8a13a',
 };
 
