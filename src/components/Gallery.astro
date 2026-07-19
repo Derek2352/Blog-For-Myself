@@ -8,6 +8,7 @@
  * - The frame counter doubles as the timecode nod: "FRAME 02 / 05".
  */
 import { Image, getImage } from 'astro:assets';
+import { orientation } from '@/lib/images';
 
 interface GalleryImage {
   src: ImageMetadata;
@@ -23,10 +24,23 @@ interface Props {
 
 const { images, id } = Astro.props;
 
+// tiles take an orientation-matched aspect, so portrait shots stay portrait
+const TILE_ASPECT = {
+  wide: 'aspect-[4/3]',
+  tall: 'aspect-[3/4]',
+  square: 'aspect-square',
+} as const;
+
 const items = await Promise.all(
   images.map(async (img) => {
     const full = await getImage({ src: img.src, width: 1800 });
-    return { alt: img.alt, caption: img.caption ?? '', full: full.src, thumb: img.src };
+    return {
+      alt: img.alt,
+      caption: img.caption ?? '',
+      full: full.src,
+      thumb: img.src,
+      aspect: TILE_ASPECT[orientation(img.src)],
+    };
   }),
 );
 
@@ -53,7 +67,7 @@ const payload = JSON.stringify(
               alt={img.alt}
               widths={[400, 700]}
               sizes="(min-width: 768px) 30vw, 45vw"
-              class="aspect-[4/3] w-full object-cover"
+              class:list={[img.aspect, 'w-full object-cover']}
               loading="lazy"
             />
           </button>

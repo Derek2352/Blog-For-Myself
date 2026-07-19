@@ -149,6 +149,11 @@ passages you can wrap them: `<span lang="zh-Hant">…</span>`.
   for build assets + basic security headers on Cloudflare/Netlify.
 - `npm run photos` also flags **images over 2 MB** — resize to ~2000px on the long edge
   before committing.
+- **Orientation is automatic**: drop in any photo — landscape, portrait, or square — and
+  the layout adapts by itself (dimensions are read at build time). Wide covers fill their
+  frames; portrait covers hang matted on the cream surface at a capped height; gallery
+  tiles take orientation-matched shapes so mixed rolls sit together like a real contact
+  sheet. No fields to set.
 - Draft-preview builds (`build:drafts`) emit `noindex` so a leaked preview URL never gets
   into search engines.
 

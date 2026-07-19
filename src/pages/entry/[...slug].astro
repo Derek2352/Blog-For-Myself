@@ -19,6 +19,7 @@ import {
 } from '@/lib/content';
 import { categoryBySlug } from '@/data/categories';
 import { resolveTexture } from '@/lib/patterns';
+import { orientation } from '@/lib/images';
 
 export async function getStaticPaths() {
   const entries = await getEntries();
@@ -92,12 +93,17 @@ const nextCode = next ? await entryCode(next) : '';
         </div>
       ) : (
         <figure class="frame mt-8 overflow-hidden" transition:name={`cover-${entry.id}`}>
+          {/* wide covers run full width; tall/square ones hang matted at a capped height */}
           <Image
             src={entry.data.cover}
             alt={`${entry.data.title} — cover image`}
             widths={[720, 1100, 1600]}
             sizes="(min-width: 1280px) 72rem, 94vw"
-            class="w-full"
+            class:list={
+              orientation(entry.data.cover) === 'wide'
+                ? 'w-full'
+                : 'mx-auto w-auto max-h-[75vh]'
+            }
             loading="eager"
             fetchpriority="high"
           />

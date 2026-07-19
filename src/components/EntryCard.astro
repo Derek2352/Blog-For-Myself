@@ -11,6 +11,7 @@ import type { Entry } from '@/lib/content';
 import { entryCode, entryHref } from '@/lib/content';
 import { categoryBySlug } from '@/data/categories';
 import { railRange } from '@/lib/format';
+import { orientation } from '@/lib/images';
 
 interface Props {
   entry: Entry;
@@ -26,6 +27,8 @@ const code = await entryCode(entry);
 const href = entryHref(entry);
 const category = categoryBySlug(entry.data.category);
 const range = railRange(entry.data.date, entry.data.endDate);
+// wide covers fill the card frame; tall/square ones sit matted on the surface
+const coverFit = orientation(entry.data.cover) === 'wide' ? 'object-cover' : 'object-contain';
 ---
 
 {
@@ -67,7 +70,7 @@ const range = railRange(entry.data.date, entry.data.endDate);
             alt=""
             widths={[480, 800, 1200]}
             sizes="(min-width: 1024px) 30vw, (min-width: 640px) 45vw, 92vw"
-            class="aspect-[16/10] w-full object-cover"
+            class:list={['aspect-[16/10] w-full', coverFit]}
             loading={eager ? 'eager' : 'lazy'}
           />
         </div>

@@ -16,6 +16,7 @@ import {
 } from '@/lib/content';
 import { categoryBySlug } from '@/data/categories';
 import { resolveTexture } from '@/lib/patterns';
+import { orientation } from '@/lib/images';
 import { now } from '@/data/now';
 import { isoDay, monthKey } from '@/lib/format';
 
@@ -104,7 +105,10 @@ const catIndex = (await getCategoryIndex()).filter((c) => c.entryCount + c.logCo
                 alt=""
                 widths={[640, 960, 1400]}
                 sizes="(min-width: 1024px) 48vw, 92vw"
-                class="aspect-[16/10] w-full object-cover"
+                class:list={[
+                  'aspect-[16/10] w-full',
+                  orientation(hero.data.cover) === 'wide' ? 'object-cover' : 'object-contain',
+                ]}
                 loading="eager"
                 fetchpriority="high"
               />

@@ -12,6 +12,7 @@ import { getLogs, logCode, logHasBody, categoryHref, type Log } from '@/lib/cont
 import { categoryBySlug } from '@/data/categories';
 import { resolveTexture } from '@/lib/patterns';
 import { resolvePeriod } from '@/lib/periods';
+import { orientation } from '@/lib/images';
 import { isoDay } from '@/lib/format';
 
 export async function getStaticPaths() {
@@ -72,7 +73,9 @@ const texture = resolveTexture(category ?? { slug: log.data.category });
             alt={`${log.data.title} — photo`}
             widths={[720, 1100]}
             sizes="(min-width: 768px) 48rem, 94vw"
-            class="w-full"
+            class:list={
+              orientation(log.data.image) === 'wide' ? 'w-full' : 'mx-auto w-auto max-h-[70vh]'
+            }
             loading="eager"
           />
         </figure>
