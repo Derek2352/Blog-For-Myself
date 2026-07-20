@@ -62,6 +62,23 @@ The 60-second path for small monthly things (a workshop, a talk, a certificate).
 A log **with a body** gets a small detail page; a log **without one** stays a terminal
 card — no dead pages.
 
+### The Content Studio — `npm run studio` (visual, drop-everything)
+
+The one UI where **everything** goes in, including the text. Run `npm run studio` and open
+**http://127.0.0.1:4455** — a local authoring app (dev-only; it writes to `src/content/…`
+and is never part of the built site). From it you can:
+
+- create and edit **entries and logs** — every field, the four reflection sections, tags,
+  links, draft/featured flags, and a **"+ new tab"** button to add a category on the spot;
+- **drag in photos** for the cover and gallery (with alt text + captions) and **video**
+  (drop a file or paste a YouTube/Vimeo/Bilibili link) — images are auto-resized and the
+  frontmatter is written for you, exactly like `npm run inbox`;
+- see live thumbnails of what you've added, and delete an item and its folder.
+
+Typical flow: `npm run studio` in one terminal, `npm run dev` in another, and edit on the
+left while the site refreshes on the right. When you're happy, commit and push. The
+terminal scripts below still work for anyone who prefers the keyboard:
+
 ### The media inbox — `npm run inbox`
 
 **The single entrance for photos and video.** Dump files straight off your phone into

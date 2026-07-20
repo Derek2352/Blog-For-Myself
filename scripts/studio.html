@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Content Studio · local</title>
+    <style>
+      :root {
+        --ground: #f9f4ea; --surface: #fffcf5; --ink: #2a241e; --muted: #6e6257;
+        --line: #e8e0d2; --accent: #8e2f45; --accent-ink: #fff; --signal: #e8a13a; --ok: #3c7a4e;
+        --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        --sans: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang TC", "Noto Sans TC", sans-serif;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: var(--sans); background: var(--ground); color: var(--ink); }
+      header {
+        display: flex; align-items: center; gap: 1rem; padding: 0.7rem 1.2rem;
+        border-bottom: 1px solid var(--line); background: var(--surface); position: sticky; top: 0; z-index: 5;
+      }
+      header h1 { font-size: 1rem; margin: 0; font-weight: 600; }
+      header .tag { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+      header .spacer { flex: 1; }
+      #status { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); }
+      button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 0.45rem 0.8rem; }
+      button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+      button.ghost { background: transparent; }
+      button.danger { color: var(--accent); }
+      button:hover { border-color: var(--accent); }
+      .layout { display: grid; grid-template-columns: 300px 1fr; min-height: calc(100vh - 52px); }
+      aside { border-right: 1px solid var(--line); padding: 1rem; overflow-y: auto; max-height: calc(100vh - 52px); position: sticky; top: 52px; }
+      aside .row { display: flex; gap: 0.5rem; margin-bottom: 0.8rem; }
+      aside .row button { flex: 1; }
+      .cat-group { margin-bottom: 0.9rem; }
+      .cat-group h3 { font-family: var(--mono); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 0.3rem; }
+      .item { padding: 0.4rem 0.55rem; border-radius: 7px; cursor: pointer; font-size: 0.85rem; display: flex; align-items: center; gap: 0.4rem; }
+      .item:hover { background: var(--ground); }
+      .item.active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+      .item .badge { font-family: var(--mono); font-size: 0.6rem; padding: 0.05rem 0.3rem; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); }
+      .item .badge.draft { color: var(--signal); border-color: var(--signal); }
+      main { padding: 1.5rem 2rem; max-width: 900px; overflow-y: auto; }
+      .empty { color: var(--muted); margin-top: 4rem; text-align: center; }
+      fieldset { border: 1px solid var(--line); border-radius: 12px; padding: 1.1rem 1.2rem; margin: 0 0 1.2rem; background: var(--surface); }
+      legend { font-family: var(--mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); padding: 0 0.4rem; }
+      label { display: block; font-size: 0.78rem; color: var(--muted); margin: 0.7rem 0 0.25rem; }
+      input[type=text], input[type=date], input[type=number], input[type=url], textarea, select {
+        width: 100%; font: inherit; padding: 0.5rem 0.6rem; border: 1px solid var(--line); border-radius: 8px; background: var(--ground); color: var(--ink);
+      }
+      textarea { resize: vertical; min-height: 90px; line-height: 1.55; }
+      .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1rem; }
+      .inline { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.8rem; }
+      .inline label { margin: 0; }
+      .chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.4rem; }
+      .chip { font-family: var(--mono); font-size: 0.72rem; background: var(--ground); border: 1px solid var(--line); border-radius: 6px; padding: 0.15rem 0.45rem; display: flex; gap: 0.3rem; align-items: center; }
+      .chip button { border: 0; background: none; padding: 0; color: var(--muted); font-size: 0.9rem; line-height: 1; }
+      .dropzone { border: 1.5px dashed var(--line); border-radius: 10px; padding: 1rem; text-align: center; color: var(--muted); font-size: 0.82rem; cursor: pointer; transition: 0.15s; }
+      .dropzone.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); color: var(--accent); }
+      .thumb { display: inline-block; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; vertical-align: top; }
+      .thumb img { display: block; width: 130px; height: 90px; object-fit: cover; }
+      .gallery-item { display: flex; gap: 0.7rem; align-items: flex-start; padding: 0.6rem 0; border-bottom: 1px solid var(--line); }
+      .gallery-item .meta { flex: 1; }
+      .hint { font-size: 0.75rem; color: var(--muted); margin-top: 0.3rem; }
+      .toast { position: fixed; bottom: 1rem; right: 1rem; background: var(--ink); color: var(--ground); padding: 0.6rem 1rem; border-radius: 8px; font-size: 0.85rem; opacity: 0; transition: 0.25s; pointer-events: none; z-index: 20; }
+      .toast.show { opacity: 1; }
+      .toast.err { background: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Content Studio</h1>
+      <span class="tag">local only · writes to src/content</span>
+      <span class="spacer"></span>
+      <span id="status"></span>
+      <button class="danger ghost" id="delete" hidden>Delete</button>
+      <button class="primary" id="save" disabled>Save</button>
+    </header>
+    <div class="layout">
+      <aside>
+        <div class="row">
+          <button id="new-entry">+ Entry</button>
+          <button id="new-log">+ Log</button>
+        </div>
+        <div id="list"></div>
+      </aside>
+      <main><p class="empty">Pick something on the left, or start a new Entry / Log.</p></main>
+    </div>
+    <div class="toast" id="toast"></div>
+
+    <script>
+      const $ = (s, r = document) => r.querySelector(s);
+      let state = null;
+      let current = null; // { kind, id, isNew, data, sections/body }
+      let dirty = false;
+
+      const toast = (msg, err = false) => {
+        const t = $('#toast');
+        t.textContent = msg; t.className = 'toast show' + (err ? ' err' : '');
+        setTimeout(() => (t.className = 'toast'), 2600);
+      };
+      const api = async (path, body) => {
+        const r = await fetch(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+        const j = await r.json();
+        if (!r.ok || j.error) throw new Error(j.error || 'Request failed');
+        return j;
+      };
+      const setDirty = (v) => { dirty = v; $('#save').disabled = !v; $('#status').textContent = v ? 'unsaved changes' : ''; };
+
+      async function loadState() {
+        state = await api('/api/state');
+        renderList();
+      }
+
+      function renderList() {
+        const list = $('#list');
+        list.innerHTML = '';
+        for (const cat of state.categories) {
+          const entries = state.entries.filter((e) => e.data.category === cat.slug);
+          const logs = state.logs.filter((l) => l.data.category === cat.slug);
+          if (!entries.length && !logs.length) continue;
+          const g = document.createElement('div');
+          g.className = 'cat-group';
+          g.innerHTML = '<h3>' + cat.label + '</h3>';
+          for (const it of [...entries, ...logs]) {
+            const el = document.createElement('div');
+            el.className = 'item' + (current && current.kind === it.kind && current.id === it.id ? ' active' : '');
+            el.innerHTML =
+              '<span class="badge">' + (it.kind === 'entry' ? 'E' : 'L') + '</span>' +
+              '<span style="flex:1">' + escapeHtml(it.data.title || it.id) + '</span>' +
+              (it.data.draft ? '<span class="badge draft">draft</span>' : '');
+            el.onclick = () => selectItem(it.kind, it.id);
+            g.appendChild(el);
+          }
+          list.appendChild(g);
+        }
+      }
+
+      const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+      function selectItem(kind, id) {
+        if (dirty && !confirm('Discard unsaved changes?')) return;
+        const src = (kind === 'entry' ? state.entries : state.logs).find((x) => x.id === id);
+        current = JSON.parse(JSON.stringify(src));
+        current.isNew = false;
+        renderForm();
+        renderList();
+      }
+
+      function newItem(kind) {
+        if (dirty && !confirm('Discard unsaved changes?')) return;
+        const today = new Date().toISOString().slice(0, 10);
+        current = {
+          kind, id: null, isNew: true,
+          data: { title: '', category: state.categories[0]?.slug || '', date: today, draft: true, tags: [], gallery: [], links: [], featured: false, kind: 'other' },
+          sections: state.sections.map((h) => ({ heading: h, text: '' })),
+          body: '',
+        };
+        renderForm();
+        renderList();
+        setDirty(true);
+      }
+
+      function field(labelText, key, type = 'text', opts = {}) {
+        const val = current.data[key] ?? '';
+        const id = 'f_' + key;
+        let control;
+        if (type === 'textarea') control = '<textarea id="' + id + '">' + escapeHtml(val) + '</textarea>';
+        else if (type === 'select') control = '<select id="' + id + '">' + opts.options.map((o) => '<option value="' + o.v + '"' + (val === o.v ? ' selected' : '') + '>' + o.t + '</option>').join('') + '</select>';
+        else control = '<input type="' + type + '" id="' + id + '" value="' + escapeHtml(val) + '">';
+        return '<label for="' + id + '">' + labelText + '</label>' + control;
+      }
+
+      function renderForm() {
+        const m = $('main');
+        const isE = current.kind === 'entry';
+        const cats = state.categories.map((c) => ({ v: c.slug, t: c.label }));
+        let h = '';
+
+        h += '<fieldset><legend>' + (isE ? 'Entry' : 'Log') + ' · details</legend>';
+        h += field('Title', 'title');
+        h += '<div class="grid2">';
+        h += '<div>' + field('Category', 'category', 'select', { options: cats }) + '<button class="ghost" id="new-cat" style="margin-top:.4rem;font-size:.75rem">+ new tab</button></div>';
+        h += '<div>' + field('Date', 'date', 'date') + '</div>';
+        h += '</div>';
+        if (isE) {
+          h += '<div class="grid2"><div>' + field('End date (optional)', 'endDate', 'date') + '</div><div>' + field('Reflection updated (optional)', 'updated', 'date') + '</div></div>';
+          h += '<div class="grid2"><div>' + field('Role (optional)', 'role') + '</div><div>' + field('Location (optional)', 'location') + '</div></div>';
+          h += field('Organization (optional)', 'organization');
+        } else {
+          h += field('Kind', 'kind', 'select', { options: state.kinds.map((k) => ({ v: k, t: k })) });
+        }
+        h += field('Summary (card blurb)', 'summary', 'textarea');
+        if (isE) h += field('Note — one-line aside in your voice (optional)', 'note');
+        if (!isE) h += field('External link (optional)', 'link', 'url');
+        // tags
+        h += '<label>Tags</label><div class="chips" id="tags"></div><input type="text" id="tag-input" placeholder="type a tag, press Enter (lowercase-kebab)">';
+        // flags
+        h += '<div class="inline"><input type="checkbox" id="f_draft"' + (current.data.draft ? ' checked' : '') + '><label for="f_draft">Draft (hidden from the public build)</label></div>';
+        if (isE) {
+          h += '<div class="inline"><input type="checkbox" id="f_featured"' + (current.data.featured ? ' checked' : '') + '><label for="f_featured">Featured on the homepage</label></div>';
+          h += field('Order (optional, pins in grid)', 'order', 'number');
+        }
+        h += '</fieldset>';
+
+        // reflection / body
+        if (isE) {
+          h += '<fieldset><legend>Reflection</legend>';
+          current.sections.forEach((s, i) => {
+            h += '<label>' + s.heading + '</label><textarea data-section="' + i + '">' + escapeHtml(stripC(s.text)) + '</textarea>';
+          });
+          h += '<p class="hint">The four questions. Leave blank and the page shows a gentle "still being written" note.</p></fieldset>';
+        } else {
+          h += '<fieldset><legend>Body (optional)</legend>';
+          h += '<textarea id="log-body">' + escapeHtml(stripC(current.body || '')) + '</textarea>';
+          h += '<p class="hint">A sentence or two. Leave empty and the log stays a terminal card (no detail page).</p></fieldset>';
+        }
+
+        // media
+        h += '<fieldset><legend>Media</legend>';
+        if (current.isNew) {
+          h += '<p class="hint">Save first, then drop photos/video here.</p>';
+        } else if (isE) {
+          h += '<label>Cover</label>' + coverBox();
+          h += '<label style="margin-top:1rem">Gallery</label><div id="gallery-list"></div>' + dropBox('gallery', 'Drop gallery photos (you\'ll add alt text)');
+          h += '<label style="margin-top:1rem">Video (screens on the page)</label>';
+          h += '<input type="text" id="f_video" value="' + escapeHtml(current.data.video || '') + '" placeholder="paste a YouTube/Vimeo/Bilibili link…">';
+          h += dropBox('video', '…or drop a video file');
+        } else {
+          h += '<label>Photo (optional)</label>' + (current.data.image ? thumb(current.data.image) : '') + dropBox('image', 'Drop one photo');
+        }
+        h += '</fieldset>';
+
+        m.innerHTML = h;
+        $('#delete').hidden = current.isNew;
+        wireForm();
+      }
+
+      const stripC = (s) => (s || '').replace(/<!--[\s\S]*?-->/g, '').trim();
+      const previewSrc = (rel) => '/__media?k=' + current.kind + '&id=' + encodeURIComponent(current.id) + '&p=' + encodeURIComponent(rel) + '&t=' + Date.now();
+      function thumb(rel) { return '<div class="thumb"><img src="' + previewSrc(rel) + '" alt=""></div>'; }
+      function coverBox() {
+        const c = current.data.cover || '';
+        const isPlaceholder = c.endsWith('.svg');
+        const preview = c ? '<div style="margin:.4rem 0">' + thumb(c) + '</div>' : '';
+        return preview + '<div class="hint">current: <code>' + escapeHtml(c || '(none)') + '</code>' + (isPlaceholder ? ' — placeholder' : '') + '</div>' + dropBox('cover', 'Drop a cover image (replaces the placeholder)');
+      }
+      function dropBox(role, text) {
+        return '<div class="dropzone" data-role="' + role + '">' + text + '</div>';
+      }
+
+      function renderGallery() {
+        const wrap = $('#gallery-list');
+        if (!wrap) return;
+        wrap.innerHTML = (current.data.gallery || []).map((g, i) =>
+          '<div class="gallery-item"><div class="thumb"><img src="' + previewSrc(g.src) + '" alt="" style="width:90px;height:64px"></div>' +
+          '<div class="meta"><div class="hint"><code>' + escapeHtml(g.src) + '</code></div>' +
+          '<input type="text" data-galt="' + i + '" placeholder="alt text" value="' + escapeHtml(g.alt || '') + '">' +
+          '<input type="text" data-gcap="' + i + '" placeholder="caption (optional)" value="' + escapeHtml(g.caption || '') + '" style="margin-top:.3rem">' +
+          '</div><button class="danger ghost" data-gdel="' + i + '">remove</button></div>'
+        ).join('');
+        wrap.querySelectorAll('[data-galt]').forEach((el) => el.oninput = () => { current.data.gallery[+el.dataset.galt].alt = el.value; setDirty(true); });
+        wrap.querySelectorAll('[data-gcap]').forEach((el) => el.oninput = () => { current.data.gallery[+el.dataset.gcap].caption = el.value; setDirty(true); });
+        wrap.querySelectorAll('[data-gdel]').forEach((el) => el.onclick = () => { current.data.gallery.splice(+el.dataset.gdel, 1); setDirty(true); renderGallery(); });
+      }
+
+      function renderTags() {
+        const wrap = $('#tags');
+        if (!wrap) return;
+        wrap.innerHTML = (current.data.tags || []).map((t, i) => '<span class="chip">#' + escapeHtml(t) + '<button data-tdel="' + i + '">×</button></span>').join('');
+        wrap.querySelectorAll('[data-tdel]').forEach((el) => el.onclick = () => { current.data.tags.splice(+el.dataset.tdel, 1); setDirty(true); renderTags(); });
+      }
+
+      function wireForm() {
+        renderTags();
+        renderGallery();
+        // text fields → current.data
+        ['title', 'category', 'date', 'endDate', 'updated', 'role', 'location', 'organization', 'summary', 'note', 'link', 'kind', 'order', 'video'].forEach((k) => {
+          const el = $('#f_' + k);
+          if (!el) return;
+          el.oninput = () => { current.data[k] = el.value; setDirty(true); };
+        });
+        const draft = $('#f_draft'); if (draft) draft.onchange = () => { current.data.draft = draft.checked; setDirty(true); };
+        const feat = $('#f_featured'); if (feat) feat.onchange = () => { current.data.featured = feat.checked; setDirty(true); };
+        // sections
+        document.querySelectorAll('[data-section]').forEach((el) => el.oninput = () => { current.sections[+el.dataset.section].text = el.value; setDirty(true); });
+        const lb = $('#log-body'); if (lb) lb.oninput = () => { current.body = lb.value; setDirty(true); };
+        // tag input
+        const ti = $('#tag-input');
+        if (ti) ti.onkeydown = (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            const v = ti.value.trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '');
+            if (v && !current.data.tags.includes(v)) { current.data.tags.push(v); setDirty(true); renderTags(); }
+            ti.value = '';
+          }
+        };
+        // new category
+        const nc = $('#new-cat');
+        if (nc) nc.onclick = async () => {
+          const label = prompt('New tab label (e.g. "Music & Sound"):');
+          if (!label) return;
+          try {
+            const r = await api('/api/new-category', { label });
+            state = r.state;
+            current.data.category = r.slug;
+            renderForm();
+            toast('Tab "' + label + '" added');
+          } catch (e) { toast(e.message, true); }
+        };
+        // dropzones
+        document.querySelectorAll('.dropzone').forEach(wireDrop);
+      }
+
+      function wireDrop(zone) {
+        const role = zone.dataset.role;
+        const pick = () => {
+          const inp = document.createElement('input');
+          inp.type = 'file';
+          inp.accept = role === 'video' ? 'video/*' : 'image/*';
+          inp.multiple = role === 'gallery';
+          inp.onchange = () => handleFiles([...inp.files], role);
+          inp.click();
+        };
+        zone.onclick = pick;
+        zone.ondragover = (e) => { e.preventDefault(); zone.classList.add('over'); };
+        zone.ondragleave = () => zone.classList.remove('over');
+        zone.ondrop = (e) => { e.preventDefault(); zone.classList.remove('over'); handleFiles([...e.dataTransfer.files], role); };
+      }
+
+      async function handleFiles(files, role) {
+        if (current.isNew) { toast('Save the item first, then add media.', true); return; }
+        if (dirty && !confirm('Uploads save the current item first. Continue?')) return;
+        if (dirty) await doSave(true);
+        for (const file of files) {
+          let alt = '', caption = '';
+          if (role === 'gallery') { alt = prompt('Alt text for ' + file.name + ' (what\'s in the photo?):') || ''; caption = prompt('Caption (optional):') || ''; }
+          try {
+            toast('Uploading ' + file.name + '…');
+            const dataBase64 = await toBase64(file);
+            const r = await api('/api/upload', { kind: current.kind, id: current.id, role, filename: file.name, dataBase64, alt, caption });
+            // refresh current from server truth
+            const fresh = r.item;
+            current.data = fresh.data;
+            if (fresh.sections) current.sections = fresh.sections;
+            if (fresh.body !== undefined) current.body = fresh.body;
+            renderForm();
+            await loadState();
+            renderList();
+            toast(file.name + ' added');
+          } catch (e) { toast(e.message, true); }
+        }
+      }
+
+      const toBase64 = (file) => new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result.split(',')[1]);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+
+      async function doSave(silent = false) {
+        // sync video text field
+        const vf = $('#f_video'); if (vf) current.data.video = vf.value;
+        const payload = { kind: current.kind, id: current.id, isNew: current.isNew, data: current.data };
+        if (current.kind === 'entry') payload.sections = current.sections; else payload.body = current.body;
+        const r = await api('/api/save', payload);
+        current.id = r.id; current.isNew = false;
+        state = r.state;
+        setDirty(false);
+        renderList();
+        if (!silent) { renderForm(); toast('Saved · ' + r.id); }
+      }
+
+      $('#save').onclick = () => doSave().catch((e) => toast(e.message, true));
+      $('#new-entry').onclick = () => newItem('entry');
+      $('#new-log').onclick = () => newItem('log');
+      $('#delete').onclick = async () => {
+        if (!current || current.isNew) return;
+        if (!confirm('Delete "' + (current.data.title || current.id) + '" and its folder? This cannot be undone.')) return;
+        try {
+          const r = await api('/api/delete', { kind: current.kind, id: current.id });
+          state = r.state; current = null; dirty = false;
+          $('main').innerHTML = '<p class="empty">Deleted. Pick something else or start new.</p>';
+          $('#delete').hidden = true; $('#save').disabled = true; $('#status').textContent = '';
+          renderList(); toast('Deleted');
+        } catch (e) { toast(e.message, true); }
+      };
+      window.onbeforeunload = (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } };
+
+      loadState().catch((e) => toast(e.message, true));
+    </script>
+  </body>
+</html>
