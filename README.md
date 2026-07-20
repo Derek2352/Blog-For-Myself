@@ -229,11 +229,10 @@ passages you can wrap them: `<span lang="zh-Hant">…</span>`.
 
 - Entries from the CV are published (`draft: false`); reflection bodies are **templates
   waiting for your words** — nothing was invented on your behalf.
-- Items marked `# TODO: verify` at the top of their frontmatter (Blueprint of Tomorrow,
-  1.4 Seconds, Inner Mongolia, Wuyishan, Portugal & Spain, BOCHK, Honours Academy,
-  community/career items, HKFYG certificate log) are `draft: true` with approximate dates —
-  confirm details, add photos, then publish. Community & Mentorship tabs therefore only
-  show in dev until you publish something in them.
+- A few items remain `draft: true` (unconfirmed or not-yet-happened): **1.4 Seconds**,
+  **Wuyishan 7-Day Exchange**, **Honours Academy**, and the **career-mentor** entries.
+  Confirm details, add photos, set `draft: false` to publish. The Mentorship & Career tab
+  therefore only shows in dev until you publish something in it.
 - All covers are generated placeholders — replace `images/cover.svg` with real photography
   (keep the `cover:` path in sync). Also replace `src/assets/portrait.svg` and
   `public/cv.pdf` (the CV download button points there).
