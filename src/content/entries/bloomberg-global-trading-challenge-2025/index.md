@@ -14,18 +14,39 @@ featured: false
 draft: false
 ---
 
+<!-- FIRST-PASS DRAFT (from your CV + research) — edit freely in your own voice.
+     "How it felt" especially is a placeholder; make it yours. -->
+
 ## What it was
 
-<!-- The context: what this was, who ran it, the scope. -->
+Bloomberg's **Global Trading Challenge** is the only university investing competition run
+*entirely inside the Bloomberg Terminal* — the same system professional investors use — and
+one of the largest in the world, drawing thousands of students across dozens of countries.
+Teams manage a virtual **US$1 million portfolio** under live market conditions, ranked on
+time-weighted return against a global equity benchmark. I was **selected to represent
+HSUHK** in the Oct–Nov 2025 round.
 
 ## What I did
 
-<!-- My specific part — decisions, tools, deliverables. -->
+I applied real financial-analysis and risk-management strategy to a portfolio moving in real
+time — the coursework theory suddenly load-bearing. The Terminal itself was half the
+challenge and half the reward: learning to navigate the professional toolset under time
+pressure, read live data, and act on it. The market doesn't wait for you to finish your
+analysis, so the work was as much about **position sizing and risk discipline** as about
+picking direction — deciding not just what to buy, but how much, and when to cut.
 
 ## What I learned
 
-<!-- Skills and insights, including the unexpected ones. -->
+Volatile scenarios punish overconfidence faster than anything in a textbook. Watching a
+thesis get repriced by the market in real time taught me more about risk management than any
+single lecture — and made the abstractions from class concrete. Getting fluent on the
+Bloomberg Terminal was its own payoff: it's the industry's native environment, and being at
+home in it is a head start.
 
 ## How it felt
 
-<!-- The honest, human part. Write freely — this is why the site exists. -->
+<!-- Placeholder — rewrite this honestly in your own words. Prompts if useful:
+     a position that went against you; the adrenaline of a live market; representing HSUHK. -->
+
+Trading a live portfolio on the same terminal the professionals use — with the university's
+name on my entry — made the whole field of finance feel suddenly real and within reach.
