@@ -78,12 +78,22 @@ async function collectItems() {
   return items;
 }
 
+const trim = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+
 function describeItem(i) {
-  if (i.isLog) return `${i.slug}  (log${i.missing ? ', no photo yet' : ''})`;
+  const name = trim(i.title, 46);
+  if (i.isLog) return `${name}  (log${i.missing ? ', no photo yet' : ''})`;
   const needs = [];
   if (i.placeholderCover) needs.push('cover');
   if (i.galleryCount < i.target) needs.push(`${i.target - i.galleryCount} gallery`);
-  return `${i.slug}${needs.length ? `  (needs ${needs.join(' + ')})` : ''}`;
+  return `${name}${needs.length ? `  (needs ${needs.join(' + ')})` : ''}`;
+}
+
+/** Where a pick will put the file — shown BEFORE anything moves. */
+function destinationOf(item, isVideo) {
+  if (isVideo) return 'public/videos/';
+  if (item.isLog) return `src/content/logs/${item.slug}/`;
+  return `src/content/entries/${item.slug}/images/`;
 }
 
 async function uniqueDest(dir, name) {
@@ -212,6 +222,7 @@ for (const [idx, file] of media.entries()) {
     const item = await pickItem('Attach this film to which entry?', false);
     if (item === 'quit') break;
     if (!item) continue;
+    console.log(`  → ${item.title}\n    destination: ${destinationOf(item, true)}`);
     const videosDir = path.join(ROOT, 'public/videos');
     await mkdir(videosDir, { recursive: true });
     const dest = await uniqueDest(videosDir, cleanName(file));
@@ -229,6 +240,7 @@ for (const [idx, file] of media.entries()) {
   const item = await pickItem('Where does this photo go?');
   if (item === 'quit') break;
   if (!item) continue;
+  console.log(`  → ${item.title}\n    destination: ${destinationOf(item, false)}`);
 
   if (item.isLog) {
     const dir = path.dirname(item.indexPath);
