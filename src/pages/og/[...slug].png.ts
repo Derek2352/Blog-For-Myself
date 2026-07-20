@@ -3,6 +3,7 @@ import { getEntries, entryCode, type Entry } from '@/lib/content';
 import { categoryBySlug } from '@/data/categories';
 import { railRange } from '@/lib/format';
 import { renderOgCard } from '@/lib/og';
+import { contentImagePath } from '@/lib/lqip';
 
 export async function getStaticPaths() {
   const entries = await getEntries();
@@ -22,7 +23,7 @@ export const GET: APIRoute = async ({ props }) => {
   const png = await renderOgCard({
     rail,
     title: entry.data.title,
-    cover: entry.data.cover,
+    coverFile: (await contentImagePath('entries', entry.id, 'cover')) ?? undefined,
   });
   return new Response(png, { headers: { 'Content-Type': 'image/png' } });
 };

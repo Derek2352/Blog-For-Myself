@@ -44,7 +44,7 @@ const path = Astro.url.pathname.replace(/\/?$/, '/');
             <div class="tab-flyout" id={flyoutId}>
               <div class="tab-flyout-inner">
                 <a class="flyout-head" href={href}>
-                  {tab.label} · all →
+                  all →
                 </a>
                 {tab.entries.length > 0 && (
                   <ul class="flyout-list">
@@ -88,6 +88,19 @@ const path = Astro.url.pathname.replace(/\/?$/, '/');
       group.addEventListener('pointerenter', check);
       group.addEventListener('focusin', check);
     });
+
+    // mobile: show a scroll hint while more tabs are hidden to the right
+    const bar = document.querySelector<HTMLElement>('[data-tabbar]');
+    const wrap = bar?.closest<HTMLElement>('.tabbar-wrap');
+    if (bar && wrap) {
+      const update = () => {
+        const more = bar.scrollWidth - bar.clientWidth - bar.scrollLeft > 8;
+        wrap.toggleAttribute('data-more', more);
+      };
+      bar.addEventListener('scroll', update, { passive: true });
+      window.addEventListener('resize', update);
+      update();
+    }
   }
   document.addEventListener('astro:page-load', setupFlyouts);
 </script>

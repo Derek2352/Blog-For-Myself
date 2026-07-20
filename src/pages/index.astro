@@ -18,6 +18,7 @@ import { categoryBySlug } from '@/data/categories';
 import { resolveTexture } from '@/lib/patterns';
 import { orientation } from '@/lib/images';
 import { personSchema } from '@/lib/schema';
+import { lqipStyle } from '@/lib/lqip';
 import { now } from '@/data/now';
 import { isoDay, monthKey } from '@/lib/format';
 
@@ -27,6 +28,7 @@ const logs = await getLogs();
 const featured = entries.filter((e) => e.data.featured);
 const hero = featured[0] ?? entries[0];
 const heroCode = hero ? await entryCode(hero) : '';
+const heroLqip = hero ? await lqipStyle("entries", hero.id, "cover") : undefined;
 const strip = (featured.length > 1 ? featured : entries).filter((e) => e !== hero).slice(0, 3);
 
 const lately = await Promise.all(
@@ -100,7 +102,7 @@ const catIndex = (await getCategoryIndex()).filter((c) => c.entryCount + c.logCo
       hero && (
         <figure class="reveal-2">
           <a href={entryHref(hero)} class="card group block">
-            <div class="frame card-cover overflow-hidden">
+            <div class="frame card-cover blurup overflow-hidden" style={heroLqip}>
               <Image
                 src={hero.data.cover}
                 alt=""

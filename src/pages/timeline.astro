@@ -12,11 +12,13 @@ const entries = await getEntries();
 
 type Row = { type: 'year'; year: number } | { type: 'entry'; entry: Entry };
 const rows: Row[] = [];
+const years: number[] = [];
 let currentYear: number | null = null;
 for (const entry of entries) {
   const year = entry.data.date.getUTCFullYear();
   if (year !== currentYear) {
     rows.push({ type: 'year', year });
+    years.push(year);
     currentYear = year;
   }
   rows.push({ type: 'entry', entry });
@@ -36,23 +38,60 @@ for (const entry of entries) {
     </header>
 
     <h2 class="sr-only">All entries, newest first</h2>
-    <div class="relative mt-10 pl-6 sm:pl-9">
-      <div class="reel-ticks-v absolute bottom-0 left-0 top-0" aria-hidden="true"></div>
-      <ol class="list-none p-0">
-        {
-          rows.map((row) =>
-            row.type === 'year' ? (
-              <li class="pb-1 pt-8 first:pt-0">
-                <p class="font-display text-3xl text-muted" aria-label={`Year ${row.year}`}>
-                  {row.year}
-                </p>
-              </li>
-            ) : (
-              <TimelineItem entry={row.entry} />
-            ),
-          )
-        }
-      </ol>
+    <div class="mt-10 gap-8 lg:grid lg:grid-cols-[4rem_1fr]">
+      {
+        years.length > 1 && (
+          <nav class="jump-rail hidden lg:flex" aria-label="Jump to year">
+            {years.map((y) => (
+              <a href={`#year-${y}`} data-jump={`year-${y}`}>
+                {y}
+              </a>
+            ))}
+          </nav>
+        )
+      }
+      <div class="relative pl-6 sm:pl-9">
+        <div class="reel-ticks-v absolute bottom-0 left-0 top-0" aria-hidden="true"></div>
+        <ol class="list-none p-0">
+          {
+            rows.map((row) =>
+              row.type === 'year' ? (
+                <li id={`year-${row.year}`} class="scroll-mt-24 pb-1 pt-8 first:pt-0">
+                  <p class="font-display text-3xl text-muted" aria-label={`Year ${row.year}`}>
+                    {row.year}
+                  </p>
+                </li>
+              ) : (
+                <TimelineItem entry={row.entry} />
+              ),
+            )
+          }
+        </ol>
+      </div>
     </div>
   </div>
 </Base>
+
+<script>
+  // Highlight the current year/period in the jump rail as you scroll.
+  function setupJumpRail(): void {
+    const links = [...document.querySelectorAll<HTMLAnchorElement>('.jump-rail a[data-jump]')];
+    if (!links.length) return;
+    const targets = links
+      .map((a) => document.getElementById(a.dataset.jump!))
+      .filter(Boolean) as HTMLElement[];
+    const io = new IntersectionObserver(
+      (ents) => {
+        for (const e of ents) {
+          if (e.isIntersecting) {
+            const id = e.target.id;
+            links.forEach((a) => a.classList.toggle('here', a.dataset.jump === id));
+          }
+        }
+      },
+      { rootMargin: '-10% 0px -80% 0px' },
+    );
+    targets.forEach((t) => io.observe(t));
+  }
+  document.addEventListener('astro:page-load', setupJumpRail);
+</script>

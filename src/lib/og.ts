@@ -43,11 +43,10 @@ function loadFonts() {
 }
 
 /** Try to inline a raster cover (real photos); SVG placeholders return undefined. */
-async function coverDataUri(cover: ImageMetadata): Promise<string | undefined> {
-  const fsPath = (cover as ImageMetadata & { fsPath?: string }).fsPath;
-  if (!fsPath || cover.format === 'svg') return undefined;
+async function coverDataUri(coverFile: string): Promise<string | undefined> {
+  if (/\.svg$/i.test(coverFile)) return undefined;
   try {
-    const jpg = await sharp(fsPath).resize(520, 630, { fit: 'cover' }).jpeg({ quality: 78 }).toBuffer();
+    const jpg = await sharp(coverFile).resize(520, 630, { fit: 'cover' }).jpeg({ quality: 78 }).toBuffer();
     return `data:image/jpeg;base64,${jpg.toString('base64')}`;
   } catch {
     return undefined;
@@ -63,17 +62,18 @@ export interface OgCard {
   rail: string; // "E-014 · 2026-04 → 2026-06 · COMPETITIONS & AWARDS"
   title: string;
   footer?: string;
-  cover?: ImageMetadata;
+  /** Absolute path to the cover source file (raster → photo layout). */
+  coverFile?: string;
 }
 
 export async function renderOgCard({
   rail,
   title,
   footer = 'Derek Yung — Portfolio & Log',
-  cover,
+  coverFile,
 }: OgCard): Promise<ArrayBuffer> {
   const fonts = await loadFonts();
-  const photo = cover ? await coverDataUri(cover) : undefined;
+  const photo = coverFile ? await coverDataUri(coverFile) : undefined;
   const titleSize = title.length > 70 ? 52 : title.length > 40 ? 60 : 72;
 
   const textColumn = el(

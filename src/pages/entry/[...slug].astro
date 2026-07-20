@@ -7,6 +7,7 @@ import Gallery from '@/components/Gallery.astro';
 import EntryCard from '@/components/EntryCard.astro';
 import PhotoPlan from '@/components/PhotoPlan.astro';
 import VideoEmbed from '@/components/VideoEmbed.astro';
+import ReadingAids from '@/components/ReadingAids.astro';
 import {
   getEntries,
   entryCode,
@@ -21,6 +22,7 @@ import { categoryBySlug } from '@/data/categories';
 import { resolveTexture } from '@/lib/patterns';
 import { orientation } from '@/lib/images';
 import { entrySchema } from '@/lib/schema';
+import { lqipStyle } from '@/lib/lqip';
 
 export async function getStaticPaths() {
   const entries = await getEntries();
@@ -49,6 +51,7 @@ const prev = index > 0 ? siblings[index - 1] : undefined;
 const next = index >= 0 && index < siblings.length - 1 ? siblings[index + 1] : undefined;
 const prevCode = prev ? await entryCode(prev) : '';
 const nextCode = next ? await entryCode(next) : '';
+const coverLqip = await lqipStyle("entries", entry.id, "cover");
 ---
 
 <Base
@@ -64,6 +67,7 @@ const nextCode = next ? await entryCode(next) : '';
     categoryLabel: category?.label ?? entry.data.category,
   })}
 >
+  <ReadingAids />
   <article class="wrap py-10" data-pagefind-body>
     <span class="sr-only" data-pagefind-filter="type">Entry</span>
     <header class="max-w-3xl">
@@ -99,7 +103,7 @@ const nextCode = next ? await entryCode(next) : '';
           <VideoEmbed url={entry.data.video} title={entry.data.title} poster={entry.data.cover} />
         </div>
       ) : (
-        <figure class="frame mt-8 overflow-hidden" transition:name={`cover-${entry.id}`}>
+        <figure class="frame blurup mt-8 overflow-hidden" style={coverLqip} transition:name={`cover-${entry.id}`}>
           {/* wide covers run full width; tall/square ones hang matted at a capped height */}
           <Image
             src={entry.data.cover}
@@ -262,14 +266,33 @@ const nextCode = next ? await entryCode(next) : '';
       });
   }
 
+  function goPlane(link: HTMLAnchorElement): void {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.classList.contains('a11y-motion')) {
+      navigate(link.href);
+    } else {
+      fly(link, link.dataset.plane === 'prev' ? -1 : 1);
+    }
+  }
+
   document.addEventListener('astro:page-load', () => {
-    document.querySelectorAll<HTMLAnchorElement>('a[data-plane]').forEach((link) => {
+    const links = document.querySelectorAll<HTMLAnchorElement>('a[data-plane]');
+    links.forEach((link) => {
       link.addEventListener('click', (e) => {
-        if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
         e.preventDefault();
-        fly(link, link.dataset.plane === 'prev' ? -1 : 1);
+        goPlane(link);
       });
     });
+    // ← / → jump between entries in the category (skips when typing/searching)
+    const prev = document.querySelector<HTMLAnchorElement>('a[data-plane="prev"]');
+    const next = document.querySelector<HTMLAnchorElement>('a[data-plane="next"]');
+    document.addEventListener('keydown', onKey);
+    function onKey(e: KeyboardEvent) {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t?.isContentEditable) return;
+      if (e.key === 'ArrowLeft' && prev) { e.preventDefault(); goPlane(prev); }
+      if (e.key === 'ArrowRight' && next) { e.preventDefault(); goPlane(next); }
+    }
   });
 </script>

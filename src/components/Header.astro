@@ -1,5 +1,6 @@
 ---
 import ThemeToggle from './ThemeToggle.astro';
+import A11yControls from './A11yControls.astro';
 import TabBar from './TabBar.astro';
 import { site } from '@/data/site';
 
@@ -36,11 +37,12 @@ const path = Astro.url.pathname.replace(/\/?$/, '/');
           </a>
         ))
       }
+      <A11yControls />
       <ThemeToggle />
     </nav>
   </div>
   <div class="wrap">
-    <TabBar />
+    <div class="tabbar-wrap"><TabBar /></div>
   </div>
 </header>
 

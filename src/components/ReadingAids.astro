@@ -1,0 +1,38 @@
+---
+/**
+ * Reading progress bar + back-to-top button for long detail pages.
+ * Progress reflects how far through the article you are; the button
+ * appears past the first screen. Both are motion-safe and reset on
+ * client-side navigation.
+ */
+---
+
+<div class="reading-progress" data-progress aria-hidden="true"></div>
+<button type="button" class="to-top" data-to-top aria-label="Back to top">
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M12 19V5M5 12l7-7 7 7"></path>
+  </svg>
+</button>
+
+<script>
+  function setupReadingAids(): void {
+    const bar = document.querySelector<HTMLElement>('[data-progress]');
+    const btn = document.querySelector<HTMLButtonElement>('[data-to-top]');
+    if (!bar || !btn) return;
+    const reduce = () =>
+      matchMedia('(prefers-reduced-motion: reduce)').matches ||
+      document.documentElement.classList.contains('a11y-motion');
+
+    const onScroll = () => {
+      const doc = document.documentElement;
+      const max = doc.scrollHeight - doc.clientHeight;
+      const pct = max > 0 ? Math.min(1, doc.scrollTop / max) : 0;
+      bar.style.width = (pct * 100).toFixed(1) + '%';
+      btn.classList.toggle('show', doc.scrollTop > doc.clientHeight * 0.6);
+    };
+    btn.onclick = () => window.scrollTo({ top: 0, behavior: reduce() ? 'auto' : 'smooth' });
+    document.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+  }
+  document.addEventListener('astro:page-load', setupReadingAids);
+</script>

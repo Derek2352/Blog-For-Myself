@@ -96,7 +96,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <!-- Soft page-to-page transitions (covers morph, tabs slide). -->
     <ClientRouter />
 
-    <!-- Theme before first paint: stored choice wins, else system preference.
+    <!-- Theme + accessibility mode before first paint: stored choices win.
          Re-applied after every client-side swap (the router replaces <html>
          attributes), plus a .js flag that scroll-reveals key off. -->
     <script is:inline>
@@ -108,6 +108,9 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
               ? stored === 'dark'
               : matchMedia('(prefers-color-scheme: dark)').matches;
             document.documentElement.classList.toggle('dark', dark);
+            for (const k of ['large', 'contrast', 'underline', 'motion']) {
+              document.documentElement.classList.toggle('a11y-' + k, localStorage.getItem('a11y-' + k) === '1');
+            }
           } catch {}
           document.documentElement.classList.add('js');
         };
@@ -137,7 +140,9 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
       )
     }
     <Header />
-    <main id="main" class="flex-1">
+    <!-- polite announcement of the new page after client-side navigation -->
+    <p class="sr-only" aria-live="polite" data-route-announce></p>
+    <main id="main" class="flex-1" tabindex="-1">
       <slot />
     </main>
     <Footer />
@@ -173,7 +178,24 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
           .querySelectorAll('[data-io-reveal]:not(.io-in)')
           .forEach((el) => io.observe(el));
       }
+      // Blur-up: fade each image in once it has decoded.
+      function setupBlurup(): void {
+        document.querySelectorAll<HTMLImageElement>('.blurup img').forEach((img) => {
+          if (img.complete) img.classList.add('loaded');
+          else img.addEventListener('load', () => img.classList.add('loaded'), { once: true });
+        });
+      }
       document.addEventListener('astro:page-load', setupReveals);
+      document.addEventListener('astro:page-load', setupBlurup);
+
+      // After a client-side navigation, move focus to <main> and announce the
+      // page title, so screen-reader users learn the page changed.
+      document.addEventListener('astro:after-swap', () => {
+        const main = document.getElementById('main');
+        const announce = document.querySelector('[data-route-announce]');
+        if (announce) announce.textContent = document.title.replace(/ — .*/, '');
+        if (main) main.focus({ preventScroll: true });
+      });
     </script>
   </body>
 </html>
