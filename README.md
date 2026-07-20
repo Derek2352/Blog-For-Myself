@@ -65,8 +65,11 @@ card — no dead pages.
 ### The media inbox — `npm run inbox`
 
 **The single entrance for photos and video.** Dump files straight off your phone into
-`_inbox/` (any names), run `npm run inbox`, and answer two or three questions per file.
-The script:
+`_inbox/` (any names), run `npm run inbox`, and file each one through a catalog that
+mirrors the site nav: pick the **tab by number** (1 = Competitions & Awards, …), then the
+item inside it. After the first pick it knows where you're working — **Enter files the
+next photo to the same entry**, and `a` files *all* remaining ones there (alt text still
+asked per photo). `n` reopens the catalog, `s` skips, `q` quits. The script:
 
 - resizes anything oversized (long edge > 2000px or > 2 MB) on the way in
 - moves each photo into the chosen entry's `images/` folder (or the log's folder)

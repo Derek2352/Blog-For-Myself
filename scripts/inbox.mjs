@@ -15,7 +15,7 @@ import { readdir, readFile, writeFile, rename, unlink, mkdir, stat } from 'node:
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
-import { makePrompter, yamlQuote } from './lib.mjs';
+import { loadCategories, makePrompter, yamlQuote } from './lib.mjs';
 import { photoPlan } from './photo-rules.mjs';
 
 const ROOT = new URL('..', import.meta.url).pathname;
@@ -67,6 +67,7 @@ async function collectItems() {
         isLog,
         indexPath,
         title: fmStr(block, 'title') ?? dirent.name,
+        category: fmStr(block, 'category') ?? '',
         missing,
         placeholderCover,
         galleryCount,
@@ -183,20 +184,81 @@ const media = files.filter((f) => PHOTO_EXT.test(f) || VIDEO_EXT.test(f));
 const items = await collectItems();
 console.log(`\nMEDIA INBOX — ${media.length} file(s) to sort\n${'─'.repeat(56)}`);
 
-async function pickItem(promptText, allowLogs = true) {
-  const list = allowLogs ? items : items.filter((i) => !i.isLog);
-  const top = list.slice(0, 12);
-  console.log('');
-  top.forEach((i, n) => console.log(`  ${String(n + 1).padStart(2)}. ${describeItem(i)}`));
+// ---- the catalog: pick the TAB first (numbered like the site nav),
+//      then the item inside it. Enter repeats your last choice, so a
+//      batch from one event files in two keystrokes per photo. ----
+const { cats } = await loadCategories();
+const byCat = new Map(cats.map((c) => [c.slug, { ...c, items: [] }]));
+for (const item of items) byCat.get(item.category)?.items.push(item);
+
+let lastTab = null;
+let lastItem = null;
+/** 'a' at the Same-place prompt: file every remaining photo into lastItem. */
+let stickyAll = false;
+
+async function pickDestination(promptText, allowLogs = true) {
+  console.log(`\n${promptText}`);
   for (;;) {
-    const answer = (await rl.question(`${promptText} (number/slug, s = skip, q = quit): `)).trim();
-    if (answer === 'q') return 'quit';
-    if (answer === 's' || answer === '') return null;
-    const byNumber = top[Number(answer) - 1];
-    if (byNumber) return byNumber;
-    const bySlug = list.find((i) => i.slug === answer);
-    if (bySlug) return bySlug;
-    console.log(`  No item "${answer}" — try a number from the list or an exact slug.`);
+    // level 1 — the tab catalog
+    console.log('');
+    cats.forEach((c, n) => {
+      const eligible = byCat.get(c.slug).items.filter((i) => allowLogs || !i.isLog);
+      const hungry = eligible.filter((i) => i.missing > 0).length;
+      console.log(
+        `  ${String(n + 1).padStart(2)}. ${c.label}${hungry ? `  (${hungry} item${hungry === 1 ? '' : 's'} need photos)` : ''}`,
+      );
+    });
+    const tabDefault = lastTab ? `, Enter = ${byCat.get(lastTab).label}` : '';
+    const a = (await rl.question(`  Tab (number/slug${tabDefault}, s = skip, q = quit): `)).trim();
+    if (a === 'q') return 'quit';
+    if (a === 's') return null;
+    let tab = null;
+    if (a === '' && lastTab) tab = lastTab;
+    else if (cats[Number(a) - 1]) tab = cats[Number(a) - 1].slug;
+    else if (byCat.has(a)) tab = a;
+    else {
+      // power shortcut: typing an exact item slug jumps straight to it
+      const direct = items.find((i) => i.slug === a && (allowLogs || !i.isLog));
+      if (direct) {
+        lastTab = direct.category;
+        lastItem = direct;
+        return direct;
+      }
+      console.log(a === '' ? '  (no last tab yet — pick a number)' : `  No tab "${a}".`);
+      continue;
+    }
+
+    // level 2 — items within the tab
+    const group = byCat.get(tab);
+    const eligible = group.items.filter((i) => allowLogs || !i.isLog);
+    if (eligible.length === 0) {
+      console.log(`  ${group.label} has no ${allowLogs ? 'items' : 'entries'} yet — pick another tab.`);
+      continue;
+    }
+    console.log(`\n  ${group.label}:`);
+    const top = eligible.slice(0, 15);
+    top.forEach((i, n) => console.log(`  ${String(n + 1).padStart(2)}. ${describeItem(i)}`));
+    const itemDefault =
+      lastItem && lastItem.category === tab && (allowLogs || !lastItem.isLog)
+        ? `, Enter = ${trim(lastItem.title, 28)}`
+        : '';
+    const b = (
+      await rl.question(`  Item (number/slug${itemDefault}, b = back, s = skip, q = quit): `)
+    ).trim();
+    if (b === 'q') return 'quit';
+    if (b === 's') return null;
+    if (b === 'b') continue;
+    let picked = null;
+    if (b === '' && itemDefault) picked = lastItem;
+    else if (top[Number(b) - 1]) picked = top[Number(b) - 1];
+    else picked = eligible.find((i) => i.slug === b) ?? null;
+    if (!picked) {
+      console.log(`  No item "${b}" in ${group.label} — starting over from the tabs.`);
+      continue;
+    }
+    lastTab = tab;
+    lastItem = picked;
+    return picked;
   }
 }
 
@@ -219,7 +281,7 @@ for (const [idx, file] of media.entries()) {
   console.log(`\nFILE ${idx + 1}/${media.length} · ${file}${dims} · ${size}${isVideo ? ' · video' : ''}`);
 
   if (isVideo) {
-    const item = await pickItem('Attach this film to which entry?', false);
+    const item = await pickDestination('Attach this film to which entry?', false);
     if (item === 'quit') break;
     if (!item) continue;
     console.log(`  → ${item.title}\n    destination: ${destinationOf(item, true)}`);
@@ -237,10 +299,44 @@ for (const [idx, file] of media.entries()) {
     continue;
   }
 
-  const item = await pickItem('Where does this photo go?');
-  if (item === 'quit') break;
-  if (!item) continue;
-  console.log(`  → ${item.title}\n    destination: ${destinationOf(item, false)}`);
+  // Once an entry is picked, following photos default there — no catalog
+  // re-walk for a batch from the same event. Enter = same place again,
+  // a = all remaining files here, n = open the catalog as usual.
+  let item = null;
+  let autoBatch = false;
+  if (lastItem && !lastItem.isLog) {
+    if (stickyAll) {
+      item = lastItem;
+      autoBatch = true;
+      console.log(`  → ${item.title} (filing all remaining here)`);
+      console.log(`    destination: ${destinationOf(item, false)}`);
+    } else {
+      const same = (
+        await rl.question(
+          `Same place? ${trim(lastItem.title, 40)} (Enter = yes, a = all remaining, n = pick elsewhere, s = skip, q = quit): `,
+        )
+      )
+        .trim()
+        .toLowerCase();
+      if (same === 'q') break;
+      if (same === 's') continue;
+      if (same === '' || same === 'a') {
+        if (same === 'a') {
+          stickyAll = true;
+          autoBatch = true;
+        }
+        item = lastItem;
+        console.log(`  → ${item.title}\n    destination: ${destinationOf(item, false)}`);
+      }
+    }
+  }
+  if (!item) {
+    const picked = await pickDestination('Where does this photo go?');
+    if (picked === 'quit') break;
+    if (!picked) continue;
+    item = picked;
+    console.log(`  → ${item.title}\n    destination: ${destinationOf(item, false)}`);
+  }
 
   if (item.isLog) {
     const dir = path.dirname(item.indexPath);
@@ -253,8 +349,9 @@ for (const [idx, file] of media.entries()) {
     continue;
   }
 
-  const role =
-    (await rl.question('Use as [g]allery or [c]over? [g]: ')).trim().toLowerCase() === 'c'
+  const role = autoBatch
+    ? 'gallery'
+    : (await rl.question('Use as [g]allery or [c]over? [g]: ')).trim().toLowerCase() === 'c'
       ? 'cover'
       : 'gallery';
   const imagesDir = path.join(path.dirname(item.indexPath), 'images');
