@@ -93,6 +93,15 @@ export const categories: Category[] = [
     pattern: "waves",
     hue: 340,
   },
+  {
+    slug: "leisure-time",
+    label: "Leisure Time :)",
+    order: 8,
+    blurb:
+      "Off the clock — films watched, places wandered, and whatever else refills the tank.",
+    pattern: "waves",
+    hue: 195,
+  },
 ];
 
 /** Slugs that can never be category slugs — they collide with fixed routes. */
