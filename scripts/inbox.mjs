@@ -194,7 +194,11 @@ let moved = 0;
 for (const [idx, file] of media.entries()) {
   const srcPath = path.join(INBOX, file);
   const isVideo = VIDEO_EXT.test(file);
-  const size = ((await stat(srcPath)).size / 1024 / 1024).toFixed(1);
+  const bytes = (await stat(srcPath)).size;
+  const size =
+    bytes >= 1024 * 1024
+      ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
+      : `${Math.max(1, Math.round(bytes / 1024))} KB`;
   let dims = '';
   if (!isVideo && !/\.svg$/i.test(file)) {
     try {
@@ -202,7 +206,7 @@ for (const [idx, file] of media.entries()) {
       dims = ` · ${m.width}×${m.height}`;
     } catch {}
   }
-  console.log(`\nFILE ${idx + 1}/${media.length} · ${file}${dims} · ${size} MB${isVideo ? ' · video' : ''}`);
+  console.log(`\nFILE ${idx + 1}/${media.length} · ${file}${dims} · ${size}${isVideo ? ' · video' : ''}`);
 
   if (isVideo) {
     const item = await pickItem('Attach this film to which entry?', false);
@@ -215,7 +219,7 @@ for (const [idx, file] of media.entries()) {
     const publicPath = `/videos/${path.basename(dest)}`;
     await writeFile(item.indexPath, setVideo(await readFile(item.indexPath, 'utf8'), publicPath));
     console.log(`  ✓ ${publicPath} → ${item.slug} (video set; it screens on the page, click-to-play)`);
-    if (Number(size) > 25) {
+    if (bytes > 25 * 1024 * 1024) {
       console.log('  note: that file is hefty — a YouTube/Bilibili link keeps the repo lighter.');
     }
     moved += 1;
@@ -272,8 +276,9 @@ for (const [idx, file] of media.entries()) {
       item.galleryCount += 1;
     }
   }
+  // update the "needs" label but keep list ORDER frozen for the whole
+  // session — the same number must mean the same destination on every file
   item.missing = Math.max(0, item.missing - 1);
-  items.sort((a, b) => b.missing - a.missing || a.slug.localeCompare(b.slug));
   moved += 1;
 }
 
