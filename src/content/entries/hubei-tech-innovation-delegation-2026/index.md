@@ -27,9 +27,10 @@ infrastructure that AI and modern computing actually run on, in **Wuhan** and **
 ## What I did
 
 The delegation went straight to the machines. At the **Wuhan AI Computing Center** and
-**Supercomputing Center**, I saw the compute layer up close — Wuhan's centres run on
-domestic Huawei Ascend hardware and host large multimodal models, part of China's push to
-build a home-grown AI stack. At the **Wuhan National Laboratory for Optoelectronics** at
+**Supercomputing Center**, I saw the compute layer up close — the AI centre runs on Huawei's
+domestic **Atlas 900** cluster (Ascend silicon, ~100 PFLOPS at launch), part of China's push
+to build a home-grown AI stack under a very different supply chain from the one I take for
+granted. At the **Wuhan National Laboratory for Optoelectronics** at
 HUST — one of the country's first national laboratories, working on photonics, integrated
 optics and next-generation memory — the exchange turned to the frontier of the physical
 science beneath the silicon. The trip then widened into Central China's broader landscape

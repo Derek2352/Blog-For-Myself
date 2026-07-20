@@ -26,11 +26,13 @@ entrepreneurship across Guangzhou's **Nansha and Tianhe** districts.
 ## What I did
 
 The itinerary went straight to working industry hubs: **Designest Innovation Consulting**,
-**Guangdong Medical Valley**, and the **Blue Bay Future Sci-Tech Camp** (where the focus was
-drone technology, and I got into the detail of their proprietary analytical framework). At
-the **Guangdong–Hong Kong–Macao Youth Innovation and Entrepreneurship Center**, the lens
-widened to the *policy* layer — the infrastructure and incentives designed to help regional
-start-ups actually get off the ground.
+**Guangdong Medical Valley** (a biomedical and medical-device incubation park in Nansha,
+built to grow the region's life-sciences industry), and the **Blue Bay Future Sci-Tech Camp**
+— where the focus was drone technology, fitting for Nansha, which has become one of China's
+lead districts for government-coordinated drone services. I got into the detail of the camp's
+proprietary analytical framework. At the **Guangdong–Hong Kong–Macao Youth Innovation and
+Entrepreneurship Center**, the lens widened to the *policy* layer — the infrastructure and
+incentives designed to help regional start-ups actually get off the ground.
 
 ## What I learned
 

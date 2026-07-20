@@ -25,11 +25,12 @@ FinTech and smart cities.
 
 ## What I did
 
-Two anchor visits. At the **National Supercomputing Center Shenzhen**, I looked at advanced
-data analytics and digital infrastructure at national scale. At **Shenzhen Zhicheng Computing
-Network Technology** — the city's **Smart City & Big Data Center** — I saw data-driven FinTech
-systems in real-world operation, and evaluated the part they play in shaping China's digital
-economy.
+Two anchor visits. At the **National Supercomputing Center Shenzhen** — one of China's first
+national supercomputing centres, whose original system briefly ranked second-fastest in the
+world and which is now moving to exascale — I looked at advanced data analytics and digital
+infrastructure at national scale. At **Shenzhen Zhicheng Computing Network Technology** — the
+city's **Smart City & Big Data Center** — I saw data-driven FinTech systems in real-world
+operation, and evaluated the part they play in shaping China's digital economy.
 
 ## What I learned
 

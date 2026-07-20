@@ -19,12 +19,13 @@ draft: false
 
 ## What it was
 
-Bloomberg's **Global Trading Challenge** is the only university investing competition run
+Bloomberg's **Global Trading Challenge** is the first university investing competition run
 *entirely inside the Bloomberg Terminal* — the same system professional investors use — and
-one of the largest in the world, drawing thousands of students across dozens of countries.
-Teams manage a virtual **US$1 million portfolio** under live market conditions, ranked on
-time-weighted return against a global equity benchmark. I was **selected to represent
-HSUHK** in the Oct–Nov 2025 round.
+one of the largest in the world (a recent edition drew 8,400+ students across 38 countries).
+Teams manage a virtual **US$1 million portfolio** under live market conditions, with no
+single position allowed past 20% of the book, ranked on **time-weighted return against
+Bloomberg's World Large, Mid & Small Cap index**. I was **selected to represent HSUHK** in
+the Oct–Nov 2025 round.
 
 ## What I did
 
