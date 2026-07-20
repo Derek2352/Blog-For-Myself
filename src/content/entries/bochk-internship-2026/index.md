@@ -1,18 +1,19 @@
 ---
-# TODO: verify — unconfirmed details below (dates/titles/facts); confirm and add photos, then set draft: false
-title: "Bank of China (Hong Kong) — Bank-wide Operations Internship"
+title: "Bank of China (Hong Kong) — Summer Internship"
 category: "experience"
-date: 2026-07-15 # from mid-July 2026 (upcoming)
-role: "Intern — Bank-wide Operations Department, Loans Division"
+date: 2026-07-01
+endDate: 2026-08-31
+role: "Summer Intern — Bank-Wide Operation Department, Loans Division"
 organization: "Bank of China (Hong Kong)"
 location: "Hong Kong"
-summary: "An upcoming internship in the Loans Division of BOCHK's Bank-wide Operations Department, starting mid-July 2026."
+summary: "A competitive summer internship in the Loans Division of the Bank-Wide Operation Department — hands-on exposure to loan operations, operational controls, and back-office banking workflows inside one of Hong Kong's largest financial institutions."
+# note: ""  # one-line personal aside in your voice — shows as an italic margin note
 cover: "./images/cover.svg"
 gallery: []
 tags: ["banking", "operations", "loans"]
 links: []
 featured: false
-draft: true
+draft: false
 ---
 
 ## What it was

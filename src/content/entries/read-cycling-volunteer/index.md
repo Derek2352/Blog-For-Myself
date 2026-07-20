@@ -1,8 +1,8 @@
 ---
-# TODO: verify — unconfirmed details below (dates/titles/facts); confirm and add photos, then set draft: false
+# Confirmed on CV (Interests). Date is approximate — set the real one when handy.
 title: "Read-Cycling"
 category: "community"
-date: 2025-11-01 # TODO: verify dates
+date: 2025-11-01 # date approximate
 role: "Volunteer"
 summary: "Volunteering with Read-Cycling — giving books a second life."
 cover: "./images/cover.svg"
@@ -10,7 +10,7 @@ gallery: []
 tags: ["volunteering", "sustainability"]
 links: []
 featured: false
-draft: true
+draft: false
 ---
 
 ## What it was
