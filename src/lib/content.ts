@@ -108,6 +108,23 @@ export async function getNavCategories(): Promise<CategoryWithCounts[]> {
   return (await getCategoryIndex()).filter((c) => c.entryCount + c.logCount > 0);
 }
 
+export interface NavCategory extends CategoryWithCounts {
+  /** Top few entries for the hover flyout (grid order). */
+  entries: Entry[];
+}
+
+/**
+ * Nav categories with their leading entries attached — powers the tab-bar
+ * hover flyout. Derived from content; no hardcoded sub-navigation.
+ */
+export async function getNavTree(limit = 8): Promise<NavCategory[]> {
+  const [allEntries, nav] = await Promise.all([getEntries(), getNavCategories()]);
+  return nav.map((c) => ({
+    ...c,
+    entries: sortForCategory(allEntries.filter((e) => e.data.category === c.slug)).slice(0, limit),
+  }));
+}
+
 /* ------------------------------------------------------------------ *
  * Mixed feed (entries + logs) and period → month grouping.
  * ------------------------------------------------------------------ */

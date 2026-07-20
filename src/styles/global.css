@@ -232,6 +232,89 @@
   .tabbar::-webkit-scrollbar { display: none; }
   @media (min-width: 768px) { .tabbar { flex-wrap: wrap; overflow-x: visible; } }
 
+  /* ---- hover flyout: each tab expands to its entries (sub-tabs) ---- */
+  .tab-group { position: relative; }
+  /* removed from layout entirely on touch devices */
+  .tab-flyout { display: none; }
+
+  @media (hover: hover) and (min-width: 768px) {
+    .tab-flyout {
+      display: block;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      z-index: 40;
+      padding-top: 6px; /* transparent bridge so the pointer can cross the gap */
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transform: translateY(4px);
+    }
+    .tab-flyout.flip { left: auto; right: 0; }
+    .tab-group:hover > .tab-flyout,
+    .tab-group:focus-within > .tab-flyout {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      transform: none;
+    }
+  }
+  @media (hover: hover) and (min-width: 768px) and (prefers-reduced-motion: no-preference) {
+    .tab-flyout { transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s; }
+  }
+
+  .tab-flyout-inner {
+    min-width: 15rem;
+    max-width: min(22rem, 92vw);
+    max-height: min(70vh, 30rem);
+    overflow-y: auto;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    background: var(--color-surface);
+    box-shadow: 0 18px 44px -22px rgb(30 20 10 / 0.35);
+    padding: 0.4rem;
+  }
+  .flyout-head {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-accent);
+    padding: 0.45rem 0.6rem 0.5rem;
+    border-bottom: 1px solid var(--color-line);
+  }
+  .flyout-list {
+    list-style: none;
+    margin: 0.3rem 0;
+    padding: 0;
+    display: grid;
+    gap: 0.05rem;
+  }
+  .flyout-list a {
+    display: block;
+    padding: 0.4rem 0.6rem;
+    border-radius: var(--radius-chip);
+    font-size: 0.85rem;
+    line-height: 1.35;
+    color: var(--color-ink);
+    transition: background-color 0.12s, color 0.12s;
+  }
+  .flyout-list a:hover {
+    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+    color: var(--color-accent);
+  }
+  .flyout-more {
+    display: block;
+    padding: 0.4rem 0.6rem;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+  .flyout-more:hover { color: var(--color-accent); }
+
   /* ---- reflection prose (markdown bodies) ---- */
   .prose-reflection {
     max-width: 65ch;
