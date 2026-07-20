@@ -24,3 +24,7 @@ yarn-error.log*
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# media inbox — unsorted drops never enter git history
+_inbox/*
+!_inbox/README.md

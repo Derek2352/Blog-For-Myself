@@ -21,6 +21,12 @@ type Player =
   | { kind: 'link'; src: string };
 
 function resolvePlayer(raw: string): Player {
+  // root-relative self-hosted files (e.g. "/videos/film.mp4")
+  if (raw.startsWith('/')) {
+    return /\.(mp4|webm|mov|m4v)$/i.test(raw)
+      ? { kind: 'file', src: raw }
+      : { kind: 'link', src: raw };
+  }
   let u: URL;
   try {
     u = new URL(raw);

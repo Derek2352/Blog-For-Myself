@@ -11,7 +11,8 @@
     "preview": "astro preview",
     "new-entry": "node scripts/new-entry.mjs",
     "new-log": "node scripts/new-log.mjs",
-    "photos": "node scripts/photo-plan.mjs"
+    "photos": "node scripts/photo-plan.mjs",
+    "inbox": "node scripts/inbox.mjs"
   },
   "dependencies": {
     "@astrojs/mdx": "^4.3.0",

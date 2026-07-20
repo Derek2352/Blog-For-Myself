@@ -53,10 +53,15 @@ const entries = defineCollection({
       /** Optional one-line personal aside, shown as a margin note on the
        *  entry page — your voice, not the CV's. */
       note: z.string().optional(),
-      /** Optional video URL (YouTube / Vimeo / Bilibili / direct .mp4).
-       *  When set, the entry page screens the film where the cover would
-       *  sit — click-to-play, so pages stay fast. */
-      video: z.string().url().optional(),
+      /** Optional video (YouTube / Vimeo / Bilibili URL, or a root-relative
+       *  self-hosted file like "/videos/film.mp4"). When set, the entry page
+       *  screens the film where the cover would sit — click-to-play. */
+      video: z
+        .string()
+        .refine((v) => v.startsWith('/') || z.string().url().safeParse(v).success, {
+          message: 'video must be a full URL or a root-relative path like /videos/film.mp4',
+        })
+        .optional(),
       cover: image(),
       gallery: z
         .array(

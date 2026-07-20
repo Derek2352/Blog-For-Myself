@@ -62,6 +62,23 @@ The 60-second path for small monthly things (a workshop, a talk, a certificate).
 A log **with a body** gets a small detail page; a log **without one** stays a terminal
 card — no dead pages.
 
+### The media inbox — `npm run inbox`
+
+**The single entrance for photos and video.** Dump files straight off your phone into
+`_inbox/` (any names), run `npm run inbox`, and answer two or three questions per file.
+The script:
+
+- resizes anything oversized (long edge > 2000px or > 2 MB) on the way in
+- moves each photo into the chosen entry's `images/` folder (or the log's folder)
+- **writes the frontmatter for you** — cover swap (cleaning up the generated
+  placeholder), gallery item with the alt text it asks you for, or the log's `image:`
+- routes video files to `public/videos/` and sets the entry's `video:` (they screen
+  click-to-play) — though for full films, a YouTube/Bilibili link in `video:` keeps the
+  repo lighter
+
+Unsorted files in `_inbox/` are gitignored, so nothing ships until it's been filed.
+iPhone HEIC isn't supported — export as JPG first.
+
 ### The photo plan — `npm run photos`
 
 The repo tells you **what pictures to paste and how many**. Rules per category live in
