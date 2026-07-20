@@ -13,18 +13,31 @@ featured: false
 draft: false
 ---
 
+<!-- FIRST-PASS DRAFT — light by design; add the real specifics (which charity, when) and
+     make "How it felt" your own. -->
+
 ## What it was
 
-<!-- The context: what this was, who ran it, the scope. -->
+**Flag day fundraising** — a Hong Kong tradition where volunteers take to the streets with a
+donation bag, raising money for a charity one small contribution and one paper flag at a
+time.
 
 ## What I did
 
-<!-- My specific part — decisions, tools, deliverables. -->
+<!-- Add the details: which charity/flag day, your patch, the morning. -->
+
+Spent the morning out on the street inviting passers-by to give — the direct, human end of
+fundraising, where every donation is a short conversation.
 
 ## What I learned
 
-<!-- Skills and insights, including the unexpected ones. -->
+Asking strangers for support, politely and cheerfully, is its own quiet skill — and a good
+reminder that a lot of real-world impact is just showing up early and being willing to make
+the ask.
 
 ## How it felt
 
-<!-- The honest, human part. Write freely — this is why the site exists. -->
+<!-- Placeholder — replace with a line in your own voice. -->
+
+A cheerful, slightly tiring morning — and a reminder of how much kindness there is in an
+ordinary Hong Kong street.

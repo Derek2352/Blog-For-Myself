@@ -14,18 +14,35 @@ featured: false
 draft: false
 ---
 
+<!-- FIRST-PASS DRAFT (from your CV) — edit freely in your own voice.
+     "How it felt" especially is a placeholder; make it yours. -->
+
 ## What it was
 
-<!-- The context: what this was, who ran it, the scope. -->
+A focused innovation visit to **Shenzhen** — China's hardware and tech capital — organised by
+the **BBA-FAFT Programme Office**, zeroing in on the data infrastructure behind modern
+FinTech and smart cities.
 
 ## What I did
 
-<!-- My specific part — decisions, tools, deliverables. -->
+Two anchor visits. At the **National Supercomputing Center Shenzhen**, I looked at advanced
+data analytics and digital infrastructure at national scale. At **Shenzhen Zhicheng Computing
+Network Technology** — the city's **Smart City & Big Data Center** — I saw data-driven FinTech
+systems in real-world operation, and evaluated the part they play in shaping China's digital
+economy.
 
 ## What I learned
 
-<!-- Skills and insights, including the unexpected ones. -->
+Shenzhen made concrete something my FinTech courses treat abstractly: **modern finance runs
+on compute and data infrastructure**. A smart-city big-data centre is, in effect, financial
+plumbing — and seeing it operating at scale reframed how I think about where value in FinTech
+actually sits. Read alongside the Hubei delegation's supercomputing centres, it built a real
+mental map of the physical layer under the services I use daily.
 
 ## How it felt
 
-<!-- The honest, human part. Write freely — this is why the site exists. -->
+<!-- Placeholder — rewrite this honestly in your own words. Prompts if useful:
+     the scale of the centre; a system that impressed you; Shenzhen's pace. -->
+
+Seeing the data backbone of a smart city in operation gave the word "FinTech" a physical
+weight it never had in a lecture hall.

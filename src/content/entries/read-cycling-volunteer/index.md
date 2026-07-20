@@ -13,18 +13,30 @@ featured: false
 draft: false
 ---
 
+<!-- FIRST-PASS DRAFT — light by design; add the real specifics (which event, when, what
+     you did on the day) and make "How it felt" your own. -->
+
 ## What it was
 
-<!-- The context: what this was, who ran it, the scope. -->
+Volunteering with **Read-Cycling** — giving used books a second life by collecting,
+sorting, and redistributing them rather than letting them go to waste.
 
 ## What I did
 
-<!-- My specific part — decisions, tools, deliverables. -->
+<!-- Add the concrete details: the session(s) you joined, what your role was on the day. -->
+
+Hands-on sorting and redistribution work — the unglamorous, satisfying kind that keeps good
+books in circulation and out of landfill.
 
 ## What I learned
 
-<!-- Skills and insights, including the unexpected ones. -->
+Sustainability isn't only a policy word; sometimes it's just a Saturday spent making sure
+something useful reaches someone who wants it. A small, tangible counterweight to the
+screen-heavy rest of my work.
 
 ## How it felt
 
-<!-- The honest, human part. Write freely — this is why the site exists. -->
+<!-- Placeholder — replace with a line in your own voice. -->
+
+Good in the simplest way — a few hours that end with something tidier and more useful than
+when you started.
