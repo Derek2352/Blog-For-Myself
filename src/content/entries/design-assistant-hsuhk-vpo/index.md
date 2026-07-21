@@ -11,7 +11,7 @@ cover: "./images/cover.svg"
 gallery: []
 tags: ["ai-workflow", "design-ops", "data"]
 links: []
-featured: false
+featured: true
 draft: false
 ---
 

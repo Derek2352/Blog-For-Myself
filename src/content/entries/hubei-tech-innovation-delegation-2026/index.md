@@ -10,7 +10,7 @@ cover: "./images/cover.svg"
 gallery: []
 tags: ["ai-infrastructure", "cloud", "optoelectronics"]
 links: []
-featured: false
+featured: true
 draft: false
 ---
 

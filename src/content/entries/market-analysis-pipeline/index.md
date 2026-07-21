@@ -10,6 +10,7 @@ links:
   - label: "GitHub — Derek2352/Market-Analysis"
     url: "https://github.com/Derek2352/Market-Analysis"
 featured: true
+order: 1 # homepage hero (also pins first in its category grid)
 draft: false
 ---
 

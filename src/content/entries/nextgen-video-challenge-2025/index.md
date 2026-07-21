@@ -9,7 +9,7 @@ cover: "./images/cover.svg"
 gallery: []
 tags: ["ai-film", "award", "deans-recommendation"]
 links: []
-featured: true
+featured: false
 draft: false
 ---
 

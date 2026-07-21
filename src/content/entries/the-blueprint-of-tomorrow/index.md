@@ -15,7 +15,7 @@ cover: "./images/cover.svg"
 gallery: []
 tags: ["ai-film", "corporate-governance", "esg", "champion"]
 links: []
-featured: true
+featured: false
 draft: false
 ---
 
