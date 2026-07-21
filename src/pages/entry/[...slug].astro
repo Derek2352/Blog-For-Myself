@@ -5,6 +5,7 @@ import Base from '@/layouts/Base.astro';
 import MetadataRail from '@/components/MetadataRail.astro';
 import Gallery from '@/components/Gallery.astro';
 import EntryCard from '@/components/EntryCard.astro';
+import TagChip from '@/components/TagChip.astro';
 import PhotoPlan from '@/components/PhotoPlan.astro';
 import VideoEmbed from '@/components/VideoEmbed.astro';
 import ReadingAids from '@/components/ReadingAids.astro';
@@ -92,6 +93,21 @@ const coverLqip = await lqipStyle("entries", entry.id, "cover");
             </span>
             {entry.data.note}
           </p>
+        )
+      }
+      {/* mobile: key facts up top; desktop shows them in the rail instead */}
+      {
+        (entry.data.role || entry.data.tags.length > 0) && (
+          <div class="mt-4 flex flex-wrap items-center gap-2 lg:hidden">
+            {entry.data.role && (
+              <span class="rail rounded-(--radius-chip) border border-accent px-2 py-1 text-accent">
+                {entry.data.role}
+              </span>
+            )}
+            {entry.data.tags.map((tag) => (
+              <TagChip tag={tag} />
+            ))}
+          </div>
         )
       }
     </header>

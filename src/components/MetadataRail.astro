@@ -69,7 +69,7 @@ const period = resolvePeriod(d.date);
     }
     {
       d.role && (
-        <div class="py-3">
+        <div class="hidden py-3 lg:block">
           <dt class="rail">Role</dt>
           <dd class="mt-1">{d.role}</dd>
         </div>
@@ -93,7 +93,7 @@ const period = resolvePeriod(d.date);
     }
     {
       d.tags.length > 0 && (
-        <div class="py-3">
+        <div class="hidden py-3 lg:block">
           <dt class="rail">Tags</dt>
           <dd class="mt-1.5 flex flex-wrap gap-1.5">
             {d.tags.map((tag) => (
