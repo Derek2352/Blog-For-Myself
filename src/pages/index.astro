@@ -214,7 +214,12 @@ const moreCats = primaryCats.length ? catIndex.filter((c) => !c.primary) : [];
             <li class="ledger-row border-b border-line">
               <div class="grid grid-cols-[6.2rem_3.2rem_1fr] items-baseline gap-3 py-3 sm:grid-cols-[6.5rem_3.5rem_1fr_auto]">
                 <span class="rail">{isoDay(row.date)}</span>
-                <span class="rail text-accent">{row.code}</span>
+                <span
+                  class="rail opacity-70"
+                  title="Archive index — a stable code for every item on the site"
+                >
+                  {row.code}
+                </span>
                 <span class="min-w-0 text-[0.95rem] leading-snug">
                   {row.href ? (
                     <a href={row.href} class="transition-colors hover:text-accent">
