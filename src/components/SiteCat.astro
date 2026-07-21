@@ -174,12 +174,18 @@
     if (root.dataset.init) return;
     root.dataset.init = '1';
 
-    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      // a still cat, sitting quietly in the corner
+    // Reduce motion — whether from the OS setting or the site's accessibility
+    // toggle (.a11y-motion on <html>) — parks the cat idle instead of letting
+    // it wander. Checked live (see the observers at the end), so flipping the
+    // accessibility control starts or stops the cat without a reload.
+    const motionReduced = () =>
+      matchMedia('(prefers-reduced-motion: reduce)').matches ||
+      document.documentElement.classList.contains('a11y-motion');
+    const parkIdle = () => {
+      root.classList.remove('walking', 'chasing', 'pounce', 'startled');
       root.classList.add('idle');
-      root.style.transform = `translateX(${Math.max(0, window.innerWidth - CAT_W - 20)}px)`;
-      return;
-    }
+    };
+    let running = false;
 
     const s: CatState = {
       x: Math.min(140, window.innerWidth * 0.2),
@@ -291,6 +297,13 @@
 
     let last = performance.now();
     const tick = (now: number) => {
+      // Stop the moment reduce-motion turns on; the observers below restart the
+      // loop if it is turned back off.
+      if (motionReduced()) {
+        running = false;
+        parkIdle();
+        return;
+      }
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
 
@@ -385,8 +398,36 @@
       setClasses();
     });
 
+    const start = () => {
+      if (running || motionReduced()) return;
+      running = true;
+      last = performance.now();
+      requestAnimationFrame(tick);
+    };
+    const stop = () => {
+      running = false;
+      s.mode = 'idle';
+      parkIdle();
+    };
+
+    // React live to reduce-motion changes from either source: the OS media
+    // query, and the a11y toggle (which flips .a11y-motion on <html>).
+    matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', () =>
+      motionReduced() ? stop() : start(),
+    );
+    new MutationObserver(() => (motionReduced() ? stop() : start())).observe(
+      document.documentElement,
+      { attributes: true, attributeFilter: ['class'] },
+    );
+
     setClasses();
-    requestAnimationFrame(tick);
+    if (motionReduced()) {
+      s.x = Math.max(0, window.innerWidth - CAT_W - 20);
+      render();
+      parkIdle();
+    } else {
+      start();
+    }
   }
 
   document.addEventListener('astro:page-load', () => {

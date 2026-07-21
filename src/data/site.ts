@@ -26,3 +26,40 @@ export const site = {
    */
   analyticsToken: '',
 } as const;
+
+/**
+ * About-page résumé data. Kept here (not inside about.astro) so refreshing a
+ * certification, language, or tool is a data edit, never a code edit — the
+ * same files-as-content rule the rest of the site follows.
+ */
+export const resume = {
+  education: {
+    school: 'The Hang Seng University of Hong Kong (HSUHK)',
+    degree: 'BBA (Hons) in Financial Analysis and FinTech',
+    dates: 'Sept 2025 – Expected Aug 2029',
+    gpa: 'GPA 3.89 / 4.00',
+  },
+  certifications: [
+    'AWS Certified AI Practitioner',
+    'AWS Certified Cloud Practitioner',
+    'Alibaba Cloud Associate – Cloud Computing',
+    'Google Cloud — Gemini Academy for Students',
+  ],
+  languages: [
+    'Cantonese — native',
+    'Mandarin — intermediate (PSC 3A)',
+    'English — fluent (IELTS 7.5)',
+    'Korean — basic',
+  ],
+  tools: [
+    'Tableau',
+    'Excel',
+    'PowerPoint',
+    'Canva',
+    'Adobe Photoshop',
+    'Figma',
+    'CapCut',
+    'AWS & Alibaba Cloud',
+    'Generative AI + local LLMs',
+  ],
+} as const;

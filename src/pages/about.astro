@@ -1,37 +1,12 @@
 ---
 import { Image } from 'astro:assets';
 import Base from '@/layouts/Base.astro';
-import { site } from '@/data/site';
+import { site, resume } from '@/data/site';
 import { personSchema } from '@/lib/schema';
 import portrait from '@/assets/portrait.svg';
 
 const linkedin: string = site.linkedin;
-
-const education = {
-  school: 'The Hang Seng University of Hong Kong (HSUHK)',
-  degree: 'BBA (Hons) in Financial Analysis and FinTech',
-  dates: 'Sept 2025 – Expected Aug 2029',
-  gpa: 'GPA 3.89 / 4.00',
-};
-
-const certifications = [
-  'AWS Certified AI Practitioner',
-  'AWS Certified Cloud Practitioner',
-  'Alibaba Cloud Associate – Cloud Computing',
-  'Google Cloud — Gemini Academy for Students',
-];
-
-const languages = [
-  'Cantonese — native',
-  'Mandarin — intermediate (PSC 3A)',
-  'English — fluent (IELTS 7.5)',
-  'Korean — basic',
-];
-
-const tools = [
-  'Tableau', 'Excel', 'PowerPoint', 'Canva', 'Adobe Photoshop', 'Figma', 'CapCut',
-  'AWS & Alibaba Cloud', 'Generative AI + local LLMs',
-];
+const { education, certifications, languages, tools } = resume;
 ---
 
 <Base
