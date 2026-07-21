@@ -126,11 +126,11 @@ const coverLqip = await lqipStyle("entries", entry.id, "cover");
       <MetadataRail entry={entry} />
       {
         hasReflection ? (
-          <div class="prose-reflection min-w-0">
+          <div class="prose-reflection order-1 min-w-0 lg:order-2">
             <Content />
           </div>
         ) : (
-          <div class="min-w-0 self-start border-t border-line pt-6">
+          <div class="order-1 min-w-0 self-start border-t border-line pt-6 lg:order-2">
             <p class="font-display text-2xl italic leading-snug">
               The full reflection is still being written.
             </p>
