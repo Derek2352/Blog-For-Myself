@@ -10,7 +10,7 @@
  * the built site.
  */
 import { createServer } from 'node:http';
-import { readFile, writeFile, readdir, mkdir, rm, stat } from 'node:fs/promises';
+import { readFile, writeFile, readdir, mkdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';

@@ -67,6 +67,16 @@
     }
   }
 
+  // The popover lives in the header, which is re-rendered on every client-side
+  // navigation, so these helpers re-query the *current* elements at call time.
+  function openMenu(v: boolean): void {
+    const toggle = document.querySelector<HTMLButtonElement>('[data-a11y] [data-a11y-toggle]');
+    const menu = document.querySelector<HTMLElement>('[data-a11y] .a11y-menu');
+    if (!toggle || !menu) return;
+    menu.hidden = !v;
+    toggle.setAttribute('aria-expanded', String(v));
+  }
+
   function setupA11y(): void {
     const root = document.querySelector<HTMLElement>('[data-a11y]');
     if (!root) return;
@@ -84,13 +94,18 @@
       };
     });
 
-    const open = (v: boolean) => { menu.hidden = !v; toggle.setAttribute('aria-expanded', String(v)); };
-    toggle.onclick = () => open(menu.hidden);
-    document.addEventListener('click', (e) => {
-      if (!root.contains(e.target as Node)) open(false);
-    });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') open(false); });
+    toggle.onclick = () => openMenu(menu.hidden);
   }
+
+  // Outside-click and Escape close the popover. Both listen on `document`
+  // (survives navigation) so they are registered ONCE — binding them inside
+  // setupA11y would stack a new pair on every page load and leave old ones
+  // firing against detached header nodes.
+  document.addEventListener('click', (e) => {
+    const root = document.querySelector<HTMLElement>('[data-a11y]');
+    if (root && !root.contains(e.target as Node)) openMenu(false);
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') openMenu(false); });
 
   document.addEventListener('astro:page-load', setupA11y);
   document.addEventListener('astro:after-swap', applyA11y);

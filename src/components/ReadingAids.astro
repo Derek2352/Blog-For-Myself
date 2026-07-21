@@ -15,24 +15,34 @@
 </button>
 
 <script>
-  function setupReadingAids(): void {
-    const bar = document.querySelector<HTMLElement>('[data-progress]');
-    const btn = document.querySelector<HTMLButtonElement>('[data-to-top]');
-    if (!bar || !btn) return;
-    const reduce = () =>
-      matchMedia('(prefers-reduced-motion: reduce)').matches ||
-      document.documentElement.classList.contains('a11y-motion');
+  // The scroll listener lives on `document`, which survives client-side
+  // navigation, so it is registered ONCE for the session. `bar`/`btn` are
+  // refreshed on every page-load (they only exist on entry pages); when they
+  // are null the handler no-ops. Binding it inside the page-load callback
+  // instead would stack a fresh listener on every navigation.
+  let bar: HTMLElement | null = null;
+  let btn: HTMLButtonElement | null = null;
 
-    const onScroll = () => {
-      const doc = document.documentElement;
-      const max = doc.scrollHeight - doc.clientHeight;
-      const pct = max > 0 ? Math.min(1, doc.scrollTop / max) : 0;
-      bar.style.width = (pct * 100).toFixed(1) + '%';
-      btn.classList.toggle('show', doc.scrollTop > doc.clientHeight * 0.6);
-    };
-    btn.onclick = () => window.scrollTo({ top: 0, behavior: reduce() ? 'auto' : 'smooth' });
-    document.addEventListener('scroll', onScroll, { passive: true });
-    onScroll();
+  const reduceMotion = () =>
+    matchMedia('(prefers-reduced-motion: reduce)').matches ||
+    document.documentElement.classList.contains('a11y-motion');
+
+  function onScroll(): void {
+    if (!bar || !btn) return;
+    const doc = document.documentElement;
+    const max = doc.scrollHeight - doc.clientHeight;
+    const pct = max > 0 ? Math.min(1, doc.scrollTop / max) : 0;
+    bar.style.width = (pct * 100).toFixed(1) + '%';
+    btn.classList.toggle('show', doc.scrollTop > doc.clientHeight * 0.6);
   }
-  document.addEventListener('astro:page-load', setupReadingAids);
+  document.addEventListener('scroll', onScroll, { passive: true });
+
+  document.addEventListener('astro:page-load', () => {
+    bar = document.querySelector<HTMLElement>('[data-progress]');
+    btn = document.querySelector<HTMLButtonElement>('[data-to-top]');
+    if (btn) {
+      btn.onclick = () => window.scrollTo({ top: 0, behavior: reduceMotion() ? 'auto' : 'smooth' });
+    }
+    onScroll();
+  });
 </script>

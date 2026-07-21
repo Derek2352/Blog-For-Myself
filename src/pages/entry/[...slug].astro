@@ -298,7 +298,29 @@ const coverLqip = await lqipStyle("entries", entry.id, "cover");
     }
   }
 
+  // ← / → jump between entries in the category (skips when typing/searching).
+  // This listens on `document`, which survives client-side navigation, so it is
+  // registered ONCE and re-queries the current page's prev/next at keypress
+  // time. Registering it inside astro:page-load would stack a listener per
+  // entry visited and fire stale handlers pointing at previous pages' links.
+  function onKey(e: KeyboardEvent): void {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const t = e.target as HTMLElement | null;
+    if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t?.isContentEditable) return;
+    if (e.key === 'ArrowLeft') {
+      const prev = document.querySelector<HTMLAnchorElement>('a[data-plane="prev"]');
+      if (prev) { e.preventDefault(); goPlane(prev); }
+    }
+    if (e.key === 'ArrowRight') {
+      const next = document.querySelector<HTMLAnchorElement>('a[data-plane="next"]');
+      if (next) { e.preventDefault(); goPlane(next); }
+    }
+  }
+  document.addEventListener('keydown', onKey);
+
   document.addEventListener('astro:page-load', () => {
+    // Click handlers bind to the plane links themselves — fresh elements each
+    // navigation, collected with the old page, so binding here is safe.
     const links = document.querySelectorAll<HTMLAnchorElement>('a[data-plane]');
     links.forEach((link) => {
       link.addEventListener('click', (e) => {
@@ -307,16 +329,5 @@ const coverLqip = await lqipStyle("entries", entry.id, "cover");
         goPlane(link);
       });
     });
-    // ← / → jump between entries in the category (skips when typing/searching)
-    const prev = document.querySelector<HTMLAnchorElement>('a[data-plane="prev"]');
-    const next = document.querySelector<HTMLAnchorElement>('a[data-plane="next"]');
-    document.addEventListener('keydown', onKey);
-    function onKey(e: KeyboardEvent) {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const t = e.target as HTMLElement | null;
-      if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t?.isContentEditable) return;
-      if (e.key === 'ArrowLeft' && prev) { e.preventDefault(); goPlane(prev); }
-      if (e.key === 'ArrowRight' && next) { e.preventDefault(); goPlane(next); }
-    }
   });
 </script>

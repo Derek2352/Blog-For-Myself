@@ -89,18 +89,27 @@ const path = Astro.url.pathname.replace(/\/?$/, '/');
       group.addEventListener('focusin', check);
     });
 
-    // mobile: show a scroll hint while more tabs are hidden to the right
+    // mobile: show a scroll hint while more tabs are hidden to the right.
+    // The scroll listener is on the bar itself (a fresh element each nav, so it
+    // is collected with the old bar) — safe to bind here.
     const bar = document.querySelector<HTMLElement>('[data-tabbar]');
     const wrap = bar?.closest<HTMLElement>('.tabbar-wrap');
     if (bar && wrap) {
-      const update = () => {
-        const more = bar.scrollWidth - bar.clientWidth - bar.scrollLeft > 8;
-        wrap.toggleAttribute('data-more', more);
-      };
-      bar.addEventListener('scroll', update, { passive: true });
-      window.addEventListener('resize', update);
-      update();
+      bar.addEventListener('scroll', updateScrollHint, { passive: true });
+      updateScrollHint();
     }
   }
+
+  // Resize listens on `window` (survives navigation) so it is registered ONCE
+  // and re-queries the current bar; binding it per page-load would leak.
+  function updateScrollHint(): void {
+    const bar = document.querySelector<HTMLElement>('[data-tabbar]');
+    const wrap = bar?.closest<HTMLElement>('.tabbar-wrap');
+    if (!bar || !wrap) return;
+    const more = bar.scrollWidth - bar.clientWidth - bar.scrollLeft > 8;
+    wrap.toggleAttribute('data-more', more);
+  }
+  window.addEventListener('resize', updateScrollHint);
+
   document.addEventListener('astro:page-load', setupFlyouts);
 </script>
