@@ -22,7 +22,7 @@ import {
 import { categoryBySlug } from '@/data/categories';
 import { resolveTexture } from '@/lib/patterns';
 import { orientation } from '@/lib/images';
-import { entrySchema } from '@/lib/schema';
+import { entrySchema, breadcrumbSchema } from '@/lib/schema';
 import { lqipStyle } from '@/lib/lqip';
 
 export async function getStaticPaths() {
@@ -59,14 +59,22 @@ const coverLqip = await lqipStyle("entries", entry.id, "cover");
   title={entry.data.title}
   description={entry.data.summary}
   ogImage={ogImage}
+  ogImageAlt={`${entry.data.title} — ${category?.label ?? entry.data.category}`}
   ogType="article"
   pattern={texture.pattern}
   hue={texture.hue}
-  schema={entrySchema(entry, {
-    url: new URL(Astro.url.pathname, Astro.site).toString(),
-    image: ogImage,
-    categoryLabel: category?.label ?? entry.data.category,
-  })}
+  schema={[
+    entrySchema(entry, {
+      url: new URL(Astro.url.pathname, Astro.site).toString(),
+      image: ogImage,
+      categoryLabel: category?.label ?? entry.data.category,
+    }),
+    breadcrumbSchema(Astro.site, [
+      { name: 'Home', path: '/' },
+      { name: category?.label ?? entry.data.category, path: categoryHref(entry.data.category) },
+      { name: entry.data.title, path: Astro.url.pathname },
+    ]),
+  ]}
 >
   <ReadingAids />
   <article class="wrap py-10" data-pagefind-body>

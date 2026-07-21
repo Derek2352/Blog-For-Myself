@@ -22,23 +22,27 @@ interface Props {
   description?: string;
   /** Absolute URL for the Open Graph image (entry covers). */
   ogImage?: string;
+  /** Alt text describing the OG image (accessibility for shared previews). */
+  ogImageAlt?: string;
   ogType?: 'website' | 'article';
   /** Soft page texture (see src/lib/patterns.ts). Category pages pass their own. */
   pattern?: PatternName;
   hue?: number;
-  /** Optional JSON-LD structured data (Person, Article, …). */
-  schema?: Record<string, unknown>;
+  /** Optional JSON-LD structured data — one object or several. */
+  schema?: Record<string, unknown> | Record<string, unknown>[];
 }
 
 const {
   title,
   description = site.description,
   ogImage = new URL('/og/site.png', Astro.site).toString(),
+  ogImageAlt,
   ogType = 'website',
   pattern = 'plus',
   hue = 35,
   schema,
 } = Astro.props;
+const schemas = schema ? (Array.isArray(schema) ? schema : [schema]) : [];
 const pageTitle = title ? `${title} — ${site.title}` : `${site.title} — Portfolio & Log`;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 ---
@@ -78,19 +82,21 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <meta property="og:url" content={canonical} />
     <meta property="og:site_name" content={site.title} />
     {ogImage && <meta property="og:image" content={ogImage} />}
+    {ogImage && <meta property="og:image:alt" content={ogImageAlt ?? title ?? site.title} />}
     <meta name="twitter:card" content={ogImage ? 'summary_large_image' : 'summary'} />
     <meta name="twitter:title" content={title ?? pageTitle} />
     <meta name="twitter:description" content={description} />
     {ogImage && <meta name="twitter:image" content={ogImage} />}
+    {ogImage && <meta name="twitter:image:alt" content={ogImageAlt ?? title ?? site.title} />}
 
     {
-      schema && (
+      schemas.map((s) => (
         <script
           type="application/ld+json"
           is:inline
-          set:html={JSON.stringify(schema).replace(/</g, '\\u003c')}
+          set:html={JSON.stringify(s).replace(/</g, '\\u003c')}
         />
-      )
+      ))
     }
 
     <!-- Soft page-to-page transitions (covers morph, tabs slide). -->
@@ -118,6 +124,18 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
         document.addEventListener('astro:after-swap', apply);
       })();
     </script>
+
+    {
+      /* Privacy-friendly analytics — only when a token is configured (site.ts). */
+      site.analyticsToken && (
+        <script
+          is:inline
+          defer
+          src="https://static.cloudflareinsights.com/beacon.min.js"
+          data-cf-beacon={`{"token": "${site.analyticsToken}"}`}
+        />
+      )
+    }
   </head>
   <body class="flex min-h-full flex-col">
     <div

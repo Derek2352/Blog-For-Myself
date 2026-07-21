@@ -170,8 +170,15 @@ passages you can wrap them: `<span lang="zh-Hant">…</span>`.
   photo (jpg/png/webp), its card automatically switches to a photo + text layout. Cards
   render Latin text; if you start writing CJK titles, add a Noto Sans TC weight to
   `loadFonts` in `src/lib/og.ts`.
-- **CI:** `.github/workflows/ci.yml` runs the full build on every push — a bad
-  frontmatter edit fails there instead of breaking a deploy.
+- **CI:** `.github/workflows/ci.yml` runs the unit tests + full build on every push — a
+  bad frontmatter edit (or a regression in the date/period/texture logic) fails there
+  instead of breaking a deploy.
+- **Tests:** `npm test` (Vitest) covers the pure content-model logic — date/range
+  formatting, period-vs-month resolution, image orientation, and per-tab texture
+  resolution. Add a case in `tests/` when you touch any of those.
+- **Analytics (optional):** set `analyticsToken` in `src/data/site.ts` to your Cloudflare
+  Web Analytics token and a privacy-friendly beacon (no cookies, no banner) is emitted;
+  leave it `''` and nothing loads.
 - **Data integrity:** the build fails loudly (with fix-it messages) on bad hand-edited
   data — duplicate/malformed category slugs, reserved-slug collisions, periods that end
   before they start, malformed period dates, entries whose `endDate` precedes `date`, and

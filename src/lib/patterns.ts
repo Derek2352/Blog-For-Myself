@@ -41,6 +41,8 @@ export function resolveTexture(c: {
   const h = hash(c.slug);
   return {
     pattern: c.pattern ?? PATTERN_NAMES[h % PATTERN_NAMES.length]!,
-    hue: c.hue ?? HUE_WHEEL[(h >> 3) % HUE_WHEEL.length]!,
+    // unsigned shift: a signed `>>` can go negative for large hashes, and
+    // `negative % length` yields a negative index → undefined hue.
+    hue: c.hue ?? HUE_WHEEL[(h >>> 3) % HUE_WHEEL.length]!,
   };
 }

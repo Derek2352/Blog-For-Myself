@@ -19,4 +19,10 @@ export const site = {
   linkedin: '',
   /** Path (under /public) to the downloadable CV. Replace the placeholder PDF. */
   cvPath: '/cv.pdf',
+  /**
+   * Cloudflare Web Analytics token (privacy-friendly, no cookies, no banner).
+   * Get it from the Cloudflare dashboard → Web Analytics → your site → JS
+   * snippet → the `token` value. Leave '' and no analytics script is emitted.
+   */
+  analyticsToken: '',
 } as const;

@@ -13,7 +13,8 @@
     "new-log": "node scripts/new-log.mjs",
     "photos": "node scripts/photo-plan.mjs",
     "inbox": "node scripts/inbox.mjs",
-    "studio": "node scripts/studio.mjs"
+    "studio": "node scripts/studio.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "@astrojs/mdx": "^4.3.0",
@@ -34,6 +35,7 @@
     "@types/node": "^26.1.1",
     "pagefind": "^1.5.2",
     "playwright-core": "^1.61.1",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.10"
   }
 }

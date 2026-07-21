@@ -20,6 +20,23 @@ export function personSchema(siteUrl: URL | undefined): Record<string, unknown> 
   };
 }
 
+/** Home → Category → Entry breadcrumb trail for search results. */
+export function breadcrumbSchema(
+  siteUrl: URL | undefined,
+  trail: { name: string; path: string }[],
+): Record<string, unknown> {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: trail.map((t, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      name: t.name,
+      item: siteUrl ? new URL(t.path, siteUrl).toString() : t.path,
+    })),
+  };
+}
+
 export function entrySchema(
   entry: Entry,
   opts: { url: string; image: string; categoryLabel: string },
