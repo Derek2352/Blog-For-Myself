@@ -13,14 +13,76 @@ tokens), MDX, and `astro:assets`. No database, no CMS — the repo *is* the back
 
 ---
 
-## Quick start
+## Setup — step by step
+
+From a fresh clone to a deployed site. Six steps, in order (~15 min).
+
+**Before you start:** [Node.js](https://nodejs.org) 20 (LTS) or newer (`node -v`) and Git
+(`git --version`). No database, API key, or environment variable is needed to run the site.
+
+### S-01 · Get the code
 
 ```bash
-npm install
-npm run dev        # http://localhost:4321 — drafts are visible here, with a "draft" mark
-npm run build      # type/schema check + static build into dist/ — drafts excluded
-npm run preview    # serve the production build locally
+git clone https://github.com/Derek2352/Blog-For-Myself.git
+cd Blog-For-Myself
+npm install        # one time; re-run only when package.json changes
 ```
+
+### S-02 · Run locally
+
+```bash
+npm run dev        # http://localhost:4321 — Ctrl+C to stop
+```
+
+Hot-reloads on save. Drafts are visible here (with a "draft" mark) and stay out of the real
+build.
+
+### S-03 · Add content
+
+The month-to-month workflow. An **entry** is a substantial item (cover + gallery +
+reflection); a **log** is a light monthly note. Three ways in:
+
+```bash
+npm run studio     # visual editor at http://127.0.0.1:4455  (easiest)
+npm run new-entry  # scaffold an entry from prompts
+npm run new-log    # scaffold a monthly log
+```
+
+Or by hand: copy an existing folder under `src/content/entries/<slug>/index.md` (or
+`logs/`), put images beside it, reference as `cover: "./cover.jpg"`, then set
+`draft: false`. The `category:` must match a slug in `src/data/categories.ts` — a typo
+fails the build with a clear message. See [**Adding content**](#adding-content-the-monthly-workflow)
+below for the full workflow (studio, media inbox, photo plan).
+
+### S-04 · Make it yours (all data edits, no code)
+
+| What | Where |
+|------|-------|
+| Name, tagline, email, GitHub, LinkedIn, CV path | `src/data/site.ts` |
+| About-page résumé (education, certs, languages, tools) | `src/data/site.ts` → `resume` |
+| Navigation tabs (add / rename / reorder) | `src/data/categories.ts` |
+| Named seasons (e.g. "Summer 2026") | `src/data/periods.ts` |
+| Your CV PDF · portrait photo | `public/cv.pdf` · `src/assets/portrait.svg` |
+
+Adding a category object to `categories.ts` creates its tab, page, share card, and texture
+automatically. Nothing else to touch.
+
+### S-05 · Build & check
+
+```bash
+npm run build      # type/schema check + static build + search index (fails here, not live)
+npm run preview    # serve the production build locally
+npm test           # 17 unit tests
+```
+
+### S-06 · Deploy
+
+Set your real URL in `astro.config.mjs` (`site:`) **and** the `Sitemap:` line in
+`public/robots.txt`, then connect the repo to Cloudflare Pages (build command
+`npm run build`, output `dist`, `NODE_VERSION=20`). Every push then auto-deploys. Full
+host details — Netlify, Vercel, draft previews — are in [**Deploy**](#deploy) below.
+
+---
 
 > **Draft policy:** items with `draft: true` render in `npm run dev` (so you can preview
 > them) and are excluded from production builds. Publishing = setting `draft: false`.
