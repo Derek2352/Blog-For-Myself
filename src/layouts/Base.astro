@@ -170,8 +170,9 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <script>
       // Scroll-reveal for [data-io-reveal] elements (timeline frames, period
       // reels). Reduced-motion or no-IO browsers just see everything.
+      const REVEAL_SEL = '[data-io-reveal], [data-io-stagger]';
       const revealAll = () =>
-        document.querySelectorAll('[data-io-reveal]').forEach((el) => el.classList.add('io-in'));
+        document.querySelectorAll(REVEAL_SEL).forEach((el) => el.classList.add('io-in'));
 
       function setupReveals(): void {
         if (
@@ -193,8 +194,8 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
           { rootMargin: '0px 0px -8% 0px' },
         );
         document
-          .querySelectorAll('[data-io-reveal]:not(.io-in)')
-          .forEach((el) => io.observe(el));
+          .querySelectorAll(`${REVEAL_SEL}`)
+          .forEach((el) => !el.classList.contains('io-in') && io.observe(el));
       }
       // Blur-up: fade each image in once it has decoded.
       function setupBlurup(): void {

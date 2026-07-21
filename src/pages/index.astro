@@ -185,7 +185,7 @@ const catIndex = (await getCategoryIndex()).filter((c) => c.entryCount + c.logCo
   <section class="wrap mb-4 mt-20" aria-labelledby="browse-h">
     <p class="kicker">have a look around</p>
     <h2 id="browse-h" class="mt-1 font-display text-3xl">Wander by category</h2>
-    <ul class="mt-6 grid list-none gap-4 p-0 sm:grid-cols-2 lg:grid-cols-3">
+    <ul class="mt-6 grid list-none gap-4 p-0 sm:grid-cols-2 lg:grid-cols-3" data-io-stagger>
       {
         catIndex.map((c) => (
           <li>
