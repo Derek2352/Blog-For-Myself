@@ -28,6 +28,12 @@ export interface Category {
   pattern?: PatternName;
   /** Hue (0–360) for the faint top-of-page wash. */
   hue?: number;
+  /**
+   * Flagship category. Primary categories read at full weight in the tab bar
+   * and are the ones surfaced first in the homepage "start here" browse;
+   * everything else is secondary. Omit for a secondary tab.
+   */
+  primary?: boolean;
 }
 
 export const categories: Category[] = [
@@ -39,6 +45,7 @@ export const categories: Category[] = [
       "Competitive work across finance and AI storytelling — from Bloomberg terminals and pitch stages to award-winning film briefs.",
     pattern: "hatch",
     hue: 8,
+    primary: true,
   },
   {
     slug: "creative-ai",
@@ -48,6 +55,7 @@ export const categories: Category[] = [
       "AI-animated film, photography, and self-built pipelines — where the analyst and the animator share a desk.",
     pattern: "halftone",
     hue: 285,
+    primary: true,
   },
   {
     slug: "study-trips",
@@ -57,6 +65,7 @@ export const categories: Category[] = [
       "Cross-border programmes between Hong Kong, the mainland, and beyond — innovation ecosystems seen first-hand.",
     pattern: "contours",
     hue: 150,
+    primary: true,
   },
   {
     slug: "experience",
@@ -66,6 +75,7 @@ export const categories: Category[] = [
       "Roles and internships — applied work in design operations, data, and banking.",
     pattern: "ledger",
     hue: 45,
+    primary: true,
   },
   {
     slug: "leadership",

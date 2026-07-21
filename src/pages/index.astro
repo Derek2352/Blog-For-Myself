@@ -56,6 +56,11 @@ const lately = await Promise.all(
 );
 
 const catIndex = (await getCategoryIndex()).filter((c) => c.entryCount + c.logCount > 0);
+// Lead the homepage browse with flagship categories; the rest become a quiet
+// "also" line so this section stops mirroring the full tab bar.
+const primaryCats = catIndex.filter((c) => c.primary);
+const browseCats = primaryCats.length ? primaryCats : catIndex;
+const moreCats = primaryCats.length ? catIndex.filter((c) => !c.primary) : [];
 ---
 
 <Base schema={personSchema(Astro.site)}>
@@ -85,16 +90,16 @@ const catIndex = (await getCategoryIndex()).filter((c) => c.entryCount + c.logCo
       }
       <div class="mt-7 flex flex-wrap gap-3">
         <a
-          href="/about/"
+          href="/timeline/"
           class="rounded-(--radius-chip) bg-accent px-4 py-2 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90"
         >
-          More about me
+          See the work
         </a>
         <a
-          href="/monthly/"
+          href="/about/"
           class="rounded-(--radius-chip) border border-line px-4 py-2 text-sm transition-colors hover:border-accent hover:text-accent"
         >
-          The monthly log
+          More about me
         </a>
       </div>
     </div>
@@ -133,7 +138,7 @@ const catIndex = (await getCategoryIndex()).filter((c) => c.entryCount + c.logCo
   {
     strip.length > 0 && (
       <section class="wrap mt-6 reveal-3" aria-labelledby="featured-h">
-        <p class="kicker">worth your time</p>
+        <p class="kicker">best place to start</p>
         <h2 id="featured-h" class="mt-1 font-display text-3xl">
           Start with these
         </h2>
@@ -146,10 +151,60 @@ const catIndex = (await getCategoryIndex()).filter((c) => c.entryCount + c.logCo
     )
   }
 
-  <!-- Lately: newest entries + logs, mixed, as ledger rows -->
+  <!-- Browse: flagship categories lead; the rest sit in a quiet "also" line so
+       this stops mirroring the full tab bar. -->
+  <section class="wrap mt-20" aria-labelledby="browse-h">
+    <p class="kicker">where to start</p>
+    <h2 id="browse-h" class="mt-1 font-display text-3xl">Browse by category</h2>
+    <ul class="mt-6 grid list-none gap-4 p-0 sm:grid-cols-2 lg:grid-cols-3" data-io-stagger>
+      {
+        browseCats.map((c) => (
+          <li>
+            <a
+              href={categoryHref(c.slug)}
+              class:list={[
+                'panel patterned lift group block h-full p-5 transition-colors hover:border-accent',
+                `pat-${resolveTexture(c).pattern}`,
+              ]}
+              style={`--hue: ${resolveTexture(c).hue}`}
+            >
+              <p class="rail">
+                {c.entryCount} {c.entryCount === 1 ? 'entry' : 'entries'} · {c.logCount}
+                {c.logCount === 1 ? ' log' : ' logs'}
+              </p>
+              <h3 class="mt-2 font-display text-2xl transition-colors group-hover:text-accent">
+                {c.label}
+              </h3>
+              <p class="mt-1.5 text-sm leading-relaxed text-muted">{c.blurb}</p>
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+    {
+      moreCats.length > 0 && (
+        <p class="mt-5 text-sm text-muted">
+          Also:{' '}
+          {moreCats.map((c, i) => (
+            <Fragment>
+              {i > 0 && (
+                <span aria-hidden="true"> · </span>
+              )}
+              <a href={categoryHref(c.slug)} class="transition-colors hover:text-accent">
+                {c.label}
+              </a>
+            </Fragment>
+          ))}
+        </p>
+      )
+    }
+  </section>
+
+  <!-- Lately: newest entries + logs, mixed, as ledger rows — for depth, below
+       the work and the browse, deliberately quieter. -->
   {
     lately.length > 0 && (
-      <section class="wrap mt-20" aria-labelledby="lately-h">
+      <section class="wrap mb-4 mt-20" aria-labelledby="lately-h">
         <p class="kicker">lately</p>
         <h2 id="lately-h" class="mt-1 font-display text-3xl">
           What the last few months looked like
@@ -180,35 +235,4 @@ const catIndex = (await getCategoryIndex()).filter((c) => c.entryCount + c.logCo
       </section>
     )
   }
-
-  <!-- Category index: every live tab, its blurb, its counts -->
-  <section class="wrap mb-4 mt-20" aria-labelledby="browse-h">
-    <p class="kicker">have a look around</p>
-    <h2 id="browse-h" class="mt-1 font-display text-3xl">Wander by category</h2>
-    <ul class="mt-6 grid list-none gap-4 p-0 sm:grid-cols-2 lg:grid-cols-3" data-io-stagger>
-      {
-        catIndex.map((c) => (
-          <li>
-            <a
-              href={categoryHref(c.slug)}
-              class:list={[
-                'panel patterned lift group block h-full p-5 transition-colors hover:border-accent',
-                `pat-${resolveTexture(c).pattern}`,
-              ]}
-              style={`--hue: ${resolveTexture(c).hue}`}
-            >
-              <p class="rail">
-                {c.entryCount} {c.entryCount === 1 ? 'entry' : 'entries'} · {c.logCount}
-                {c.logCount === 1 ? ' log' : ' logs'}
-              </p>
-              <h3 class="mt-2 font-display text-2xl transition-colors group-hover:text-accent">
-                {c.label}
-              </h3>
-              <p class="mt-1.5 text-sm leading-relaxed text-muted">{c.blurb}</p>
-            </a>
-          </li>
-        ))
-      }
-    </ul>
-  </section>
 </Base>

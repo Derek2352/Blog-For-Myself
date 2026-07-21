@@ -28,7 +28,11 @@ const path = Astro.url.pathname.replace(/\/?$/, '/');
             aria-describedby={hasFlyout ? flyoutId : undefined}
             class:list={[
               'relative block whitespace-nowrap px-3 py-2.5 text-sm transition-colors',
-              active ? 'font-medium text-ink' : 'text-muted hover:text-ink',
+              active
+                ? 'font-medium text-ink'
+                : tab.primary
+                  ? 'text-ink hover:text-accent'
+                  : 'text-muted hover:text-ink',
             ]}
           >
             {tab.label}
