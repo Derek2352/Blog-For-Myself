@@ -42,6 +42,18 @@ import Base from '@/layouts/Base.astro';
         showImages: false,
         autofocus: true,
       });
+      // Pagefind labels its box with a placeholder only, which disappears once
+      // you type. Add a persistent accessible name and keep it applied across
+      // Pagefind's re-renders (WCAG 3.3.2 Labels or Instructions / 4.1.2).
+      const nameInput = () => {
+        const inp = document.querySelector('#search input[type="text"]');
+        if (inp && inp.getAttribute('aria-label') !== 'Search entries and logs') {
+          inp.setAttribute('aria-label', 'Search entries and logs');
+        }
+      };
+      const searchEl = document.getElementById('search');
+      if (searchEl) new MutationObserver(nameInput).observe(searchEl, { childList: true, subtree: true });
+      requestAnimationFrame(nameInput);
     } catch {
       document.getElementById('search-fallback').hidden = false;
     }

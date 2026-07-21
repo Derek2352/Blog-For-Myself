@@ -27,7 +27,6 @@ const code = await entryCode(entry);
 const href = entryHref(entry);
 const category = categoryBySlug(entry.data.category);
 const range = humanRange(entry.data.date, entry.data.endDate);
-const codeTitle = 'Archive index — a stable code for every item on the site';
 // wide covers fill the card frame; tall/square ones sit matted on the surface
 const coverFit = orientation(entry.data.cover) === 'wide' ? 'object-cover' : 'object-contain';
 ---
@@ -55,7 +54,7 @@ const coverFit = orientation(entry.data.cover) === 'wide' ? 'object-cover' : 'ob
             {showCategory && category && ` · ${category.label}`}
             {entry.data.draft && <span class="text-signal-text"> · draft</span>}
             <span aria-hidden="true"> · </span>
-            <span title={codeTitle}>{code}</span>
+            <span aria-hidden="true">{code}</span>
           </p>
           <h3 class="mt-0.5 font-display text-lg leading-snug transition-colors group-hover:text-accent">
             {entry.data.title}
@@ -89,7 +88,7 @@ const coverFit = orientation(entry.data.cover) === 'wide' ? 'object-cover' : 'ob
           )}
           {entry.data.draft && <span class="text-signal-text">· draft</span>}
           <span aria-hidden="true">·</span>
-          <span title={codeTitle}>{code}</span>
+          <span aria-hidden="true">{code}</span>
         </p>
         <h3 class="mt-1.5 font-display text-[1.35rem] leading-tight transition-colors group-hover:text-accent">
           {entry.data.title}

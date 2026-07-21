@@ -213,8 +213,10 @@ Every entry's body uses the same four headings, so future-me stays consistent:
 ```
 
 Write them as prose, not bullet lists. "How it felt" is the reason this site exists —
-keep it honest. Traditional Chinese renders inline anywhere (夾單, 組長); for long CJK
-passages you can wrap them: `<span lang="zh-Hant">…</span>`.
+keep it honest. Traditional Chinese renders inline anywhere (夾單, 組長). For screen
+readers to pronounce it correctly, wrap any inline non-English run — a word or a whole
+passage — in a language span: `<span lang="zh-Hant">夾單</span>` (WCAG 3.1.2 Language of
+Parts). The page itself is already declared `lang="en"`, so only the exceptions need marking.
 
 ## Videos, search, share cards, CI
 

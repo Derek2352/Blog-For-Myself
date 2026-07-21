@@ -308,6 +308,8 @@ const coverLqip = await lqipStyle("entries", entry.id, "cover");
   // entry visited and fire stale handlers pointing at previous pages' links.
   function onKey(e: KeyboardEvent): void {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    // respect the a11y "Disable keyboard shortcuts" toggle (WCAG 2.1.4)
+    if (document.documentElement.classList.contains('a11y-noshortcuts')) return;
     const t = e.target as HTMLElement | null;
     if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t?.isContentEditable) return;
     if (e.key === 'ArrowLeft') {

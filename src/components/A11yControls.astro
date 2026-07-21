@@ -9,7 +9,7 @@
 <div class="a11y" data-a11y>
   <button
     type="button"
-    class="inline-flex size-8 items-center justify-center border border-line text-muted transition-colors hover:border-muted hover:text-ink"
+    class="tap-safe inline-flex size-8 items-center justify-center border border-line text-muted transition-colors hover:border-muted hover:text-ink"
     aria-label="Accessibility options"
     aria-expanded="false"
     aria-controls="a11y-menu"
@@ -26,6 +26,8 @@
     <label><input type="checkbox" data-a11y-opt="contrast" /> Higher contrast</label>
     <label><input type="checkbox" data-a11y-opt="underline" /> Underline links</label>
     <label><input type="checkbox" data-a11y-opt="motion" /> Reduce motion</label>
+    <p class="rail px-1 pb-1 pt-2">Input</p>
+    <label><input type="checkbox" data-a11y-opt="noshortcuts" /> Disable keyboard shortcuts</label>
   </div>
 </div>
 
@@ -57,7 +59,7 @@
 </style>
 
 <script>
-  const A11Y_KEYS = ['large', 'contrast', 'underline', 'motion'] as const;
+  const A11Y_KEYS = ['large', 'contrast', 'underline', 'motion', 'noshortcuts'] as const;
 
   function applyA11y(): void {
     for (const k of A11Y_KEYS) {

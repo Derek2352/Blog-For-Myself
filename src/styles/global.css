@@ -115,6 +115,12 @@
   }
   @media (min-width: 640px) { .wrap { padding-inline: 1.5rem; } }
 
+  /* touch comfort: compact icon buttons keep their small look but expand to a
+     44px hit area on coarse (touch) pointers — WCAG 2.5.5 Target Size (Enhanced) */
+  @media (pointer: coarse) {
+    .tap-safe { min-width: 44px; min-height: 44px; }
+  }
+
   /* soft panel: the default resting place for cards */
   .panel {
     border: 1px solid var(--color-line);
@@ -132,7 +138,7 @@
   /* ---- signature: the index rail (timecode / ticker margin notes) ---- */
   .rail {
     font-family: var(--font-mono);
-    font-size: 0.6875rem;
+    font-size: 0.72rem;
     line-height: 1.6;
     letter-spacing: 0.06em;
     text-transform: uppercase;
