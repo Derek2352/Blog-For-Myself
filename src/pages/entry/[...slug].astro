@@ -146,15 +146,17 @@ const coverLqip = await lqipStyle("entries", entry.id, "cover");
       )
     }
 
+    {/* Reflection comes first in the DOM so keyboard/reading order matches the
+        mobile visual order (reflection, then rail); lg:order restores the rail
+        to the left column on desktop. */}
     <div class="mt-10 grid gap-10 lg:grid-cols-[16rem_1fr] lg:gap-14">
-      <MetadataRail entry={entry} />
       {
         hasReflection ? (
-          <div class="prose-reflection order-1 min-w-0 lg:order-2">
+          <div class="prose-reflection min-w-0 lg:order-2">
             <Content />
           </div>
         ) : (
-          <div class="order-1 min-w-0 self-start border-t border-line pt-6 lg:order-2">
+          <div class="min-w-0 self-start border-t border-line pt-6 lg:order-2">
             <p class="font-display text-2xl italic leading-snug">
               The full reflection is still being written.
             </p>
@@ -171,6 +173,7 @@ const coverLqip = await lqipStyle("entries", entry.id, "cover");
           </div>
         )
       }
+      <MetadataRail entry={entry} />
     </div>
 
     {

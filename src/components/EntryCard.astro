@@ -55,7 +55,7 @@ const coverFit = orientation(entry.data.cover) === 'wide' ? 'object-cover' : 'ob
             {showCategory && category && ` · ${category.label}`}
             {entry.data.draft && <span class="text-signal-text"> · draft</span>}
             <span aria-hidden="true"> · </span>
-            <span class="opacity-70" title={codeTitle}>{code}</span>
+            <span title={codeTitle}>{code}</span>
           </p>
           <h3 class="mt-0.5 font-display text-lg leading-snug transition-colors group-hover:text-accent">
             {entry.data.title}
@@ -89,7 +89,7 @@ const coverFit = orientation(entry.data.cover) === 'wide' ? 'object-cover' : 'ob
           )}
           {entry.data.draft && <span class="text-signal-text">· draft</span>}
           <span aria-hidden="true">·</span>
-          <span class="opacity-70" title={codeTitle}>{code}</span>
+          <span title={codeTitle}>{code}</span>
         </p>
         <h3 class="mt-1.5 font-display text-[1.35rem] leading-tight transition-colors group-hover:text-accent">
           {entry.data.title}
