@@ -258,33 +258,35 @@
 
   /* ---- hover flyout: each tab expands to its entries (sub-tabs) ---- */
   .tab-group { position: relative; }
-  /* removed from layout entirely on touch devices */
-  .tab-flyout { display: none; }
+  /* Hidden flyouts use display:none (not visibility:hidden) so a right-edge
+     tab's 15rem flyout never sits in layout and pokes past the viewport — that
+     was causing phantom horizontal scroll at tablet widths. The fade-in is
+     restored with a keyframe on show, since display can't transition. */
+  .tab-flyout {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 40;
+    padding-top: 6px; /* transparent bridge so the pointer can cross the gap */
+  }
+  .tab-flyout.flip { left: auto; right: 0; }
 
   @media (hover: hover) and (min-width: 768px) {
-    .tab-flyout {
-      display: block;
-      position: absolute;
-      top: 100%;
-      left: 0;
-      z-index: 40;
-      padding-top: 6px; /* transparent bridge so the pointer can cross the gap */
-      opacity: 0;
-      visibility: hidden;
-      pointer-events: none;
-      transform: translateY(4px);
-    }
-    .tab-flyout.flip { left: auto; right: 0; }
     .tab-group:hover > .tab-flyout,
     .tab-group:focus-within > .tab-flyout {
-      opacity: 1;
-      visibility: visible;
-      pointer-events: auto;
-      transform: none;
+      display: block;
     }
   }
   @media (hover: hover) and (min-width: 768px) and (prefers-reduced-motion: no-preference) {
-    .tab-flyout { transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s; }
+    .tab-group:hover > .tab-flyout,
+    .tab-group:focus-within > .tab-flyout {
+      animation: flyout-in 0.16s ease both;
+    }
+  }
+  @keyframes flyout-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: none; }
   }
 
   .tab-flyout-inner {
