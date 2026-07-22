@@ -83,7 +83,9 @@ const payload = JSON.stringify(
       <button type="button" class="rail lightbox-btn" data-lb-close>Close ✕</button>
     </div>
     <figure class="lightbox-stage">
-      <img data-lb-img src="" alt="" />
+      {/* no initial src: an empty src="" resolves to the page URL and triggers a
+          spurious document fetch. The lightbox script sets src/alt on open. */}
+      <img data-lb-img alt="" />
       <figcaption class="rail mt-3 text-center" data-lb-caption hidden></figcaption>
     </figure>
     <div class="lightbox-bar">
