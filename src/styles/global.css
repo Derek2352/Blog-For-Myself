@@ -498,6 +498,9 @@
   .tabbar,
   footer,
   dialog,
+  #site-cat,
+  .reading-progress,
+  .to-top,
   [data-pagefind-ignore],
   [data-video-play] {
     display: none !important;
