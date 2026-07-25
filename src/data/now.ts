@@ -6,9 +6,12 @@
 export const now = {
   /** e.g. "2026-07" — shown after the items */
   updated: "2026-07",
-  items: [
-    "building this site",
-    "rendering film frames for the next brief",
-    "collecting photos for the entries below",
-  ],
+  /**
+   * Empty = the whole "now →" line is hidden on the homepage (nothing else to
+   * change). Only fill this in if you'll actually keep it current: a line that
+   * still says last year's month reads as an abandoned site, which is worse
+   * than no line at all. Keep items short, honest, and in your own voice —
+   * and never use it for internal to-dos, since visitors read it too.
+   */
+  items: [] as string[],
 };
