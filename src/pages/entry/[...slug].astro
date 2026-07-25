@@ -268,7 +268,9 @@ const coverLqip = await lqipStyle("entries", entry.id, "cover");
     plane.style.top = `${rect.top + rect.height / 2}px`;
     const svg = plane.querySelector('svg');
     if (dir === -1 && svg) svg.style.transform = 'scaleX(-1)';
-    document.body.appendChild(plane);
+    // documentElement, not body: the router replaces body content on swap, and
+    // the plane should keep flying across the transition rather than blink out.
+    document.documentElement.appendChild(plane);
 
     const dx = dir * window.innerWidth * 0.55;
     const flight = plane.animate(
@@ -284,14 +286,18 @@ const coverLqip = await lqipStyle("entries", entry.id, "cover");
           opacity: 0,
         },
       ],
-      { duration: 600, easing: 'cubic-bezier(0.3, 0.1, 0.3, 1)' },
+      { duration: 460, easing: 'cubic-bezier(0.3, 0.1, 0.3, 1)' },
     );
-    flight.finished
-      .catch(() => {})
-      .finally(() => {
-        plane.remove();
-        navigate(link.href);
-      });
+    const cleanUp = () => plane.remove();
+    flight.finished.catch(() => {}).finally(cleanUp);
+    // Guaranteed sweep: if the router's swap cancels the animation mid-flight,
+    // `finished` may never settle, so never leave a plane stranded.
+    setTimeout(cleanUp, 900);
+
+    // Start the navigation now instead of after the flourish. The plane flies
+    // *alongside* the page transition, so the click feels immediate — waiting
+    // for the full animation first cost ~900ms per prev/next.
+    navigate(link.href);
   }
 
   function goPlane(link: HTMLAnchorElement): void {

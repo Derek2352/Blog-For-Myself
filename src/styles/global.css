@@ -419,7 +419,7 @@
 
   /* ---- image blur-up: LQIP background, sharp image fades in ---- */
   .blurup { background-size: cover; background-position: center; }
-  .blurup img { opacity: 0; transition: opacity 0.5s ease; }
+  .blurup img { opacity: 0; transition: opacity 0.35s ease; }
   .blurup img.loaded { opacity: 1; }
   html.a11y-motion .blurup img,
   .no-js .blurup img { opacity: 1; }
@@ -548,8 +548,8 @@
     opacity: 1;
     transform: none;
     transition:
-      opacity 0.55s ease,
-      transform 0.55s cubic-bezier(0.2, 0.6, 0.2, 1);
+      opacity 0.4s ease,
+      transform 0.4s cubic-bezier(0.2, 0.6, 0.2, 1);
   }
 
   /* staggered reveal: a grid's children settle in sequence as it enters */
@@ -561,14 +561,14 @@
     opacity: 1;
     transform: none;
     transition:
-      opacity 0.5s ease,
-      transform 0.5s cubic-bezier(0.2, 0.6, 0.2, 1);
+      opacity 0.38s ease,
+      transform 0.38s cubic-bezier(0.2, 0.6, 0.2, 1);
   }
-  .js [data-io-stagger].io-in > *:nth-child(2) { transition-delay: 0.05s; }
-  .js [data-io-stagger].io-in > *:nth-child(3) { transition-delay: 0.1s; }
-  .js [data-io-stagger].io-in > *:nth-child(4) { transition-delay: 0.15s; }
-  .js [data-io-stagger].io-in > *:nth-child(5) { transition-delay: 0.2s; }
-  .js [data-io-stagger].io-in > *:nth-child(n + 6) { transition-delay: 0.25s; }
+  .js [data-io-stagger].io-in > *:nth-child(2) { transition-delay: 0.035s; }
+  .js [data-io-stagger].io-in > *:nth-child(3) { transition-delay: 0.07s; }
+  .js [data-io-stagger].io-in > *:nth-child(4) { transition-delay: 0.105s; }
+  .js [data-io-stagger].io-in > *:nth-child(5) { transition-delay: 0.14s; }
+  .js [data-io-stagger].io-in > *:nth-child(n + 6) { transition-delay: 0.175s; }
 
   /* honour reduced motion for scroll + reveals (native or the a11y toggle) */
   @media (prefers-reduced-motion: reduce) {
