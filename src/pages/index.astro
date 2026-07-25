@@ -14,6 +14,7 @@ import {
   logHref,
   categoryHref,
 } from '@/lib/content';
+import { byPinnedOrder } from '@/lib/sort';
 import { categoryBySlug } from '@/data/categories';
 import { resolveTexture } from '@/lib/patterns';
 import { orientation } from '@/lib/images';
@@ -28,9 +29,7 @@ const logs = await getLogs();
 // An author-pinned `order` leads, so the hero is an intentional choice rather
 // than an accident of the newest date; entries are already newest-first, so the
 // rest of the featured set falls in date order behind the pin.
-const featured = entries
-  .filter((e) => e.data.featured)
-  .sort((a, b) => (a.data.order ?? Infinity) - (b.data.order ?? Infinity));
+const featured = entries.filter((e) => e.data.featured).sort(byPinnedOrder);
 const hero = featured[0] ?? entries[0];
 const heroCode = hero ? await entryCode(hero) : '';
 const heroLqip = hero ? await lqipStyle("entries", hero.id, "cover") : undefined;

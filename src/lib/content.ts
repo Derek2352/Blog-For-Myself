@@ -2,6 +2,7 @@ import { getCollection, type CollectionEntry } from 'astro:content';
 import { categories, type Category } from '@/data/categories';
 import { resolvePeriod, type PeriodRef } from './periods';
 import { monthKey, monthLabelFromKey } from './format';
+import { byPinnedOrder, byDateDesc } from './sort';
 
 export type Entry = CollectionEntry<'entries'>;
 export type Log = CollectionEntry<'logs'>;
@@ -40,12 +41,7 @@ export async function getLogs(): Promise<Log[]> {
  * everything else newest-first behind them.
  */
 export function sortForCategory(entries: Entry[]): Entry[] {
-  return [...entries].sort((a, b) => {
-    const ao = a.data.order ?? Number.POSITIVE_INFINITY;
-    const bo = b.data.order ?? Number.POSITIVE_INFINITY;
-    if (ao !== bo) return ao - bo;
-    return b.data.date.getTime() - a.data.date.getTime();
-  });
+  return [...entries].sort((a, b) => byPinnedOrder(a, b) || byDateDesc(a, b));
 }
 
 /* ------------------------------------------------------------------ *

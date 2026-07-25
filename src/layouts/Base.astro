@@ -15,6 +15,7 @@ import SiteCat from '@/components/SiteCat.astro';
 import WelcomeNote from '@/components/WelcomeNote.astro';
 import { site } from '@/data/site';
 import { isDraftPreviewBuild } from '@/lib/content';
+import { A11Y_KEYS } from '@/lib/a11y-prefs';
 import type { PatternName } from '@/lib/patterns';
 
 interface Props {
@@ -105,7 +106,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <!-- Theme + accessibility mode before first paint: stored choices win.
          Re-applied after every client-side swap (the router replaces <html>
          attributes), plus a .js flag that scroll-reveals key off. -->
-    <script is:inline>
+    <script is:inline define:vars={{ a11yKeys: A11Y_KEYS }}>
       (() => {
         const apply = () => {
           try {
@@ -114,7 +115,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
               ? stored === 'dark'
               : matchMedia('(prefers-color-scheme: dark)').matches;
             document.documentElement.classList.toggle('dark', dark);
-            for (const k of ['large', 'contrast', 'underline', 'motion', 'noshortcuts']) {
+            for (const k of a11yKeys) {
               document.documentElement.classList.toggle('a11y-' + k, localStorage.getItem('a11y-' + k) === '1');
             }
           } catch {}
@@ -174,7 +175,14 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
       const revealAll = () =>
         document.querySelectorAll(REVEAL_SEL).forEach((el) => el.classList.add('io-in'));
 
+      // Retire the previous page's observer on navigation: elements that never
+      // scrolled into view stay observed, so without this each client-side
+      // navigation left another observer alive holding detached nodes.
+      let revealIo: IntersectionObserver | null = null;
+
       function setupReveals(): void {
+        revealIo?.disconnect();
+        revealIo = null;
         if (
           matchMedia('(prefers-reduced-motion: reduce)').matches ||
           !('IntersectionObserver' in window)
@@ -196,6 +204,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
         document
           .querySelectorAll(`${REVEAL_SEL}`)
           .forEach((el) => !el.classList.contains('io-in') && io.observe(el));
+        revealIo = io;
       }
       // Blur-up: fade each image in once it has decoded.
       function setupBlurup(): void {

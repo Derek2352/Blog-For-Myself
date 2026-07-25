@@ -6,6 +6,7 @@
  */
 import Base from '@/layouts/Base.astro';
 import TimelineItem from '@/components/TimelineItem.astro';
+import JumpRail from '@/components/JumpRail.astro';
 import { getEntries, type Entry } from '@/lib/content';
 
 const entries = await getEntries();
@@ -39,17 +40,10 @@ for (const entry of entries) {
 
     <h2 class="sr-only">All entries, newest first</h2>
     <div class="mt-10 gap-8 lg:grid lg:grid-cols-[4rem_1fr]">
-      {
-        years.length > 1 && (
-          <nav class="jump-rail hidden lg:flex" aria-label="Jump to year">
-            {years.map((y) => (
-              <a href={`#year-${y}`} data-jump={`year-${y}`}>
-                {y}
-              </a>
-            ))}
-          </nav>
-        )
-      }
+      <JumpRail
+        label="Jump to year"
+        items={years.map((y) => ({ id: `year-${y}`, label: String(y) }))}
+      />
       <div class="relative pl-6 sm:pl-9">
         <div class="reel-ticks-v absolute bottom-0 left-0 top-0" aria-hidden="true"></div>
         <ol class="list-none p-0">
@@ -72,26 +66,3 @@ for (const entry of entries) {
   </div>
 </Base>
 
-<script>
-  // Highlight the current year/period in the jump rail as you scroll.
-  function setupJumpRail(): void {
-    const links = [...document.querySelectorAll<HTMLAnchorElement>('.jump-rail a[data-jump]')];
-    if (!links.length) return;
-    const targets = links
-      .map((a) => document.getElementById(a.dataset.jump!))
-      .filter(Boolean) as HTMLElement[];
-    const io = new IntersectionObserver(
-      (ents) => {
-        for (const e of ents) {
-          if (e.isIntersecting) {
-            const id = e.target.id;
-            links.forEach((a) => a.classList.toggle('here', a.dataset.jump === id));
-          }
-        }
-      },
-      { rootMargin: '-10% 0px -80% 0px' },
-    );
-    targets.forEach((t) => io.observe(t));
-  }
-  document.addEventListener('astro:page-load', setupJumpRail);
-</script>

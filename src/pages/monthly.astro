@@ -6,6 +6,7 @@
  */
 import Base from '@/layouts/Base.astro';
 import PeriodGroup from '@/components/PeriodGroup.astro';
+import JumpRail from '@/components/JumpRail.astro';
 import { getEntries, getLogs, toFeed, groupByPeriod } from '@/lib/content';
 
 const groups = groupByPeriod(toFeed(await getEntries(), await getLogs()));
@@ -30,15 +31,13 @@ const groups = groupByPeriod(toFeed(await getEntries(), await getLogs()));
     {
       groups.length > 0 ? (
         <div class="mt-12 gap-8 lg:grid lg:grid-cols-[10rem_1fr]">
-          {groups.length > 1 && (
-            <nav class="jump-rail hidden lg:flex" aria-label="Jump to period">
-              {groups.map((group) => (
-                <a href={`#period-${group.ref.id}`} data-jump={`period-${group.ref.id}`}>
-                  {group.ref.label}
-                </a>
-              ))}
-            </nav>
-          )}
+          <JumpRail
+            label="Jump to period"
+            items={groups.map((group) => ({
+              id: `period-${group.ref.id}`,
+              label: group.ref.label,
+            }))}
+          />
           <div class="min-w-0 space-y-16">
             {groups.map((group) => (
               <PeriodGroup group={group} showCategory />
@@ -51,26 +50,3 @@ const groups = groupByPeriod(toFeed(await getEntries(), await getLogs()));
     }
   </div>
 </Base>
-
-<script>
-  function setupJumpRail(): void {
-    const links = [...document.querySelectorAll<HTMLAnchorElement>('.jump-rail a[data-jump]')];
-    if (!links.length) return;
-    const targets = links
-      .map((a) => document.getElementById(a.dataset.jump!))
-      .filter(Boolean) as HTMLElement[];
-    const io = new IntersectionObserver(
-      (ents) => {
-        for (const e of ents) {
-          if (e.isIntersecting) {
-            const id = e.target.id;
-            links.forEach((a) => a.classList.toggle('here', a.dataset.jump === id));
-          }
-        }
-      },
-      { rootMargin: '-10% 0px -80% 0px' },
-    );
-    targets.forEach((t) => io.observe(t));
-  }
-  document.addEventListener('astro:page-load', setupJumpRail);
-</script>

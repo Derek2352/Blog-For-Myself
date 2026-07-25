@@ -155,6 +155,8 @@
 </style>
 
 <script>
+  import { motionReduced } from '@/lib/a11y-prefs';
+
   const CAT_W = 48;
   const CAT_H = 30;
 
@@ -175,12 +177,9 @@
     root.dataset.init = '1';
 
     // Reduce motion — whether from the OS setting or the site's accessibility
-    // toggle (.a11y-motion on <html>) — parks the cat idle instead of letting
-    // it wander. Checked live (see the observers at the end), so flipping the
-    // accessibility control starts or stops the cat without a reload.
-    const motionReduced = () =>
-      matchMedia('(prefers-reduced-motion: reduce)').matches ||
-      document.documentElement.classList.contains('a11y-motion');
+    // toggle — parks the cat idle instead of letting it wander. Checked live
+    // (see the observers at the end), so flipping the accessibility control
+    // starts or stops the cat without a reload.
     const parkIdle = () => {
       root.classList.remove('walking', 'chasing', 'pounce', 'startled');
       root.classList.add('idle');

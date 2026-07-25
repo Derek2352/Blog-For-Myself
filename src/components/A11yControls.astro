@@ -1,9 +1,14 @@
 ---
 /**
  * Accessibility mode — a small popover of reader toggles (larger text,
- * high contrast, underline links, reduce motion). Choices persist to
- * localStorage and are applied to <html> before first paint (see Base).
+ * high contrast, underline links, reduce motion, shortcuts off). Choices
+ * persist to localStorage and are applied to <html> before first paint
+ * (see Base). The toggles themselves are declared once in
+ * src/lib/a11y-prefs.ts — add one there and it appears here.
  */
+import { a11yGroups } from '@/lib/a11y-prefs';
+
+const groups = a11yGroups();
 ---
 
 <div class="a11y" data-a11y>
@@ -21,13 +26,18 @@
     </svg>
   </button>
   <div class="a11y-menu" id="a11y-menu" role="group" aria-label="Accessibility" hidden>
-    <p class="rail px-1 pb-1">Reading</p>
-    <label><input type="checkbox" data-a11y-opt="large" /> Larger text</label>
-    <label><input type="checkbox" data-a11y-opt="contrast" /> Higher contrast</label>
-    <label><input type="checkbox" data-a11y-opt="underline" /> Underline links</label>
-    <label><input type="checkbox" data-a11y-opt="motion" /> Reduce motion</label>
-    <p class="rail px-1 pb-1 pt-2">Input</p>
-    <label><input type="checkbox" data-a11y-opt="noshortcuts" /> Disable keyboard shortcuts</label>
+    {
+      groups.map((section, i) => (
+        <>
+          <p class:list={['rail px-1 pb-1', i > 0 && 'pt-2']}>{section.group}</p>
+          {section.prefs.map((pref) => (
+            <label>
+              <input type="checkbox" data-a11y-opt={pref.key} /> {pref.label}
+            </label>
+          ))}
+        </>
+      ))
+    }
   </div>
 </div>
 
@@ -59,7 +69,7 @@
 </style>
 
 <script>
-  const A11Y_KEYS = ['large', 'contrast', 'underline', 'motion', 'noshortcuts'] as const;
+  import { A11Y_KEYS } from '@/lib/a11y-prefs';
 
   function applyA11y(): void {
     for (const k of A11Y_KEYS) {

@@ -15,6 +15,8 @@
 </button>
 
 <script>
+  import { motionReduced } from '@/lib/a11y-prefs';
+
   // The scroll listener lives on `document`, which survives client-side
   // navigation, so it is registered ONCE for the session. `bar`/`btn` are
   // refreshed on every page-load (they only exist on entry pages); when they
@@ -22,10 +24,6 @@
   // instead would stack a fresh listener on every navigation.
   let bar: HTMLElement | null = null;
   let btn: HTMLButtonElement | null = null;
-
-  const reduceMotion = () =>
-    matchMedia('(prefers-reduced-motion: reduce)').matches ||
-    document.documentElement.classList.contains('a11y-motion');
 
   function onScroll(): void {
     if (!bar || !btn) return;
@@ -41,7 +39,7 @@
     bar = document.querySelector<HTMLElement>('[data-progress]');
     btn = document.querySelector<HTMLButtonElement>('[data-to-top]');
     if (btn) {
-      btn.onclick = () => window.scrollTo({ top: 0, behavior: reduceMotion() ? 'auto' : 'smooth' });
+      btn.onclick = () => window.scrollTo({ top: 0, behavior: motionReduced() ? 'auto' : 'smooth' });
     }
     onScroll();
   });

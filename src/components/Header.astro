@@ -49,11 +49,13 @@ const path = Astro.url.pathname.replace(/\/?$/, '/');
 <p class="sr-only">{site.tagline}</p>
 
 <script>
+  import { shortcutsDisabled } from '@/lib/a11y-prefs';
+
   // "/" jumps to search from anywhere (unless you're typing somewhere)
   document.addEventListener('keydown', (e) => {
     if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
     // respect the a11y "Disable keyboard shortcuts" toggle (WCAG 2.1.4)
-    if (document.documentElement.classList.contains('a11y-noshortcuts')) return;
+    if (shortcutsDisabled()) return;
     const target = e.target as HTMLElement | null;
     if (
       target instanceof HTMLInputElement ||

@@ -1,0 +1,62 @@
+---
+/**
+ * Sticky anchor rail for long index pages — /timeline (years) and /monthly
+ * (periods). Highlights whichever section is currently in view.
+ *
+ * Renders nothing for a single item: a rail with one target is noise.
+ * Each `item.id` must match the `id` of an element on the page.
+ */
+interface Props {
+  items: { id: string; label: string }[];
+  /** Accessible name, e.g. "Jump to year". */
+  label: string;
+}
+
+const { items, label } = Astro.props;
+---
+
+{
+  items.length > 1 && (
+    <nav class="jump-rail hidden lg:flex" aria-label={label}>
+      {items.map((item) => (
+        <a href={`#${item.id}`} data-jump={item.id}>
+          {item.label}
+        </a>
+      ))}
+    </nav>
+  )
+}
+
+<script>
+  // One observer per page. It is disconnected before each re-setup so a
+  // client-side navigation doesn't leave the previous page's observer alive.
+  let io: IntersectionObserver | null = null;
+
+  function setupJumpRail(): void {
+    io?.disconnect();
+    io = null;
+
+    const links = [...document.querySelectorAll<HTMLAnchorElement>('.jump-rail a[data-jump]')];
+    if (!links.length) return;
+    const targets = links
+      .map((a) => document.getElementById(a.dataset.jump!))
+      .filter((el): el is HTMLElement => el !== null);
+    if (!targets.length) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const id = entry.target.id;
+            links.forEach((a) => a.classList.toggle('here', a.dataset.jump === id));
+          }
+        }
+      },
+      { rootMargin: '-10% 0px -80% 0px' },
+    );
+    targets.forEach((t) => observer.observe(t));
+    io = observer;
+  }
+
+  document.addEventListener('astro:page-load', setupJumpRail);
+</script>
