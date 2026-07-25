@@ -20,7 +20,6 @@ import { resolveTexture } from '@/lib/patterns';
 import { orientation } from '@/lib/images';
 import { personSchema } from '@/lib/schema';
 import { lqipStyle } from '@/lib/lqip';
-import { now } from '@/data/now';
 import { isoDay, monthKey } from '@/lib/format';
 
 const entries = await getEntries();
@@ -69,30 +68,24 @@ const moreCats = primaryCats.length ? catIndex.filter((c) => !c.primary) : [];
 
 <Base schema={personSchema(Astro.site)}>
   <!-- Hero: photography leads; the rail annotates. -->
-  <section class="wrap grid items-center gap-10 py-12 sm:py-16 lg:grid-cols-[1fr_1.05fr]">
+  <section class="wrap grid items-center gap-10 py-12 sm:py-16 lg:grid-cols-[0.9fr_1.1fr] lg:gap-14">
     <div class="reveal">
       <p class="kicker">portfolio &amp; reflections · hong kong</p>
-      <h1 class="mt-3 font-display text-4xl leading-[1.05] sm:text-5xl lg:text-[3.4rem]">
-        Hi — I’m Derek.
+      {/* Name and tagline are one typographic unit, so the display face carries
+          the thesis instead of spending its largest size on a greeting alone. */}
+      <h1 class="mt-3 font-display leading-[1.05]">
+        <span class="block text-4xl sm:text-5xl lg:text-[3.4rem]">Hi — I’m Derek.</span>
+        <span
+          class="mt-2 block text-pretty text-2xl italic text-muted sm:text-3xl lg:text-[2.1rem]"
+        >
+          Numbers by day, frames by night.
+        </span>
       </h1>
-      <p class="mt-4 text-lg leading-relaxed text-muted">
-        I study financial analysis &amp; FinTech, and I make AI-animated film and photographs.
-        Numbers by day, frames by night — usually both at once.
+      <p class="mt-5 max-w-[48ch] text-lg leading-relaxed text-muted">
+        I study financial analysis &amp; FinTech, and I make AI-animated film and photographs —
+        usually both at once. Each entry below is the whole story, not the one-line CV version.
       </p>
-      <p class="mt-4 max-w-prose text-[0.95rem] leading-relaxed">
-        A CV squeezes each of these into one line. This site is where the full stories live —
-        what each project or trip actually was, what I did, what it taught me, and how it felt.
-        Plus the small monthly things a CV never has room for.
-      </p>
-      {
-        now.items.length > 0 && (
-          <p class="mt-5 font-mono text-xs lowercase tracking-wide text-muted">
-            <span class="text-signal-text">now →</span> {now.items.join(' · ')}
-            <span> · {now.updated}</span>
-          </p>
-        )
-      }
-      <div class="mt-7 flex flex-wrap gap-3">
+      <div class="mt-8 flex flex-wrap gap-3">
         <a
           href="/timeline/"
           class="rounded-(--radius-chip) bg-accent px-4 py-2 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90"

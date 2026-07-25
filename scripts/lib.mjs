@@ -154,26 +154,48 @@ export async function promptCategory(rl) {
 }
 
 /**
- * A neutral placeholder cover (SVG) so builds pass before real photos land.
+ * A placeholder cover (SVG) so builds pass before real photos land.
+ *
+ * Designed to read as a *deliberately empty contact-sheet cell* rather than a
+ * missing image: light warm ground, a faint ledger grid, a sand hairline frame
+ * with registration rules, and one small wine crosshair. Colours are the live
+ * design tokens (see the @theme block in src/styles/global.css), so a page full
+ * of these still looks like the site instead of a wall of dark slabs.
+ *
  * Tint varies with the seed so grids don't look like wallpaper.
  */
 export function placeholderSVG({ top = 'COVER · PENDING', bottom = '', seed = '', width = 1600, height = 1000 }) {
-  const tints = ['#342a21', '#3b2b27', '#2f2c1e', '#372532', '#302a22', '#3a3226'];
+  // Warm sands, deliberately a step deeper than --color-ground (#f9f4ea): the
+  // panel has to read as a distinct object resting on the page, not dissolve
+  // into it. A static SVG can't follow the class-driven dark theme, so this one
+  // tone is chosen to separate on ivory while staying calm on the dark ground.
+  const tints = ['#ece2d0', '#f0e6dc', '#e6dcc6', '#eee0da', '#e4e0cf', '#f0e4cd'];
   let hash = 0;
   for (const ch of seed) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
   const bg = tints[hash % tints.length];
-  const lineCol = '#a5937d';
-  const textCol = '#b7a58f';
+  const ink = '#2a241e'; // --color-ink, espresso
+  const muted = '#6e6257'; // --color-muted, warm taupe
+  const lineCol = '#cbbfa8'; // sand hairline, deep enough to draw the frame on the tint
+  const accent = '#8e2f45'; // --color-accent, ledger wine
   const t = xmlEscape(top.toUpperCase());
   const b = xmlEscape(bottom.toUpperCase());
+  const cx = width / 2;
   const midY = height / 2;
+  const markY = midY - 96;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Placeholder image">
+  <defs>
+    <pattern id="ledger" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0v40" fill="none" stroke="${ink}" stroke-opacity="0.085" stroke-width="1.5"/>
+    </pattern>
+  </defs>
   <rect width="${width}" height="${height}" fill="${bg}"/>
-  <rect x="28" y="28" width="${width - 56}" height="${height - 56}" fill="none" stroke="${lineCol}" stroke-opacity="0.5" stroke-width="2" rx="18"/>
-  <line x1="28" y1="88" x2="${width - 28}" y2="88" stroke="${lineCol}" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="2 26"/>
-  <line x1="28" y1="${height - 88}" x2="${width - 28}" y2="${height - 88}" stroke="${lineCol}" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="2 26"/>
-  <text x="${width / 2}" y="${midY - 14}" text-anchor="middle" font-family="'IBM Plex Mono','Courier New',monospace" font-size="38" letter-spacing="10" fill="${textCol}">${t}</text>
-  ${b ? `<text x="${width / 2}" y="${midY + 48}" text-anchor="middle" font-family="'IBM Plex Mono','Courier New',monospace" font-size="22" letter-spacing="6" fill="${textCol}" fill-opacity="0.7">${b}</text>` : ''}
+  <rect width="${width}" height="${height}" fill="url(#ledger)"/>
+  <rect x="28" y="28" width="${width - 56}" height="${height - 56}" fill="none" stroke="${lineCol}" stroke-width="2" rx="18"/>
+  <line x1="28" y1="88" x2="${width - 28}" y2="88" stroke="${lineCol}" stroke-width="2" stroke-dasharray="2 26"/>
+  <line x1="28" y1="${height - 88}" x2="${width - 28}" y2="${height - 88}" stroke="${lineCol}" stroke-width="2" stroke-dasharray="2 26"/>
+  <path d="M${cx - 13} ${markY}h26M${cx} ${markY - 13}v26" stroke="${accent}" stroke-opacity="0.85" stroke-width="3"/>
+  <text x="${cx}" y="${midY - 14}" text-anchor="middle" font-family="'IBM Plex Mono','Courier New',monospace" font-size="38" letter-spacing="10" fill="${ink}" fill-opacity="0.82">${t}</text>
+  ${b ? `<text x="${cx}" y="${midY + 48}" text-anchor="middle" font-family="'IBM Plex Mono','Courier New',monospace" font-size="22" letter-spacing="6" fill="${muted}">${b}</text>` : ''}
 </svg>
 `;
 }

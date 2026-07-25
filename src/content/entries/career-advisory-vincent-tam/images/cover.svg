@@ -1,8 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img" aria-label="Placeholder image">
-  <rect width="1600" height="1000" fill="#3a3226"/>
-  <rect x="28" y="28" width="1544" height="944" fill="none" stroke="#a5937d" stroke-opacity="0.5" stroke-width="2" rx="18"/>
-  <line x1="28" y1="88" x2="1572" y2="88" stroke="#a5937d" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="2 26"/>
-  <line x1="28" y1="912" x2="1572" y2="912" stroke="#a5937d" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="2 26"/>
-  <text x="800" y="486" text-anchor="middle" font-family="'IBM Plex Mono','Courier New',monospace" font-size="38" letter-spacing="10" fill="#b7a58f">COVER · PENDING</text>
-  <text x="800" y="548" text-anchor="middle" font-family="'IBM Plex Mono','Courier New',monospace" font-size="22" letter-spacing="6" fill="#b7a58f" fill-opacity="0.7">CAREER-ADVISORY-VINCENT-TAM</text>
+  <defs>
+    <pattern id="ledger" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0v40" fill="none" stroke="#2a241e" stroke-opacity="0.085" stroke-width="1.5"/>
+    </pattern>
+  </defs>
+  <rect width="1600" height="1000" fill="#f0e4cd"/>
+  <rect width="1600" height="1000" fill="url(#ledger)"/>
+  <rect x="28" y="28" width="1544" height="944" fill="none" stroke="#cbbfa8" stroke-width="2" rx="18"/>
+  <line x1="28" y1="88" x2="1572" y2="88" stroke="#cbbfa8" stroke-width="2" stroke-dasharray="2 26"/>
+  <line x1="28" y1="912" x2="1572" y2="912" stroke="#cbbfa8" stroke-width="2" stroke-dasharray="2 26"/>
+  <path d="M787 404h26M800 391v26" stroke="#8e2f45" stroke-opacity="0.85" stroke-width="3"/>
+  <text x="800" y="486" text-anchor="middle" font-family="'IBM Plex Mono','Courier New',monospace" font-size="38" letter-spacing="10" fill="#2a241e" fill-opacity="0.82">COVER · PENDING</text>
+  <text x="800" y="548" text-anchor="middle" font-family="'IBM Plex Mono','Courier New',monospace" font-size="22" letter-spacing="6" fill="#6e6257">CAREER-ADVISORY-VINCENT-TAM</text>
 </svg>
