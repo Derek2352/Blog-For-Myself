@@ -581,26 +581,146 @@
     }
   }
 
+  /* Hover motion. Scoped with html:not(.a11y-motion) for the same reason the
+     press transforms are: the accessibility toggle only forces
+     transition-duration to ~0, so without this the hover lifts still jumped
+     into place for a reader who asked for less movement. */
   @media (hover: hover) {
-    .card-cover img { transition: transform 0.35s cubic-bezier(0.2, 0.6, 0.2, 1); }
-    .card:hover .card-cover img { transform: scale(1.02); }
+    html:not(.a11y-motion) .card-cover img { transition: transform 0.35s cubic-bezier(0.2, 0.6, 0.2, 1); }
+    html:not(.a11y-motion) .card:hover .card-cover img { transform: scale(1.02); }
 
     /* cards rise to meet the cursor */
-    .lift { transition: transform 0.25s cubic-bezier(0.2, 0.6, 0.2, 1); }
-    .lift:hover { transform: translateY(-3px); }
+    html:not(.a11y-motion) .lift { transition: transform 0.25s cubic-bezier(0.2, 0.6, 0.2, 1); }
+    html:not(.a11y-motion) .lift:hover { transform: translateY(-3px); }
 
     /* ledger rows nudge forward */
-    .ledger-row > div { transition: transform 0.2s cubic-bezier(0.2, 0.6, 0.2, 1); }
-    .ledger-row:hover > div { transform: translateX(4px); }
+    html:not(.a11y-motion) .ledger-row > div { transition: transform 0.2s cubic-bezier(0.2, 0.6, 0.2, 1); }
+    html:not(.a11y-motion) .ledger-row:hover > div { transform: translateX(4px); }
 
     /* the 404 plane leans into takeoff */
-    .fly-hint svg { transition: transform 0.3s cubic-bezier(0.2, 0.6, 0.2, 1); }
-    .fly-hint:hover svg { transform: translate(4px, -4px) rotate(-12deg); }
+    html:not(.a11y-motion) .fly-hint svg { transition: transform 0.3s cubic-bezier(0.2, 0.6, 0.2, 1); }
+    html:not(.a11y-motion) .fly-hint:hover svg { transform: translate(4px, -4px) rotate(-12deg); }
   }
 
   /* theme toggle: a little press-tilt */
   #theme-toggle svg { transition: transform 0.25s ease; }
   #theme-toggle:active svg { transform: rotate(30deg) scale(0.9); }
+
+}
+
+/* ------------------------------------------------------------------ *
+ * Press feedback — every interactive thing acknowledges the touch.
+ *
+ * Hover (above) only exists on pointer devices, so without this a tap on a
+ * phone produced no response at all. Two halves: the cues here are always on,
+ * and the movement half sits under the reduced-motion guard below.
+ *
+ * This block is deliberately OUTSIDE `prefers-reduced-motion: no-preference`.
+ * It first shipped inside it by mistake, which silently removed *all* press
+ * feedback for reduced-motion readers — the exact opposite of the intent.
+ * They should lose the movement, never the feedback.
+ * ------------------------------------------------------------------ */
+
+/* The OS tap highlight is replaced, never merely removed — the :active states
+   here are its substitute. */
+a,
+button,
+summary,
+[role="button"],
+.a11y-menu label {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Universal acknowledgement: a dim while held reads on every control whatever
+   its own colours — a wine CTA with white text, a sand chip, a prose link — so
+   nothing is ever pressed in silence, and it needs no motion to register. */
+a:active,
+button:active,
+summary:active,
+[role="button"]:active,
+.a11y-menu label:active {
+  opacity: 0.82;
+}
+
+/* Containers respond to a press landing on the link or image inside them.
+   `:active` does not reach ancestors here, hence :has(). */
+.card:has(:active),
+.panel:has(:active),
+.lift:active,
+.lift:has(:active) {
+  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-line));
+}
+.ledger-row:has(:active) > div {
+  color: var(--color-accent);
+}
+
+/* Cards carry no border, so a tint is what actually reads on them — and it
+   works with motion disabled, where the sink transform is dropped. */
+.card:has(:active),
+.panel:has(:active),
+.lift:active,
+.lift:has(:active),
+[data-lb-open]:active,
+[data-lb-open]:has(:active) {
+  background: color-mix(in srgb, var(--color-accent) 5%, var(--color-surface));
+}
+
+/* Touch has no hover to preview intent, so make the press unmistakable. */
+@media (hover: none) {
+  .card:has(:active),
+  .panel:has(:active),
+  .lift:active,
+  .lift:has(:active),
+  [data-lb-open]:active,
+  [data-lb-open]:has(:active) {
+    background: color-mix(in srgb, var(--color-accent) 9%, var(--color-surface));
+  }
+}
+
+/* Movement half of the press language — the colour cues above always remain.
+   Gated on BOTH the OS setting and the site's own "Reduce motion" toggle: that
+   toggle only forces transition-duration to ~0, which would otherwise leave
+   these transforms snapping instantly instead of standing down. */
+@media (prefers-reduced-motion: no-preference) {
+  /* small controls compress — real buttons, which is every icon button,
+     lightbox control, back-to-top and the video play button */
+  html:not(.a11y-motion) button {
+    transition: transform 0.11s cubic-bezier(0.2, 0.6, 0.2, 1);
+  }
+  html:not(.a11y-motion) button:active,
+  html:not(.a11y-motion) button:has(:active),
+  html:not(.a11y-motion) [role="button"]:active {
+    transform: scale(0.96);
+  }
+
+  /* large surfaces sink rather than compress, and a press cancels the hover
+     lift so the two never fight */
+  html:not(.a11y-motion) .card,
+  html:not(.a11y-motion) .panel,
+  html:not(.a11y-motion) .lift,
+  html:not(.a11y-motion) [data-lb-open] {
+    transition:
+      transform 0.12s cubic-bezier(0.2, 0.6, 0.2, 1),
+      border-color 0.12s ease;
+  }
+  html:not(.a11y-motion) .card:has(:active),
+  html:not(.a11y-motion) .panel:has(:active),
+  html:not(.a11y-motion) .lift:active,
+  html:not(.a11y-motion) .lift:has(:active),
+  html:not(.a11y-motion) [data-lb-open]:active,
+  html:not(.a11y-motion) [data-lb-open]:has(:active) {
+    transform: translateY(0) scale(0.995);
+  }
+
+  /* One idea, consistently: hover reaches outward, a press settles everything
+     back in. Without these two, pressing a hovered card left its cover still
+     zoomed and its row still nudged — the gesture read as unresolved. */
+  html:not(.a11y-motion) .card:has(:active) .card-cover img {
+    transform: scale(1.004);
+  }
+  html:not(.a11y-motion) .ledger-row:has(:active) > div {
+    transform: translateX(1px);
+  }
 }
 
 /* the paper plane that carries you to the next entry */
