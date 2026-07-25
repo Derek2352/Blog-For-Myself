@@ -37,8 +37,14 @@ const path = Astro.url.pathname.replace(/\/?$/, '/');
           </a>
         ))
       }
-      <A11yControls />
-      <ThemeToggle />
+      {/* The two icon buttons travel together so a narrow-screen wrap never
+          strands one on its own line, and ml-auto keeps them at the right edge
+          of whatever row they land on — the a11y popover is anchored right: 0
+          to its button, so a left-aligned button would push it off-screen. */}
+      <div class="ml-auto flex items-center gap-x-3">
+        <A11yControls />
+        <ThemeToggle />
+      </div>
     </nav>
   </div>
   <div class="wrap">

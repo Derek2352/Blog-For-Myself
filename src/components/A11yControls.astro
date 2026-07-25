@@ -48,7 +48,9 @@ const groups = a11yGroups();
     right: 0;
     top: calc(100% + 0.4rem);
     z-index: 50;
-    min-width: 12.5rem;
+    /* never wider than the screen, however narrow the viewport gets */
+    min-width: min(12.5rem, calc(100vw - 2rem));
+    max-width: calc(100vw - 2rem);
     border: 1px solid var(--color-line);
     border-radius: var(--radius-card);
     background: var(--color-surface);
