@@ -26,7 +26,12 @@ export const isWarmHue = (h: number): boolean =>
   (h >= WARM_RANGE.min && h <= WARM_RANGE.max) ||
   (h >= WARM_WRAP.min && h <= WARM_WRAP.max);
 
-const hash = (s: string): number => {
+/**
+ * Stable string hash. Exported because the cat's treat wheel picks from a slug
+ * the same way this picks a hue — one deterministic source beats two copies that
+ * can drift apart.
+ */
+export const hash = (s: string): number => {
   let h = 0;
   for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return h;

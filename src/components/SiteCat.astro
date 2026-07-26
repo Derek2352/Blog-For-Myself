@@ -10,6 +10,16 @@
  * and under prefers-reduced-motion it simply sits still in the bottom-left corner.
  * To retire the cat, remove <SiteCat /> from Base.astro.
  */
+import { getNavCategories } from '@/lib/content';
+
+/**
+ * One paw per navigable tab, rendered here rather than built in the browser.
+ * Astro scopes this component's styles to elements it renders, so paws created
+ * with createElement never matched `.cat-paw` and came out 0x0 and invisible.
+ * Rendering them also keeps the collection content-driven from the same source
+ * the tab bar uses — publish a category and its paw appears by itself.
+ */
+const tabs = (await getNavCategories()).map((c) => c.slug);
 ---
 
 <div id="site-cat" transition:persist="site-cat" aria-hidden="true">
@@ -40,8 +50,54 @@
         <circle class="cat-eye" cx="57.5" cy="11.5" r="1.15"></circle>
       </g>
     </svg>
+    {/* purr/pet feedback — a couple of small marks, never text */}
+    <span class="cat-hearts" aria-hidden="true"></span>
   </span>
 </div>
+
+{/* The treat hiding in the current tab. Position and shape are set by the script;
+    pointer-events stay off so it can never intercept a click meant for a link. */}
+<div id="cat-treat" transition:persist="cat-treat" aria-hidden="true" hidden>
+  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+    <use href="#treat-fish"></use>
+  </svg>
+</div>
+
+{/* Progress. Decorative and aria-hidden: it's an easter egg, not information a
+    screen-reader user is missing out on, and announcing level-ups mid-read would
+    be an intrusion rather than a reward. */}
+<div id="cat-score" transition:persist="cat-score" aria-hidden="true" data-empty>
+  <div class="cat-paws">
+    {tabs.map((slug) => <span class="cat-paw" data-slug={slug}></span>)}
+  </div>
+  <p class="cat-caption rail"></p>
+</div>
+
+{/* Treat shapes, defined once and referenced by <use>. */}
+<svg width="0" height="0" aria-hidden="true" style="position:absolute" data-cat-sprites>
+  <defs>
+    <g id="treat-fish">
+      <path d="M3 12c4-5 9-5 13 0-4 5-9 5-13 0Z" fill="currentColor"></path>
+      <path d="M16 12l5-4v8l-5-4Z" fill="currentColor"></path>
+    </g>
+    <g id="treat-yarn">
+      <circle cx="12" cy="12" r="7" fill="currentColor"></circle>
+      <path d="M6 9c4 1 8 4 10 8M9 6c3 2 6 6 7 10" stroke="var(--color-ground)" stroke-width="1.2" fill="none"></path>
+    </g>
+    <g id="treat-bell">
+      <path d="M12 4a6 6 0 0 1 6 6v6H6v-6a6 6 0 0 1 6-6Z" fill="currentColor"></path>
+      <circle cx="12" cy="19" r="2" fill="currentColor"></circle>
+    </g>
+    <g id="treat-feather">
+      <path d="M18 4c2 6-2 13-9 16l-2-2C10 13 13 7 18 4Z" fill="currentColor"></path>
+    </g>
+    <g id="treat-biscuit">
+      <rect x="5" y="7" width="14" height="10" rx="4" fill="currentColor"></rect>
+      <circle cx="10" cy="12" r="1.1" fill="var(--color-ground)"></circle>
+      <circle cx="14" cy="12" r="1.1" fill="var(--color-ground)"></circle>
+    </g>
+  </defs>
+</svg>
 
 <style>
   #site-cat {
@@ -83,6 +139,91 @@
   }
   .cat-eye {
     fill: var(--color-ground);
+  }
+
+  /* ---- the treat hiding in a tab ---- */
+  #cat-treat {
+    position: fixed;
+    left: 0;
+    bottom: 3px;
+    z-index: 39; /* just under the cat, so the cat walks over its prize */
+    width: 20px;
+    height: 20px;
+    /* Never a hit target. The cat itself already had to learn this lesson on
+       touch; a decorative treat has even less business eating a tap. */
+    pointer-events: none;
+    color: var(--color-accent);
+    opacity: 0;
+    transform: translateX(-60px);
+  }
+  #cat-treat[hidden] {
+    display: none;
+  }
+  #cat-treat.show {
+    opacity: 0.85;
+  }
+  #cat-treat svg {
+    display: block;
+  }
+
+  /* ---- progress: a row of paws, low and quiet ---- */
+  #cat-score {
+    position: fixed;
+    left: 1rem;
+    /* clear of the cat's own 30px band, and far from the back-to-top corner */
+    bottom: 2.75rem;
+    z-index: 39;
+    pointer-events: none;
+    opacity: 0;
+    max-width: calc(100vw - 2rem);
+    /* On a phone the viewport is full of text, so a permanent overlay in the
+       corner sat on top of paragraphs. Give it the same paper it would have on
+       the desktop's empty margin: a small chip that reads as furniture rather
+       than something tangled in the prose. */
+    background: var(--color-ground);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-chip);
+    padding: 0.4rem 0.55rem;
+  }
+  #cat-score[data-empty] {
+    display: none;
+  }
+  /* Once anything has been found the row stays put — a tally you can only see for
+     three seconds after earning it is no tally at all. Only the caption fades. */
+  #cat-score:not([data-empty]) {
+    opacity: 1;
+  }
+  .cat-paws {
+    display: flex;
+    gap: 0.3rem;
+    align-items: center;
+  }
+  .cat-paw {
+    width: 9px;
+    height: 9px;
+    border-radius: 50% 50% 45% 45%;
+    background: var(--color-line);
+  }
+  .cat-paw.got {
+    background: var(--color-accent);
+  }
+  .cat-caption {
+    margin-top: 0.3rem;
+    white-space: nowrap;
+    opacity: 0;
+  }
+  #cat-score.announce .cat-caption {
+    opacity: 1;
+  }
+  .cat-hearts {
+    position: absolute;
+    left: 50%;
+    top: -6px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-accent);
+    opacity: 0;
   }
   .cat-leg,
   .cat-tail,
@@ -133,6 +274,97 @@
     #site-cat.pounce .cat-svg {
       animation: cat-pounce 0.45s cubic-bezier(0.2, 0.6, 0.2, 1);
     }
+
+    /* ---- affection: the idle repertoire widens as the cat warms to you ---- */
+    /* a slow blink, from level 1 — the cheapest way to look alive */
+    #site-cat.idle .cat-eye {
+      animation: cat-blink 5.2s ease-in-out infinite;
+    }
+    /* tail flick while sitting, level 2+ */
+    #site-cat.lv2 .cat-tail {
+      animation-duration: 1.9s;
+    }
+    /* washing a paw, level 3+ */
+    #site-cat.grooming .cat-head {
+      animation: cat-groom 1.5s ease-in-out;
+    }
+    /* a long stretch, level 4+ */
+    #site-cat.stretching .cat-svg {
+      animation: cat-stretch 1.3s ease-in-out;
+    }
+    /* curled up, top level — it has decided you're furniture, affectionately */
+    #site-cat.dozing .cat-svg {
+      animation: cat-doze 3.4s ease-in-out infinite;
+    }
+    #site-cat.purring .cat-svg {
+      animation: cat-purr 0.28s ease-in-out infinite;
+    }
+    #site-cat.purring .cat-hearts {
+      animation: cat-heart 1.1s ease-out;
+    }
+    #site-cat.munching .cat-head {
+      animation: cat-munch 0.3s ease-in-out 3;
+    }
+    /* the treat bobs so it reads as findable, not as a stray dot */
+    #cat-treat.show svg {
+      animation: treat-bob 1.9s ease-in-out infinite;
+    }
+    #cat-treat.taken {
+      animation: treat-taken 0.42s ease-out forwards;
+    }
+    #cat-score {
+      transition: opacity 0.45s ease;
+    }
+    .cat-caption {
+      transition: opacity 0.45s ease;
+    }
+    .cat-paw {
+      transition:
+        background-color 0.35s ease,
+        transform 0.35s cubic-bezier(0.2, 0.6, 0.2, 1);
+    }
+    .cat-paw.just-got {
+      transform: scale(1.5);
+    }
+  }
+
+  @keyframes cat-blink {
+    0%, 92%, 100% { transform: scaleY(1); }
+    95% { transform: scaleY(0.1); }
+  }
+  @keyframes cat-groom {
+    0%, 100% { transform: rotate(0deg) translateY(0); }
+    30% { transform: rotate(-16deg) translateY(3px); }
+    60% { transform: rotate(-10deg) translateY(2px); }
+  }
+  @keyframes cat-stretch {
+    0%, 100% { transform: scale(1, 1); }
+    45% { transform: scale(1.16, 0.86) translateY(2px); }
+  }
+  @keyframes cat-doze {
+    0%, 100% { transform: scale(1, 1) translateY(0); }
+    50% { transform: scale(1.02, 0.95) translateY(1px); }
+  }
+  @keyframes cat-purr {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-0.6px); }
+  }
+  @keyframes cat-heart {
+    0% { opacity: 0; transform: translate(-50%, 0) scale(0.6); }
+    35% { opacity: 0.9; }
+    100% { opacity: 0; transform: translate(-50%, -16px) scale(1); }
+  }
+  @keyframes cat-munch {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(1.5px); }
+  }
+  @keyframes treat-bob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+  }
+  @keyframes treat-taken {
+    0% { opacity: 0.85; transform: scale(1); }
+    100% { opacity: 0; transform: scale(1.7) translateY(-10px); }
   }
 
   @keyframes cat-step {
@@ -166,15 +398,49 @@
 
 <script>
   import { motionReduced } from '@/lib/a11y-prefs';
+  import { resolveTreat, captionFor, levelFor, isComplete } from '@/lib/cat-game';
 
   const CAT_W = 48;
   const CAT_H = 30;
+
+  /**
+   * Session progress. Module scope on purpose: Astro runs this script once per
+   * document, so the tally survives moving between pages and dies on a refresh —
+   * which is exactly the ask. Nothing is written to storage, so there is nothing
+   * to clear and no state a returning visitor inherits.
+   */
+  const game = {
+    found: new Set<string>(),
+    /** Slugs worth finding, read from the rendered tab bar rather than hardcoded. */
+    tabs: [] as string[],
+    level: 0,
+    celebrated: false,
+  };
+
+  /**
+   * The collection is whatever paws were rendered — which come from
+   * getNavCategories(), the same source as the tab bar. Reading them here rather
+   * than scraping the nav keeps one source of truth.
+   */
+  function readTabs(): string[] {
+    return [...document.querySelectorAll<HTMLElement>('#cat-score .cat-paw[data-slug]')]
+      .map((p) => p.dataset.slug!)
+      .filter(Boolean);
+  }
+
+  /** Which tab this page belongs to, if any. */
+  function currentTab(tabs: string[]): string | null {
+    const first = location.pathname.split('/').filter(Boolean)[0] ?? '';
+    return tabs.includes(first) ? first : null;
+  }
 
   interface CatState {
     x: number;
     dir: 1 | -1;
     speed: number;
-    mode: 'walk' | 'idle' | 'away' | 'climb' | 'chase';
+    mode: 'walk' | 'idle' | 'away' | 'climb' | 'chase' | 'fetch';
+    /** x of the treat the cat is heading for, in `fetch` mode. */
+    treatX: number;
     until: number;
     climbY: number;
     climbSide: 1 | -1;
@@ -206,6 +472,7 @@
       climbSide: 1,
       climbPhase: 'up',
       pounceCooldown: 0,
+      treatX: -1,
     };
     const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
@@ -242,13 +509,145 @@
     );
 
     const setClasses = () => {
+      // `walking` can never apply under reduced motion, whatever the state
+      // machine thinks: collecting a treat calls through here, and without this
+      // guard it re-attached the walk cycle to a cat that is supposed to be sat
+      // still.
       root.classList.toggle(
         'walking',
-        s.mode === 'walk' || s.mode === 'away' || s.mode === 'climb' || s.mode === 'chase',
+        !motionReduced() &&
+          (s.mode === 'walk' ||
+            s.mode === 'away' ||
+            s.mode === 'climb' ||
+            s.mode === 'chase' ||
+            s.mode === 'fetch'),
       );
       root.classList.toggle('chasing', s.mode === 'chase');
       root.classList.toggle('idle', s.mode === 'idle');
       root.classList.toggle('face-left', s.dir === -1);
+      // affection tier as a class, so the CSS can widen the idle repertoire
+      for (let i = 0; i <= 6; i++) root.classList.toggle(`lv${i}`, game.level >= i);
+    };
+
+    // ---------------------------------------------------------------------
+    // The reward loop: one treat per tab, and a cat that warms to you.
+    // ---------------------------------------------------------------------
+    /*
+     * These live outside the persisted cat, so hold them by id rather than by
+     * reference. Both carry `transition:persist` now, but they did not at first —
+     * and the router replaced them on every navigation while this closure kept
+     * writing to the detached originals. The symptom was a cat that climbed to
+     * the top affection tier with an empty paw row. Re-resolving when the cached
+     * node is no longer in the document makes that unrepeatable.
+     */
+    let treatRef: HTMLElement | null = null;
+    let scoreRef: HTMLElement | null = null;
+    const live = (cached: HTMLElement | null, id: string): HTMLElement | null =>
+      cached?.isConnected ? cached : document.getElementById(id);
+    const treat = () => (treatRef = live(treatRef, 'cat-treat'));
+    const scoreBox = () => (scoreRef = live(scoreRef, 'cat-score'));
+
+    /** Paint the paw row. Length follows the tab count, so it can't go stale. */
+    const renderScore = () => {
+      const scoreEl = scoreBox();
+      if (!scoreEl) return;
+      const total = game.tabs.length;
+      if (total === 0) {
+        scoreEl.setAttribute('data-empty', '');
+        return;
+      }
+      scoreEl.querySelectorAll<HTMLElement>('.cat-paw[data-slug]').forEach((paw) => {
+        paw.classList.toggle('got', game.found.has(paw.dataset.slug!));
+      });
+      const caption = scoreEl.querySelector('.cat-caption')!;
+      caption.textContent = captionFor(game.found.size, total);
+      // Only show the row once there's something to show; an empty row on a first
+      // visit would just be furniture nobody can explain.
+      if (game.found.size > 0) scoreEl.removeAttribute('data-empty');
+    };
+
+    /** Flash the row and its caption, then let them fade back out. */
+    let announceTimer: number | undefined;
+    const announce = () => {
+      const scoreEl = scoreBox();
+      if (!scoreEl) return;
+      scoreEl.classList.add('announce');
+      clearTimeout(announceTimer);
+      // the paws stay; only the words go
+      announceTimer = window.setTimeout(() => scoreEl.classList.remove('announce'), 3200);
+    };
+
+    const hideTreat = () => {
+      const treatEl = treat();
+      treatEl?.setAttribute('hidden', '');
+      treatEl?.classList.remove('show', 'taken');
+      s.treatX = -1;
+      if (s.mode === 'fetch') {
+        s.mode = 'walk';
+        setClasses();
+      }
+    };
+
+    /** Record a find: bump the level, repaint, and celebrate a full set once. */
+    const collect = (slug: string) => {
+      if (game.found.has(slug)) return;
+      game.found.add(slug);
+      game.level = levelFor(game.found.size, game.tabs.length);
+      renderScore();
+      const paw = scoreBox()?.querySelector(`.cat-paw[data-slug="${slug}"]`);
+      paw?.classList.add('just-got');
+      setTimeout(() => paw?.classList.remove('just-got'), 420);
+      announce();
+      setClasses();
+      if (isComplete(game.found.size, game.tabs.length) && !game.celebrated) {
+        game.celebrated = true;
+        purr(2200); // it has decided you're worth keeping
+      }
+    };
+
+    /** Put this tab's treat somewhere reachable along the floor. */
+    const spawnTreat = (slug: string) => {
+      const treatEl = treat();
+      if (!treatEl) return;
+      const shape = resolveTreat(slug);
+      treatEl.querySelector('use')?.setAttribute('href', `#treat-${shape}`);
+      // borrow this tab's own wash hue, so the treat belongs to the page
+      const hue = getComputedStyle(document.querySelector('.page-bg') ?? document.documentElement)
+        .getPropertyValue('--hue')
+        .trim();
+      treatEl.style.color = hue ? `hsl(${hue} 55% 42%)` : '';
+      /*
+       * Place it within reach rather than anywhere on the floor. At walking pace
+       * a treat on the far side of a wide window is a fifteen-second trundle —
+       * long enough that the reward stops registering as one. Keep it inside a
+       * little over half a screen of wherever the cat already is, still random
+       * enough that it isn't always underfoot.
+       */
+      const lo = 70;
+      const hi = Math.max(lo + 40, maxX() - 70);
+      const reach = (hi - lo) * 0.55;
+      const near = s.x + (Math.random() * 2 - 1) * reach;
+      s.treatX = Math.min(hi, Math.max(lo, near));
+      treatEl.style.transform = `translateX(${s.treatX}px)`;
+      treatEl.removeAttribute('hidden');
+      requestAnimationFrame(() => treatEl.classList.add('show'));
+      // food beats everything short of a climb
+      if (s.mode !== 'climb') {
+        s.mode = 'fetch';
+        s.speed = 132; // a trot, not a stroll — it can see food
+
+        setClasses();
+      }
+    };
+
+    /** Petting: hold the pointer on the cat and it purrs. Mouse only — see below. */
+    /** True while the pointer rests on the cat, so the hunt lets it be petted. */
+    let petting = false;
+    let purrTimer: number | undefined;
+    const purr = (ms = 1100) => {
+      root.classList.add('purring');
+      clearTimeout(purrTimer);
+      purrTimer = window.setTimeout(() => root.classList.remove('purring'), ms);
     };
 
     /**
@@ -257,8 +656,11 @@
      * the chase owns the cat this frame.
      */
     const hunt = (now: number, dt: number): boolean => {
+      if (petting) return true; // being fussed over; hold still
       const preyFresh = now - prey.t < 2500;
-      const preyLow = prey.y > window.innerHeight - 150;
+      // The fonder it is, the further up the page it will notice you — and the
+       // harder it runs. This is what the treats actually buy.
+      const preyLow = prey.y > window.innerHeight - (150 + game.level * 14);
       const canHunt = s.mode === 'walk' || s.mode === 'idle' || s.mode === 'chase';
 
       if (canHunt && preyFresh && preyLow) {
@@ -282,7 +684,7 @@
             return false;
           }
           s.dir = dx > 0 ? 1 : -1;
-          const sprint = Math.min(175, 62 + Math.abs(dx) * 0.35);
+          const sprint = Math.min(210, 62 + game.level * 6 + Math.abs(dx) * 0.35);
           s.x = Math.max(0, Math.min(maxX(), s.x + s.dir * sprint * dt));
           root.classList.toggle('face-left', s.dir === -1);
           return true;
@@ -299,11 +701,34 @@
       return false;
     };
 
+    /**
+     * Idle business, unlocked by affection. A wary cat just stands there; a fond
+     * one washes a paw, stretches, and eventually curls up near you. One-shot
+     * classes clear themselves; `dozing` persists while it stays idle.
+     */
+    const idleBusiness = () => {
+      root.classList.remove('grooming', 'stretching', 'dozing');
+      const lv = game.level;
+      if (lv >= 6 && Math.random() < 0.55) {
+        root.classList.add('dozing');
+        return;
+      }
+      const tricks: string[] = [];
+      if (lv >= 3) tricks.push('grooming');
+      if (lv >= 4) tricks.push('stretching');
+      if (!tricks.length || Math.random() < 0.45) return;
+      const trick = tricks[Math.floor(Math.random() * tricks.length)]!;
+      root.classList.add(trick);
+      setTimeout(() => root.classList.remove(trick), 1600);
+    };
+
     const chooseNext = (now: number) => {
       if (s.mode === 'walk') {
         s.mode = 'idle';
         s.until = now + rand(1600, 4200);
+        idleBusiness();
       } else {
+        root.classList.remove('grooming', 'stretching', 'dozing');
         s.mode = 'walk';
         s.speed = rand(34, 58);
         if (Math.random() < 0.45) s.dir = s.dir === 1 ? -1 : 1;
@@ -334,6 +759,35 @@
       }
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
+
+      // Heading for a treat outranks chasing the cursor — the cat is food-first,
+      // and otherwise a visitor moving the mouse could keep it from ever eating.
+      if (s.mode === 'fetch' && s.treatX >= 0) {
+        const dx = s.treatX - s.x;
+        if (Math.abs(dx) <= 12) {
+          root.classList.add('munching');
+          const eaten = treat();
+          eaten?.classList.add('taken');
+          const slug = currentTab(game.tabs);
+          setTimeout(() => {
+            root.classList.remove('munching');
+            eaten?.setAttribute('hidden', '');
+            eaten?.classList.remove('show', 'taken');
+          }, 900);
+          if (slug) collect(slug);
+          s.treatX = -1;
+          s.mode = 'idle';
+          s.until = now + 1400;
+          setClasses();
+        } else {
+          s.dir = dx > 0 ? 1 : -1;
+          s.x = Math.max(0, Math.min(maxX(), s.x + s.dir * s.speed * dt));
+          root.classList.toggle('face-left', s.dir === -1);
+        }
+        render();
+        requestAnimationFrame(tick);
+        return;
+      }
 
       if (hunt(now, dt)) {
         render();
@@ -437,6 +891,35 @@
     // deliberately does not fall through to whatever is behind it.
     root.querySelector('.cat-svg')?.addEventListener('click', () => scamper());
 
+    /*
+     * Petting: rest the pointer on the cat for a beat and it purrs instead of
+     * bolting. Mouse only, and that is not an oversight — on touch the cat is
+     * `pointer-events: none` so it can never swallow a tap meant for a link
+     * underneath, and re-introducing a touch hold would undo that fix.
+     */
+    let petTimer: number | undefined;
+    const svg = root.querySelector('.cat-svg');
+    svg?.addEventListener('pointerenter', (e) => {
+      if ((e as PointerEvent).pointerType !== 'mouse') return;
+      if (s.mode === 'climb') return;
+      // It has to stop to be petted. Without this the cat kept walking out from
+      // under the cursor, cancelled its own hold, and could never be petted at
+      // all — `petting` also suspends the hunt, which would otherwise drag it off
+      // after the very pointer resting on it.
+      petting = true;
+      s.mode = 'idle';
+      s.until = performance.now() + 3000;
+      setClasses();
+      clearTimeout(petTimer);
+      petTimer = window.setTimeout(() => {
+        if (petting) purr();
+      }, 600);
+    });
+    svg?.addEventListener('pointerleave', () => {
+      petting = false;
+      clearTimeout(petTimer);
+    });
+
     // Touch: the cat is not a hit target (see the CSS note), so hit-test its box
     // here instead. The tap still reaches the link underneath — it just startles
     // the cat on the way past.
@@ -474,12 +957,36 @@
       { attributes: true, attributeFilter: ['class'] },
     );
 
+    /**
+     * Per-navigation work: refresh the tab list, repaint progress, and decide
+     * whether this page is hiding a treat.
+     */
+    onPage = () => {
+      game.tabs = readTabs();
+      game.level = levelFor(game.found.size, game.tabs.length);
+      renderScore();
+      const tab = currentTab(game.tabs);
+      if (!tab || game.found.has(tab)) {
+        hideTreat();
+        return;
+      }
+      if (motionReduced()) {
+        // Nothing moves, so nothing can be fetched — arriving is enough. A
+        // visitor who browses everything still earns the whole set.
+        collect(tab);
+        hideTreat();
+        return;
+      }
+      spawnTreat(tab);
+    };
+
     setClasses();
     if (motionReduced()) {
       // Park bottom-*left*. The right corner is where the back-to-top button
       // appears once you scroll, and a parked cat can't step out of its way —
       // it would simply end up sitting underneath it for the whole visit.
       s.x = 20;
+      s.mode = 'idle'; // keep the state machine honest, or setClasses re-walks it
       render();
       parkIdle();
     } else {
@@ -487,8 +994,18 @@
     }
   }
 
+  /**
+   * Set once by initCat and re-run on every navigation. Kept out here because
+   * initCat itself is guarded to run a single time (the cat element persists
+   * across page swaps), while the treat has to be re-considered per page — and
+   * doing it this way adds no listener per navigation, which is how this codebase
+   * has leaked handlers before.
+   */
+  let onPage: (() => void) | null = null;
+
   document.addEventListener('astro:page-load', () => {
     const el = document.getElementById('site-cat');
     if (el) initCat(el);
+    onPage?.();
   });
 </script>
