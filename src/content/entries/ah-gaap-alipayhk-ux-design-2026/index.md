@@ -68,7 +68,8 @@ who share expenses constantly, flatmates and travel groups, where the balance si
 Its best trick is settling that balance in as few payments as possible — four people owing
 each other in a tangle usually nets down to one or two transfers, and working out which ones
 is a problem software should solve rather than the person who happens to be best at mental
-arithmetic.
+arithmetic. On screen it's one line — 「用最少 2 次轉帳，可以結清成個小組」 — and the whole job
+was making a graph-reconciliation problem read like a reassurance.
 
 Then the part that isn't in any brief. Currency is set in tabular figures so the numbers stop
 jittering sideways as digits change; Cantonese and English share a baseline so bilingual rows
@@ -79,11 +80,20 @@ Cantonese the way people speak it — 「等下慢慢計數先」 — not Englis
 politeness.
 
 After the Semi-Final I kept going and turned it into a proper system: **21 screens** — three
-for the architecture, ten for 夾單, seven for 後數, and four for nothing but edge cases. I
-built them first as a single self-contained HTML prototype, which became the source of truth
-for spacing, colour and motion, and then wrote a **Figma plugin** against Figma's API so the
-frames would generate themselves natively, with real Auto Layout, instead of me redrawing
-twenty-one screens by hand.
+for the architecture, ten for 夾單, seven for 後數, and four for nothing but edge cases: OCR
+that isn't sure what it read, a dispute, and a web preview for the person in the group who
+doesn't have the app. I gave myself an afternoon — **under four hours** — which is the only
+reason the rest of it happened the way it did.
+
+They exist twice over. First as a single self-contained HTML file, Tailwind pulled from a CDN,
+which became the source of truth for spacing, colour and motion. Then in Figma, via a
+**plugin** I wrote against their API — and here the honest version matters, because the tidy
+version isn't true. The plugin lays out the 21-frame grid, builds the chrome every screen
+shares (status bar, nav, home indicator), and fully constructs two hero screens with real Auto
+Layout: **A1 Payment Success** and **B2 Group Detail**. It cannot do all twenty-one. Ask a
+model for that in one pass and you run out of context long before you run out of screens. So
+it scaffolds, and I finished the remaining nineteen by hand against the HTML — which is a
+better division of labour than the one I set out to build.
 
 ## What I learned
 
@@ -104,16 +114,36 @@ which half is a skill in itself. Writing a plugin to generate the frames took le
 drawing them would have, and it meant a token change propagated everywhere instead of being
 re-applied twenty-one times by hand.
 
+Two smaller things I didn't expect. Figma turned out to be a programmable environment rather
+than a canvas: padding, direction and fill stop being panel settings and become
+`layoutMode`, `itemSpacing`, `solidPaint` — properties you can compute. And the quality of
+what an AI hands back tracks almost exactly how rigorous you were before you asked. The token
+list — exact hex values, an 8pt grid, tabular figures, the thumb zone — existed before any
+screen did, and that's why the screens came out consistent. A vague prompt doesn't produce
+vague work; it produces confident work in the wrong direction.
+
 Doing the whole pipeline — scraping, embeddings, clustering, synthesis, prototype, pitch —
 alone in a month taught me where my own bottlenecks are, and how far a disciplined
 AI-assisted workflow can stretch one person.
 
 ## How it felt
 
-<!-- Placeholder — rewrite this honestly in your own words. Prompts if useful:
-     the moment the clusters first "made sense"; presenting a solo project to the panel;
-     what a one-month sprint did to your weeks; what you'd defend and what you'd redo. -->
+The honest first reaction to my own plan was: how am I going to get twenty-one pixel-perfect
+screens out of an afternoon? Sitting with the requirements list — OCR states, animated
+markers, balance sheets that have to add up — it read less like a design brief than a dare.
 
-Building something end-to-end on my own, against the clock, was equal parts exhausting and
-clarifying — and reaching the Semi-Final made the late nights feel like they'd pointed
-somewhere real.
+Then I opened the HTML file in a browser and it looked *real*. A grid of iPhone mockups in
+Alipay's blue, markers pulsing, spacing that held together. I'd expected something I would
+have to apologise for and got something I'd have been happy to hand over. That's the moment
+the whole workflow stopped being theoretical for me.
+
+The middle was a wall, and a useful one. The AI couldn't build all twenty-one screens natively
+in Figma, and for a while I kept trying to make it — which was me insisting on the version of
+the story I'd already decided on. Splitting it instead, letting the plugin scaffold and doing
+the finish myself, was slightly deflating for about ten minutes and obviously correct
+afterwards. Most of what I learned on this project is in that ten minutes.
+
+By the end I felt genuinely ready — not because the mockups were pretty, but because I could
+explain every decision in them and point at where each one came from. Building something
+end-to-end on my own, against the clock, was equal parts exhausting and clarifying — and
+reaching the Semi-Final made the late nights feel like they'd pointed somewhere real.
