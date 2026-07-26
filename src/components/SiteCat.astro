@@ -65,6 +65,16 @@
     pointer-events: auto;
     cursor: pointer;
   }
+  /* A phone has no cursor for the cat to run from, so its 48x30 body just sits
+     at the bottom edge of the screen and swallows taps meant for whatever link
+     is under it — a dead zone that moves. On touch it stops being a hit target;
+     the tap-to-scamper reaction moves to a proximity check in the script, so
+     the cat still reacts without blocking anything. */
+  @media (hover: none) {
+    .cat-svg {
+      pointer-events: none;
+    }
+  }
   .cat-flip {
     display: block;
   }
@@ -385,8 +395,8 @@
       requestAnimationFrame(tick);
     };
 
-    // tap the cat → startled hop, then it scampers off
-    root.querySelector('.cat-svg')?.addEventListener('click', () => {
+    // startled hop, then it scampers off
+    const scamper = () => {
       if (s.mode === 'climb') return;
       root.classList.add('startled');
       setTimeout(() => root.classList.remove('startled'), 380);
@@ -395,7 +405,26 @@
       s.speed = 150;
       s.until = performance.now() + rand(4000, 9000);
       setClasses();
-    });
+    };
+
+    // Mouse: the cat is a real hit target, so clicking it boops the cat and
+    // deliberately does not fall through to whatever is behind it.
+    root.querySelector('.cat-svg')?.addEventListener('click', () => scamper());
+
+    // Touch: the cat is not a hit target (see the CSS note), so hit-test its box
+    // here instead. The tap still reaches the link underneath — it just startles
+    // the cat on the way past.
+    window.addEventListener(
+      'pointerdown',
+      (e) => {
+        if (e.pointerType === 'mouse') return;
+        const b = root.getBoundingClientRect();
+        if (e.clientX >= b.left && e.clientX <= b.right && e.clientY >= b.top && e.clientY <= b.bottom) {
+          scamper();
+        }
+      },
+      { passive: true },
+    );
 
     const start = () => {
       if (running || motionReduced()) return;
