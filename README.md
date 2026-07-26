@@ -320,12 +320,16 @@ site for the living design page (palette, type, the index-rail signature).
   afternoon light, but the accent is wine-red (not terracotta/clay) and the identity comes
   from the mono **index rail** (`E-014 · 2026-04 → 2026-06 · SEMI-FINALIST`) and its
   reel-tick ruler on `/timeline` and period headers. Dark mode is candlelit, not cold.
-- **Per-tab textures:** every page carries a soft background pattern + faint hue wash
-  (never a flat white). Each category declares `pattern`/`hue` in
-  `src/data/categories.ts` (halftone · ledger · contours · hatch · weave · plus · waves);
-  omit them on a new tab and it gets a stable pick from a hash of its slug. Patterns are
-  drawn in the ink color at whisper opacity so text contrast stays AA — tune globally via
-  `--pattern-color`, `--pat-a`, `--wash-a` in `src/styles/global.css`.
+- **Per-tab warm wash:** every page carries one soft gradient at the top — the same
+  afternoon light, shifted a few degrees per tab (never a flat white). Each category
+  declares `hue` in `src/data/categories.ts`; omit it on a new tab and it gets a stable
+  pick from a hash of its slug. Hues are confined to a narrow **warm band** (amber →
+  terracotta → wine) and `tests/wash.test.ts` fails the build if one strays: earlier
+  versions ranged into violet/cyan/green, which read as a colour cast fighting the paper.
+  Tune the strength via `--wash-a` in `src/styles/global.css`.
+  There was also a per-tab *pattern* layer (halftone/ledger/contours/hatch/weave/plus/
+  waves). It was removed: page pattern + patterned cards + textured covers stacked three
+  deep and made pages feel busy. Photographs should be the only busy thing on a page.
 - Type: Instrument Serif (display, sparingly) · Inter (body) · IBM Plex Mono (rail) — all
   self-hosted via Fontsource, with a Traditional-Chinese-safe fallback stack
   (PingFang TC / Microsoft JhengHei / Noto Sans TC).

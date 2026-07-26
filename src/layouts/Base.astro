@@ -16,7 +16,6 @@ import WelcomeNote from '@/components/WelcomeNote.astro';
 import { site } from '@/data/site';
 import { isDraftPreviewBuild } from '@/lib/content';
 import { A11Y_KEYS } from '@/lib/a11y-prefs';
-import type { PatternName } from '@/lib/patterns';
 
 interface Props {
   title?: string;
@@ -26,8 +25,7 @@ interface Props {
   /** Alt text describing the OG image (accessibility for shared previews). */
   ogImageAlt?: string;
   ogType?: 'website' | 'article';
-  /** Soft page texture (see src/lib/patterns.ts). Category pages pass their own. */
-  pattern?: PatternName;
+  /** Warm wash hue (see src/lib/wash.ts). Category pages pass their own. */
   hue?: number;
   /** Optional JSON-LD structured data — one object or several. */
   schema?: Record<string, unknown> | Record<string, unknown>[];
@@ -39,8 +37,7 @@ const {
   ogImage = new URL('/og/site.png', Astro.site).toString(),
   ogImageAlt,
   ogType = 'website',
-  pattern = 'plus',
-  hue = 35,
+  hue = 32,
   schema,
 } = Astro.props;
 const schemas = schema ? (Array.isArray(schema) ? schema : [schema]) : [];
@@ -140,7 +137,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
   </head>
   <body class="flex min-h-full flex-col">
     <div
-      class:list={['page-bg', 'patterned', `pat-${pattern}`]}
+      class:list={['page-bg', 'wash']}
       style={`--hue: ${hue}`}
       aria-hidden="true"
     >

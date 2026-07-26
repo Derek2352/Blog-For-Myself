@@ -66,16 +66,13 @@
 
   :root {
     color-scheme: light;
-    /* page-texture knobs: pattern ink + wash strength (kept whisper-quiet
-       so text contrast stays untouched — readability first) */
-    --pattern-color: color-mix(in srgb, var(--color-ink) 15%, transparent);
-    --wash-a: 0.12;
-    --pat-a: 1;
+    /* strength of the single page wash — kept whisper-quiet so text contrast
+       stays untouched and photography leads */
+    --wash-a: 0.1;
   }
   .dark {
     color-scheme: dark;
-    --pattern-color: color-mix(in srgb, var(--color-ink) 13%, transparent);
-    --wash-a: 0.16;
+    --wash-a: 0.14;
   }
 
   html {
@@ -172,77 +169,40 @@
       repeating-linear-gradient(to bottom, var(--color-line) 0 1.5px, transparent 1.5px 8px);
   }
 
-  /* ---- soft page textures: per-tab pattern + faint hue wash ----
-     Apply `patterned pat-<name>` + a --hue custom property. Pseudo layers
-     sit above the element's own background and below its content, so
-     panels and pages stay fully readable. */
-  .patterned {
+  /* ---- page wash: one soft warm gradient, nothing more ----
+     Apply `wash` + a --hue custom property. The pseudo layer sits above the
+     element's own background and below its content.
+
+     A per-tab *pattern* layer used to live here (halftone/ledger/contours/
+     waves/…). It was removed deliberately: page pattern + patterned category
+     tiles + the grid inside placeholder covers stacked three textures on one
+     screen, which read as busy on a site where photography is supposed to
+     lead. Saturation is low on purpose — this should read as light falling on
+     paper, not as a colour cast. */
+  .wash {
     position: relative;
     isolation: isolate;
   }
-  .patterned::before,
-  .patterned::after {
+  .wash::before {
     content: "";
     position: absolute;
     inset: 0;
     z-index: -1;
     border-radius: inherit;
     pointer-events: none;
-  }
-  .patterned::before {
     background: radial-gradient(
       120% 85% at 50% -10%,
-      hsl(var(--hue, 222) 55% 48% / var(--wash-a)),
+      hsl(var(--hue, 32) 38% 50% / var(--wash-a)),
       transparent 68%
     );
   }
-  .patterned::after {
-    opacity: var(--pat-a);
-  }
 
-  /* full-viewport texture layer rendered by the Base layout */
+  /* full-viewport wash layer rendered by the Base layout */
   .page-bg {
     position: fixed;
     inset: 0;
     z-index: -10;
     pointer-events: none;
-  }
-
-  .pat-halftone::after {
-    background-image:
-      radial-gradient(var(--pattern-color) 1.1px, transparent 1.2px),
-      radial-gradient(var(--pattern-color) 1.1px, transparent 1.2px);
-    background-size: 20px 20px;
-    background-position: 0 0, 10px 10px;
-  }
-  .pat-ledger::after {
-    background-image:
-      repeating-linear-gradient(to right, var(--pattern-color) 0 1px, transparent 1px 26px),
-      repeating-linear-gradient(to bottom, var(--pattern-color) 0 1px, transparent 1px 26px);
-  }
-  .pat-hatch::after {
-    background-image: repeating-linear-gradient(
-      45deg,
-      var(--pattern-color) 0 1px,
-      transparent 1px 16px
-    );
-  }
-  .pat-weave::after {
-    background-image:
-      repeating-linear-gradient(45deg, var(--pattern-color) 0 1px, transparent 1px 24px),
-      repeating-linear-gradient(-45deg, var(--pattern-color) 0 1px, transparent 1px 24px);
-  }
-  .pat-plus::after {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30'%3E%3Cpath d='M15 10v10M10 15h10' fill='none' stroke='%23808080' stroke-opacity='.32'/%3E%3C/svg%3E");
-    background-size: 30px 30px;
-  }
-  .pat-contours::after {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'%3E%3Cg fill='none' stroke='%23808080' stroke-opacity='.26'%3E%3Cpath d='M0 40c40-12 80 10 120 4s80-28 120-16'/%3E%3Cpath d='M0 92c46-16 92 14 138 6s70-30 102-22'/%3E%3Cpath d='M0 146c38 12 76-16 118-10s84 30 122 18'/%3E%3Cpath d='M0 198c44-10 88 12 132 6s76-24 108-14'/%3E%3C/g%3E%3C/svg%3E");
-    background-size: 240px 240px;
-  }
-  .pat-waves::after {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='26' viewBox='0 0 120 26'%3E%3Cpath d='M0 13c10-8 20-8 30 0s20 8 30 0 20-8 30 0 20 8 30 0' fill='none' stroke='%23808080' stroke-opacity='.26'/%3E%3C/svg%3E");
-    background-size: 120px 26px;
   }
 
   /* category tab strip: wraps on wide screens, scrolls on narrow */

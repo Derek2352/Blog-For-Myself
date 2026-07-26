@@ -10,7 +10,7 @@ import EntryCard from '@/components/EntryCard.astro';
 import PeriodGroup from '@/components/PeriodGroup.astro';
 import { categories, RESERVED_SLUGS, type Category } from '@/data/categories';
 import { getEntries, getLogs, sortForCategory, toFeed, groupByPeriod } from '@/lib/content';
-import { resolveTexture } from '@/lib/patterns';
+import { resolveWash } from '@/lib/wash';
 
 export async function getStaticPaths() {
   for (const c of categories) {
@@ -36,15 +36,14 @@ const entries = sortForCategory(
 );
 const logs = (await getLogs()).filter((l) => l.data.category === category.slug);
 const logGroups = groupByPeriod(toFeed([], logs));
-const texture = resolveTexture(category);
+const wash = resolveWash(category);
 ---
 
 <Base
   title={category.label}
   description={category.blurb || undefined}
   ogImage={new URL(`/og/category/${category.slug}.png`, Astro.site).toString()}
-  pattern={texture.pattern}
-  hue={texture.hue}
+  hue={wash.hue}
 >
   <div class="wrap py-10">
     <header class="max-w-3xl">

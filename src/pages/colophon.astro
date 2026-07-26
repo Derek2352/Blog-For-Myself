@@ -6,9 +6,9 @@
  */
 import Base from '@/layouts/Base.astro';
 import { categories } from '@/data/categories';
-import { resolveTexture } from '@/lib/patterns';
+import { resolveWash } from '@/lib/wash';
 
-const textures = categories.map((c) => ({ label: c.label, ...resolveTexture(c) }));
+const washes = categories.map((c) => ({ label: c.label, ...resolveWash(c) }));
 
 const swatches = [
   { name: 'ground', varName: '--color-ground', note: 'warm ivory — afternoon paper' },
@@ -24,8 +24,7 @@ const swatches = [
 <Base
   title="Colophon"
   description="How this site is designed and built: palette, type, the index-rail signature, and the files-as-content model."
-  pattern="ledger"
-  hue={285}
+  hue={38}
 >
   <div class="wrap max-w-4xl py-10">
     <header>
@@ -92,26 +91,25 @@ const swatches = [
       </ul>
     </section>
 
-    <section class="mt-12" aria-labelledby="textures-h">
-      <p class="kicker">textures</p>
-      <h2 id="textures-h" class="mt-1 font-display text-2xl">Every tab has its own paper</h2>
+    <section class="mt-12" aria-labelledby="washes-h">
+      <p class="kicker">light</p>
+      <h2 id="washes-h" class="mt-1 font-display text-2xl">One warm light, tab by tab</h2>
       <p class="mt-3 max-w-prose text-sm leading-relaxed text-muted">
-        Each category carries a soft background pattern and hue wash — graph paper for
-        experience, contour lines for study trips, halftone dots for creative work — declared
-        in the same data file that defines the tab, and kept faint enough that reading always
-        comes first. A new tab picks its own automatically.
+        Each tab carries a single soft wash at the top of the page — the same afternoon
+        light, shifted a few degrees in temperature. It's declared in the same data file
+        that defines the tab, and a new tab picks its own automatically. Hues stay inside a
+        deliberately narrow warm band (amber through terracotta to wine): earlier versions
+        ranged into violet, cyan and green, which read as a colour cast fighting the paper.
+        There used to be a patterned texture layer here too — page pattern, patterned cards
+        and textured covers stacked three deep, so it was removed. Photographs should be the
+        only busy thing on the page.
       </p>
       <ul class="mt-5 grid list-none gap-3 p-0 sm:grid-cols-2">
         {
-          textures.map((t) => (
-            <li
-              class:list={['panel patterned p-4', `pat-${t.pattern}`]}
-              style={`--hue: ${t.hue}; --pat-a: 1.6; --wash-a: 0.14;`}
-            >
-              <p class="rail">
-                {t.pattern} · hue {t.hue}
-              </p>
-              <p class="mt-1 font-display text-xl">{t.label}</p>
+          washes.map((w) => (
+            <li class="panel wash p-4" style={`--hue: ${w.hue}; --wash-a: 0.16;`}>
+              <p class="rail">hue {w.hue}</p>
+              <p class="mt-1 font-display text-xl">{w.label}</p>
             </li>
           ))
         }

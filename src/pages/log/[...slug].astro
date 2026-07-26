@@ -12,7 +12,7 @@ import ReadingAids from '@/components/ReadingAids.astro';
 import { lqipStyle } from '@/lib/lqip';
 import { getLogs, logCode, logHasBody, categoryHref, type Log } from '@/lib/content';
 import { categoryBySlug } from '@/data/categories';
-import { resolveTexture } from '@/lib/patterns';
+import { resolveWash } from '@/lib/wash';
 import { resolvePeriod } from '@/lib/periods';
 import { orientation } from '@/lib/images';
 import { isoDay } from '@/lib/format';
@@ -34,7 +34,7 @@ const period = resolvePeriod(log.data.date);
 const ogImage = log.data.image
   ? new URL((await getImage({ src: log.data.image, width: 1200 })).src, Astro.site).toString()
   : undefined;
-const texture = resolveTexture(category ?? { slug: log.data.category });
+const wash = resolveWash(category ?? { slug: log.data.category });
 const imageLqip = log.data.image ? await lqipStyle("logs", log.id, "image") : undefined;
 ---
 
@@ -43,8 +43,7 @@ const imageLqip = log.data.image ? await lqipStyle("logs", log.id, "image") : un
   description={log.data.summary}
   ogImage={ogImage}
   ogType="article"
-  pattern={texture.pattern}
-  hue={texture.hue}
+  hue={wash.hue}
 >
   <ReadingAids />
   <article class="wrap max-w-3xl py-10" data-pagefind-body>

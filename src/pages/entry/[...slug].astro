@@ -20,7 +20,7 @@ import {
   type Entry,
 } from '@/lib/content';
 import { categoryBySlug } from '@/data/categories';
-import { resolveTexture } from '@/lib/patterns';
+import { resolveWash } from '@/lib/wash';
 import { orientation } from '@/lib/images';
 import { entrySchema, breadcrumbSchema } from '@/lib/schema';
 import { lqipStyle } from '@/lib/lqip';
@@ -41,7 +41,7 @@ const code = await entryCode(entry);
 const category = categoryBySlug(entry.data.category);
 const related = await relatedEntries(entry);
 const ogImage = new URL(`/og/${entry.id}.png`, Astro.site).toString();
-const texture = resolveTexture(category ?? { slug: entry.data.category });
+const wash = resolveWash(category ?? { slug: entry.data.category });
 
 // prev/next within this category, same order as the category grid
 const siblings = sortForCategory(
@@ -61,8 +61,7 @@ const coverLqip = await lqipStyle("entries", entry.id, "cover");
   ogImage={ogImage}
   ogImageAlt={`${entry.data.title} — ${category?.label ?? entry.data.category}`}
   ogType="article"
-  pattern={texture.pattern}
-  hue={texture.hue}
+  hue={wash.hue}
   schema={[
     entrySchema(entry, {
       url: new URL(Astro.url.pathname, Astro.site).toString(),

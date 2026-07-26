@@ -16,7 +16,6 @@ import {
 } from '@/lib/content';
 import { byPinnedOrder } from '@/lib/sort';
 import { categoryBySlug } from '@/data/categories';
-import { resolveTexture } from '@/lib/patterns';
 import { orientation } from '@/lib/images';
 import { personSchema } from '@/lib/schema';
 import { lqipStyle } from '@/lib/lqip';
@@ -157,13 +156,11 @@ const moreCats = primaryCats.length ? catIndex.filter((c) => !c.primary) : [];
       {
         browseCats.map((c) => (
           <li>
+            {/* Clean cream panels: these used to carry their own texture and
+                hue wash on top of the page's, which was one layer too many. */}
             <a
               href={categoryHref(c.slug)}
-              class:list={[
-                'panel patterned lift group block h-full p-5 transition-colors hover:border-accent',
-                `pat-${resolveTexture(c).pattern}`,
-              ]}
-              style={`--hue: ${resolveTexture(c).hue}`}
+              class="panel lift group block h-full p-5 transition-colors hover:border-accent"
             >
               <p class="rail">
                 {c.entryCount} {c.entryCount === 1 ? 'entry' : 'entries'} · {c.logCount}

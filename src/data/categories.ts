@@ -12,21 +12,13 @@
  * - Reserved slugs (used by fixed routes): entry, log, monthly, timeline,
  *   about, tags, rss.xml, 404.
  */
-import type { PatternName } from "@/lib/patterns";
-
 export interface Category {
   slug: string;
   label: string;
   order: number;
   blurb: string;
-  /**
-   * Optional page texture: a soft background pattern + hue wash for this
-   * tab (and its entries/logs). Omit both and the tab still gets a stable
-   * one picked from a hash of its slug — new tabs need zero decisions.
-   * Patterns: halftone · ledger · contours · hatch · weave · plus · waves
-   */
-  pattern?: PatternName;
-  /** Hue (0–360) for the faint top-of-page wash. */
+  /** Warm wash hue in degrees. Keep it inside the warm band (see
+   * src/lib/wash.ts) — cool hues fight the ivory/espresso/wine palette. */
   hue?: number;
   /**
    * Flagship category. Primary categories read at full weight in the tab bar
@@ -43,8 +35,7 @@ export const categories: Category[] = [
     order: 1,
     blurb:
       "Competitive work across finance and AI storytelling — from Bloomberg terminals and pitch stages to award-winning film briefs.",
-    pattern: "hatch",
-    hue: 8,
+    hue: 12,
     primary: true,
   },
   {
@@ -53,8 +44,7 @@ export const categories: Category[] = [
     order: 2,
     blurb:
       "AI-animated film, photography, and self-built pipelines — where the analyst and the animator share a desk.",
-    pattern: "halftone",
-    hue: 285,
+    hue: 350,
     primary: true,
   },
   {
@@ -63,8 +53,7 @@ export const categories: Category[] = [
     order: 3,
     blurb:
       "Cross-border programmes between Hong Kong, the mainland, and beyond — innovation ecosystems seen first-hand.",
-    pattern: "contours",
-    hue: 150,
+    hue: 26,
     primary: true,
   },
   {
@@ -73,8 +62,7 @@ export const categories: Category[] = [
     order: 4,
     blurb:
       "Roles and internships — applied work in design operations, data, and banking.",
-    pattern: "ledger",
-    hue: 45,
+    hue: 44,
     primary: true,
   },
   {
@@ -83,8 +71,7 @@ export const categories: Category[] = [
     order: 5,
     blurb:
       "Ambassador programmes and campus leadership — translating AI fluency into shared, usable knowledge.",
-    pattern: "plus",
-    hue: 25,
+    hue: 32,
   },
   {
     slug: "community",
@@ -92,15 +79,13 @@ export const categories: Category[] = [
     order: 6,
     blurb:
       "Volunteering that keeps me grounded — books, food, and street-level fundraising in Hong Kong.",
-    pattern: "weave",
-    hue: 95,
+    hue: 20,
   },
   {
     slug: "career",
     label: "Mentorship & Career",
     order: 7,
     blurb: "Mentors and advisors shaping the road ahead.",
-    pattern: "waves",
     hue: 340,
   },
   {
@@ -109,8 +94,7 @@ export const categories: Category[] = [
     order: 8,
     blurb:
       "Off the clock — films watched, places wandered, and whatever else refills the tank.",
-    pattern: "waves",
-    hue: 195,
+    hue: 38,
   },
 ];
 
