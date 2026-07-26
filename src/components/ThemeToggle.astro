@@ -38,6 +38,8 @@
 </button>
 
 <script>
+  import { THEME_KEY, syncThemeColor } from '@/lib/theme';
+
   const syncPressed = () => {
     document
       .getElementById('theme-toggle')
@@ -47,21 +49,20 @@
   // fresh button after every client-side navigation
   document.addEventListener('astro:page-load', () => {
     syncPressed();
+    // Belt and braces: the pre-paint pass in Base.astro already does this, but
+    // if it ran before the stylesheet applied it would have read an empty token.
+    syncThemeColor();
     document.getElementById('theme-toggle')?.addEventListener('click', () => {
       const dark = document.documentElement.classList.toggle('dark');
       try {
-        localStorage.setItem('theme', dark ? 'dark' : 'light');
+        localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light');
       } catch {}
       syncPressed();
+      syncThemeColor();
     });
   });
 
-  // follow live system changes while the visitor hasn't chosen explicitly
-  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-    try {
-      if (localStorage.getItem('theme')) return;
-    } catch {}
-    document.documentElement.classList.toggle('dark', e.matches);
-    syncPressed();
-  });
+  // There is deliberately no prefers-color-scheme listener here. Light is the
+  // default, so following a live OS switch would drag a visitor who never chose
+  // into dark and quietly defeat that default. Dark is opt-in via this button.
 </script>

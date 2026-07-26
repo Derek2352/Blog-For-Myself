@@ -57,8 +57,11 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f9f4ea" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1c1814" />
+    {/* Keyed to the theme we actually render, not the OS preference — light is
+        the default now, so a media-keyed value would tint a phone's address bar
+        dark above a light page. The script below keeps it in sync from
+        --color-ground so the two hexes live in exactly one place. */}
+    <meta name="theme-color" id="theme-color" content="#f9f4ea" />
     <!-- Preload the three critical faces so text paints in its real metrics (no swap shift). -->
     <link rel="preload" as="font" type="font/woff2" href={interWoff2} crossorigin />
     <link rel="preload" as="font" type="font/woff2" href={instrumentWoff2} crossorigin />
@@ -105,18 +108,34 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
          attributes), plus a .js flag that scroll-reveals key off. -->
     <script is:inline define:vars={{ a11yKeys: A11Y_KEYS }}>
       (() => {
+        // Mirrors src/lib/theme.ts (an is:inline script can't import). Reads the
+        // live token so the two ground hexes live only in global.css.
+        // This script runs *before* the stylesheet link in <head>, so on the
+        // first pass the token is still empty — retry once styles have applied,
+        // otherwise a visitor who chose dark gets a cream address bar.
+        const syncThemeColor = () => {
+          const ground = getComputedStyle(document.documentElement)
+            .getPropertyValue('--color-ground')
+            .trim();
+          if (ground) {
+            document.getElementById('theme-color')?.setAttribute('content', ground);
+          } else {
+            document.addEventListener('DOMContentLoaded', syncThemeColor, { once: true });
+          }
+        };
         const apply = () => {
           try {
-            const stored = localStorage.getItem('theme');
-            const dark = stored
-              ? stored === 'dark'
-              : matchMedia('(prefers-color-scheme: dark)').matches;
+            // Light is the default: dark is opt-in through the toggle, so a
+            // visitor whose device is in dark mode still lands on the paper look
+            // the site is built around. A missing key reads as light.
+            const dark = localStorage.getItem('theme') === 'dark';
             document.documentElement.classList.toggle('dark', dark);
             for (const k of a11yKeys) {
               document.documentElement.classList.toggle('a11y-' + k, localStorage.getItem('a11y-' + k) === '1');
             }
           } catch {}
           document.documentElement.classList.add('js');
+          syncThemeColor();
         };
         apply();
         document.addEventListener('astro:after-swap', apply);
