@@ -10,6 +10,13 @@ export const site = {
   name: 'YUNG Ming Yin (Derek)',
   tagline:
     'Financial Analysis & FinTech undergraduate · AI-creative practitioner',
+  /**
+   * The small line under your name in the header. Voice, not a label — the
+   * literal "Portfolio & Log" wording is kept for the browser title, the RSS
+   * feed and the share cards, where "portfolio" is the word that makes you
+   * findable. This one is free to have character.
+   */
+  mastheadNote: 'vibe coded from scratch',
   description:
     'Portfolio and reflections of YUNG Ming Yin (Derek) — Financial Analysis & FinTech (Hons) undergraduate in Hong Kong and AI-creative practitioner. The director’s cut of my CV: competitions, study trips, AI film, and the monthly log.',
   locale: 'en',
