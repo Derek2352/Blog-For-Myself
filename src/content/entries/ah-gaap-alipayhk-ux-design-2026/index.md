@@ -7,6 +7,7 @@ endDate: 2026-06-30
 role: "Semi-Finalist"
 organization: "AlipayHK × Seed Foundation"
 location: "Hong Kong"
+updated: 2026-07-26
 # note: ""  # one-line personal aside in your voice — shows as an italic margin note
 summary: "An AI-powered post-payment ledger concept for the AlipayHK Super App — a public-discourse research pipeline distilled into two evidence-anchored personas, 30+ Figma frames, and a 12-screen interactive prototype, built solo in a one-month sprint."
 cover: "./images/cover.svg"
@@ -59,6 +60,31 @@ On that footing I designed the product end-to-end and shipped it solo: **30+ Fig
 frames**, a **12-screen interactive prototype**, and **two pitch decks** — built with Claude
 Code, Claude Design, Figma, and a self-deployed market-analysis web app.
 
+The feature splits in two. **夾單** handles the meal you've just paid for: point the camera
+at the receipt, let OCR parse the line items, and everyone taps to claim what they actually
+ate — then split equally, by percentage, or line by line, with payments tracked as they land
+rather than chased in a group chat. **後數** is the longer game: a standing ledger for people
+who share expenses constantly, flatmates and travel groups, where the balance simply carries.
+Its best trick is settling that balance in as few payments as possible — four people owing
+each other in a tangle usually nets down to one or two transfers, and working out which ones
+is a problem software should solve rather than the person who happens to be best at mental
+arithmetic.
+
+Then the part that isn't in any brief. Currency is set in tabular figures so the numbers stop
+jittering sideways as digits change; Cantonese and English share a baseline so bilingual rows
+sit straight instead of drifting; everything lands on an 8pt grid; and the primary action
+stays in the bottom third of a 393×852 screen, where a thumb can actually reach it. The mock
+data is Hoi Wong Congee and TamJai SamGor rather than "Restaurant A", and the microcopy is
+Cantonese the way people speak it — 「等下慢慢計數先」 — not English translated into
+politeness.
+
+After the Semi-Final I kept going and turned it into a proper system: **21 screens** — three
+for the architecture, ten for 夾單, seven for 後數, and four for nothing but edge cases. I
+built them first as a single self-contained HTML prototype, which became the source of truth
+for spacing, colour and motion, and then wrote a **Figma plugin** against Figma's API so the
+frames would generate themselves natively, with real Auto Layout, instead of me redrawing
+twenty-one screens by hand.
+
 ## What I learned
 
 The lesson that stuck: *research is a design material, not a preamble.* Because every
@@ -67,6 +93,16 @@ being about evidence — and the work got faster, not slower. I also learned how
 finance-and-FinTech lens changes a UX brief: a ledger feature lives or dies on trust,
 legibility, and getting the edge cases (partial payments, disputes, someone leaving the
 group) right.
+
+Four of the twenty-one screens do nothing but handle things going wrong, and that ratio is
+deliberate. The happy path took an afternoon; deciding what the screen says when someone pays
+half, disputes a line, or leaves the group still owing money is where the design actually
+lived.
+
+I also learned that the tedious half of design work is often automatable, and that noticing
+which half is a skill in itself. Writing a plugin to generate the frames took less time than
+drawing them would have, and it meant a token change propagated everywhere instead of being
+re-applied twenty-one times by hand.
 
 Doing the whole pipeline — scraping, embeddings, clustering, synthesis, prototype, pitch —
 alone in a month taught me where my own bottlenecks are, and how far a disciplined
