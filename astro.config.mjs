@@ -3,6 +3,7 @@ import { defineConfig } from 'astro/config';
 import mdx from '@astrojs/mdx';
 import sitemap from '@astrojs/sitemap';
 import tailwindcss from '@tailwindcss/vite';
+import remarkStripComments from './plugins/remark-strip-comments.mjs';
 
 // Set this to your production URL before deploying (also update public/robots.txt).
 // Cloudflare Pages default: https://<project>.pages.dev
@@ -25,6 +26,14 @@ export default defineConfig({
     // OG-card image endpoints are routes, not pages — keep them out of the sitemap
     sitemap({ filter: (page) => !page.includes('/og/') }),
   ],
+  markdown: {
+    // Authoring notes live in the .md bodies as <!-- … --> comments. Markdown
+    // ships those verbatim, so without this the scaffolding behind each entry
+    // ("FIRST-PASS DRAFT", "Placeholder — rewrite this honestly") is readable in
+    // the published page source. Strip them at build time instead of relying on
+    // remembering to delete each one.
+    remarkPlugins: [remarkStripComments],
+  },
   vite: {
     plugins: [tailwindcss()],
   },
