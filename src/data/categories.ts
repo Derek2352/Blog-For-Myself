@@ -34,7 +34,7 @@ export const categories: Category[] = [
     label: "Competitions & Awards",
     order: 1,
     blurb:
-      "Competitive work across finance and AI storytelling — from Bloomberg terminals and pitch stages to award-winning film briefs.",
+      "Competitive work across finance and product design — from Bloomberg terminals and pitch stages to fintech UX briefs.",
     hue: 12,
     primary: true,
   },

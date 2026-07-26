@@ -2,7 +2,7 @@
 # Facts confirmed from CV (Jul 2026): Champion · Feb–Jun 2026 · CGDFF · HKIoD recognition.
 # The HKIoD Annual Dinner showcase is from your own notes (not on the CV) — adjust freely.
 title: "The Blueprint of Tomorrow"
-category: "competitions"
+category: "creative-ai"
 date: 2026-02-01
 endDate: 2026-06-30
 role: "Champion"
