@@ -64,15 +64,25 @@ below for the full workflow (studio, media inbox, photo plan).
 | Named seasons (e.g. "Summer 2026") | `src/data/periods.ts` |
 | Your CV PDF · portrait photo | `public/cv.pdf` · `src/assets/portrait.svg` |
 
-Adding a category object to `categories.ts` creates its tab, page, share card, and texture
-automatically. Nothing else to touch.
+Adding a category object to `categories.ts` creates its tab, page, share card, and warm
+wash automatically. Nothing else to touch. Two optional flags on a category are worth
+knowing:
+
+- `primary: true` — also gives it a tile in the homepage's *"Or wander by subject"* grid.
+  Without it the category still gets its tab and page; the homepage just doesn't repeat it.
+  This is deliberate: listing every category there named them twice on one screen.
+- `hue: <number>` — pins its wash colour instead of taking a hashed pick (see
+  [Design notes](#design-notes)).
+
+A tab appears only once the category has at least one published entry or log, so a category
+you add today stays invisible until you write something in it.
 
 ### S-05 · Build & check
 
 ```bash
 npm run build      # type/schema check + static build + search index (fails here, not live)
 npm run preview    # serve the production build locally
-npm test           # 17 unit tests
+npm test           # 36 unit tests
 ```
 
 ### S-06 · Deploy
@@ -235,11 +245,11 @@ Parts). The page itself is already declared `lang="en"`, so only the exceptions 
   render Latin text; if you start writing CJK titles, add a Noto Sans TC weight to
   `loadFonts` in `src/lib/og.ts`.
 - **CI:** `.github/workflows/ci.yml` runs the unit tests + full build on every push — a
-  bad frontmatter edit (or a regression in the date/period/texture logic) fails there
+  bad frontmatter edit (or a regression in the date/period/wash logic) fails there
   instead of breaking a deploy.
 - **Tests:** `npm test` (Vitest) covers the pure content-model logic — date/range
-  formatting, period-vs-month resolution, image orientation, and per-tab texture
-  resolution. Add a case in `tests/` when you touch any of those.
+  formatting, period-vs-month resolution, image orientation, sort order, and per-tab wash
+  hue (including the warm-band guard). Add a case in `tests/` when you touch any of those.
 - **Analytics (optional):** set `analyticsToken` in `src/data/site.ts` to your Cloudflare
   Web Analytics token and a privacy-friendly beacon (no cookies, no banner) is emitted;
   leave it `''` and nothing loads.
@@ -263,9 +273,16 @@ Parts). The page itself is already declared `lang="en"`, so only the exceptions 
 - Entries whose reflection is still the template show a graceful **"still being
   written"** note publicly instead of four empty headings — write the sections and it
   disappears.
-- Press **`/`** anywhere to jump to search. Entry pages **print cleanly** (chrome and
-  patterns drop out) for anyone who PDFs them. `public/_headers` ships immutable caching
-  for build assets + basic security headers on Cloudflare/Netlify.
+- Press **`/`** anywhere to jump to search. Entry pages **print cleanly** for anyone who
+  PDFs them — nav, tab bar, footer, the page wash, the cat, the reading-progress bar and
+  the back-to-top button all drop out, leaving the words and the photographs.
+  `public/_headers` ships immutable caching for build assets + basic security headers on
+  Cloudflare/Netlify.
+- **Monthly earns its nav slot.** `/monthly/` always exists, but it is only advertised in
+  the header once there are at least `MONTHLY_NAV_MIN_LOGS` (4) published logs — below that
+  it and `/timeline/` are nearly the same list, so showing both just makes a visitor click
+  twice to find out. It appears by itself as you write logs; the number is one constant at
+  the top of `src/components/Header.astro`.
 - `npm run photos` also flags **images over 2 MB** — resize to ~2000px on the long edge
   before committing.
 - **Orientation is automatic**: drop in any photo — landscape, portrait, or square — and
@@ -281,8 +298,10 @@ Parts). The page itself is already declared `lang="en"`, so only the exceptions 
 - **`note` field (entries):** an optional one-line aside in your own voice
   (`note: "the night before the deadline was something else"`) — renders as an italic
   margin note under the summary. Use it where the CV voice isn't enough.
-- **"now →" line (homepage):** edit `src/data/now.ts` when you do your monthly logs —
-  three or four short, honest items about what you're up to.
+- **`src/data/now.ts` is currently unused.** It fed a "now →" line on the homepage that has
+  since been removed, so editing it changes nothing today. The file is kept because the
+  lines in it are yours; wire it back into `src/pages/index.astro` if you want that line
+  again, or delete it.
 - **Scrapbook galleries:** gallery prints rest at slight angles (straightening on hover)
   with italic serif captions — write captions like you'd caption a photo album, not a
   report.
@@ -293,6 +312,11 @@ Parts). The page itself is already declared `lang="en"`, so only the exceptions 
   "mouse" moves again. It persists across page transitions (one cat per visit), is
   `aria-hidden`, and sits still under reduced motion. To retire it, remove `<SiteCat />`
   from `Base.astro`.
+  On a **mouse** the cat is a real click target, so booping it doesn't also trigger
+  whatever is behind it. On **touch** it deliberately isn't: a phone has no cursor for it
+  to run from, so a hit-testable cat parked at the bottom edge would swallow taps meant for
+  the link underneath. There it reacts via a proximity check instead — the tap reaches the
+  link *and* startles the cat on the way past.
 
 ---
 
@@ -358,8 +382,6 @@ gitignored).
 
 - **Bilingual i18n (EN / 繁中):** content model is ready — `lang` handling and CJK-safe
   fonts are in from day one; add Astro i18n routing when the time comes.
-- **Search:** [Pagefind](https://pagefind.app) pairs perfectly with Astro static — add the
-  postbuild step and a search box.
 - **"Ask my portfolio" AI chat:** would need an API key + a small serverless endpoint over
   entries/logs; deliberately stubbed out (no key committed).
 - **View/like counts:** needs a tiny external store (e.g. Cloudflare KV); the static build
