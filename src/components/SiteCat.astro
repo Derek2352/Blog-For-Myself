@@ -7,7 +7,7 @@
  * page transitions, so it's one cat for the whole visit.
  *
  * Decorative only: aria-hidden, pointer-events limited to its own body,
- * and under prefers-reduced-motion it simply sits still in the corner.
+ * and under prefers-reduced-motion it simply sits still in the bottom-left corner.
  * To retire the cat, remove <SiteCat /> from Base.astro.
  */
 ---
@@ -197,7 +197,7 @@
     let running = false;
 
     const s: CatState = {
-      x: Math.min(140, window.innerWidth * 0.2),
+      x: Math.min(140, document.documentElement.clientWidth * 0.2),
       dir: 1,
       speed: 42,
       mode: 'walk',
@@ -208,7 +208,26 @@
       pounceCooldown: 0,
     };
     const rand = (a: number, b: number) => a + Math.random() * (b - a);
-    const maxX = () => window.innerWidth - CAT_W;
+
+    /**
+     * `documentElement.clientWidth`, not `window.innerWidth`: innerWidth counts a
+     * classic vertical scrollbar, but the cat is position: fixed and so lives in
+     * the viewport *inside* it. Using innerWidth walked the cat's back half under
+     * the scrollbar on any browser that doesn't use overlay scrollbars.
+     */
+    const viewportW = () => document.documentElement.clientWidth;
+
+    /**
+     * The back-to-top button parks in the bottom-right corner (right: 1rem, 2.6rem
+     * square) on long pages and paints above the cat, so a cat that reached the
+     * far right slid behind it — a 32x14px overlap. Treat that corner as
+     * furniture: while the button is showing, the patrol stops short of it. The
+     * button only appears after you scroll, which is why this only happened
+     * sometimes.
+     */
+    const CORNER_GUARD = 68; // 1rem gap + 2.6rem button + a little air
+    const cornerBusy = () => !!document.querySelector('.to-top.show');
+    const maxX = () => viewportW() - CAT_W - (cornerBusy() ? CORNER_GUARD : 0);
 
     // the visitor's pointer is, as far as the cat is concerned, a mouse
     const prey = { x: -9999, y: -9999, t: 0 };
@@ -297,7 +316,7 @@
       if (s.mode === 'climb') {
         // a short scramble up the side edge: rotate to vertical, feet on the wall
         const rot = s.climbSide === 1 ? -90 : 90;
-        const cx = s.climbSide === 1 ? window.innerWidth - CAT_W / 2 - CAT_H / 2 : CAT_H / 2 - CAT_W / 2;
+        const cx = s.climbSide === 1 ? viewportW() - CAT_W / 2 - CAT_H / 2 : CAT_H / 2 - CAT_W / 2;
         root.style.transform = `translate(${cx}px, ${-s.climbY}px) rotate(${rot}deg)`;
       } else {
         root.style.transform = `translateX(${s.x}px)`;
@@ -327,7 +346,11 @@
         if (s.mode === 'walk') {
           if ((s.dir === 1 && s.x >= maxX() - 4) || (s.dir === -1 && s.x <= 4)) {
             const roll = Math.random();
-            if (roll < 0.3) {
+            if (s.dir === 1 && cornerBusy()) {
+              // Climbing this edge or slipping out through it would both take the
+              // cat behind the back-to-top button. Just turn around.
+              s.dir = -1;
+            } else if (roll < 0.3) {
               // climb a little way up this edge
               s.mode = 'climb';
               s.climbSide = s.dir === 1 ? 1 : -1;
@@ -348,10 +371,13 @@
           if (now > s.until) chooseNext(now);
         } else {
           // away: keep walking off-screen, then re-enter from the other side
-          if (s.x > window.innerWidth + CAT_W || s.x < -CAT_W * 2) {
+          if (s.x > viewportW() + CAT_W || s.x < -CAT_W * 2) {
             if (now > s.until) {
               s.dir = s.dir === 1 ? -1 : 1;
-              s.x = s.dir === 1 ? -CAT_W : window.innerWidth;
+              // Coming back in from the right would cross the button's corner, so
+              // re-enter from the left instead while it's showing.
+              if (s.dir === -1 && cornerBusy()) s.dir = 1;
+              s.x = s.dir === 1 ? -CAT_W : viewportW();
               s.mode = 'walk';
               s.speed = rand(34, 58);
               s.until = now + rand(3000, 7000);
@@ -401,7 +427,7 @@
       root.classList.add('startled');
       setTimeout(() => root.classList.remove('startled'), 380);
       s.mode = 'away';
-      s.dir = s.x > window.innerWidth / 2 ? 1 : -1;
+      s.dir = s.x > viewportW() / 2 ? 1 : -1;
       s.speed = 150;
       s.until = performance.now() + rand(4000, 9000);
       setClasses();
@@ -450,7 +476,10 @@
 
     setClasses();
     if (motionReduced()) {
-      s.x = Math.max(0, window.innerWidth - CAT_W - 20);
+      // Park bottom-*left*. The right corner is where the back-to-top button
+      // appears once you scroll, and a parked cat can't step out of its way —
+      // it would simply end up sitting underneath it for the whole visit.
+      s.x = 20;
       render();
       parkIdle();
     } else {
