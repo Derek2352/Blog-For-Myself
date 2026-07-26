@@ -90,10 +90,29 @@ import { site } from '@/data/site';
       el.addEventListener('click', () => dialog.close());
     });
 
+    // Scrolling is an answer: someone who has started reading doesn't need a
+    // map, and a real showModal() blocks the page — so get out of the way
+    // instead of making them dismiss it first. A scroll during the 700ms wait
+    // cancels the opening outright; after that it closes the note.
+    let scrolled = false;
+    const onScroll = () => {
+      scrolled = true;
+      dialog.close(); // no-op if it hasn't opened yet
+    };
+    window.addEventListener('scroll', onScroll, { passive: true, once: true });
+    // Dismissed some other way (button, Esc, backdrop) → stop listening rather
+    // than leaving a live handler armed for the rest of the session.
+    dialog.addEventListener('close', () => window.removeEventListener('scroll', onScroll), {
+      once: true,
+    });
+
     setTimeout(() => {
+      // Either way this visit counts as welcomed: someone who scrolled straight
+      // past has found their own way in and shouldn't meet a modal next time.
       try {
         localStorage.setItem(KEY, '1');
       } catch {}
+      if (scrolled) return;
       if (document.getElementById('welcome-note') === dialog) dialog.showModal();
     }, 700);
   }

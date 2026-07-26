@@ -2,27 +2,15 @@
 import { Image } from 'astro:assets';
 import Base from '@/layouts/Base.astro';
 import EntryCard from '@/components/EntryCard.astro';
-import KindBadge from '@/components/KindBadge.astro';
-import {
-  getEntries,
-  getLogs,
-  getCategoryIndex,
-  toFeed,
-  entryCode,
-  logCode,
-  entryHref,
-  logHref,
-  categoryHref,
-} from '@/lib/content';
+import { getEntries, getCategoryIndex, entryCode, entryHref, categoryHref } from '@/lib/content';
 import { byPinnedOrder } from '@/lib/sort';
 import { categoryBySlug } from '@/data/categories';
 import { orientation } from '@/lib/images';
 import { personSchema } from '@/lib/schema';
 import { lqipStyle } from '@/lib/lqip';
-import { isoDay, monthKey } from '@/lib/format';
+import { monthKey } from '@/lib/format';
 
 const entries = await getEntries();
-const logs = await getLogs();
 
 // An author-pinned `order` leads, so the hero is an intentional choice rather
 // than an accident of the newest date; entries are already newest-first, so the
@@ -33,36 +21,11 @@ const heroCode = hero ? await entryCode(hero) : '';
 const heroLqip = hero ? await lqipStyle("entries", hero.id, "cover") : undefined;
 const strip = (featured.length > 1 ? featured : entries).filter((e) => e !== hero).slice(0, 3);
 
-const lately = await Promise.all(
-  toFeed(entries, logs)
-    .slice(0, 7)
-    .map(async (item) =>
-      item.type === 'entry'
-        ? {
-            code: await entryCode(item.entry),
-            date: item.date,
-            title: item.entry.data.title,
-            href: entryHref(item.entry) as string | undefined,
-            kind: undefined as string | undefined,
-            categoryLabel: categoryBySlug(item.entry.data.category)?.label,
-          }
-        : {
-            code: await logCode(item.log),
-            date: item.date,
-            title: item.log.data.title,
-            href: logHref(item.log),
-            kind: item.log.data.kind,
-            categoryLabel: categoryBySlug(item.log.data.category)?.label,
-          },
-    ),
-);
-
 const catIndex = (await getCategoryIndex()).filter((c) => c.entryCount + c.logCount > 0);
-// Lead the homepage browse with flagship categories; the rest become a quiet
-// "also" line so this section stops mirroring the full tab bar.
+// Lead the browse with flagship categories only. The rest are reachable from the
+// tab bar; listing them here as well named every category three times over.
 const primaryCats = catIndex.filter((c) => c.primary);
 const browseCats = primaryCats.length ? primaryCats : catIndex;
-const moreCats = primaryCats.length ? catIndex.filter((c) => !c.primary) : [];
 ---
 
 <Base schema={personSchema(Astro.site)}>
@@ -150,8 +113,8 @@ const moreCats = primaryCats.length ? catIndex.filter((c) => !c.primary) : [];
   <!-- Browse: flagship categories lead; the rest sit in a quiet "also" line so
        this stops mirroring the full tab bar. -->
   <section class="wrap mt-20" aria-labelledby="browse-h">
-    <p class="kicker">where to start</p>
-    <h2 id="browse-h" class="mt-1 font-display text-3xl">Browse by category</h2>
+    <p class="kicker">by category</p>
+    <h2 id="browse-h" class="mt-1 font-display text-3xl">Or wander by subject</h2>
     <ul class="mt-6 grid list-none gap-4 p-0 sm:grid-cols-2 lg:grid-cols-3" data-io-stagger>
       {
         browseCats.map((c) => (
@@ -175,60 +138,8 @@ const moreCats = primaryCats.length ? catIndex.filter((c) => !c.primary) : [];
         ))
       }
     </ul>
-    {
-      moreCats.length > 0 && (
-        <p class="mt-5 text-sm text-muted">
-          Also:{' '}
-          {moreCats.map((c, i) => (
-            <Fragment>
-              {i > 0 && (
-                <span aria-hidden="true"> · </span>
-              )}
-              <a href={categoryHref(c.slug)} class="transition-colors hover:text-accent">
-                {c.label}
-              </a>
-            </Fragment>
-          ))}
-        </p>
-      )
-    }
+    {/* An "Also: …" line used to sit here listing the remaining categories.
+        Removed: the same links are in the tab bar directly above, so the
+        homepage was naming categories three times over. */}
   </section>
-
-  <!-- Lately: newest entries + logs, mixed, as ledger rows — for depth, below
-       the work and the browse, deliberately quieter. -->
-  {
-    lately.length > 0 && (
-      <section class="wrap mb-4 mt-20" aria-labelledby="lately-h">
-        <p class="kicker">lately</p>
-        <h2 id="lately-h" class="mt-1 font-display text-3xl">
-          What the last few months looked like
-        </h2>
-        <ol class="mt-5 list-none border-t border-line p-0">
-          {lately.map((row) => (
-            <li class="ledger-row border-b border-line">
-              <div class="grid grid-cols-[6.2rem_3.2rem_1fr] items-baseline gap-3 py-3 sm:grid-cols-[6.5rem_3.5rem_1fr_auto]">
-                <span class="rail">{isoDay(row.date)}</span>
-                <span class="rail" aria-hidden="true">
-                  {row.code}
-                </span>
-                <span class="min-w-0 text-[0.95rem] leading-snug">
-                  {row.href ? (
-                    <a href={row.href} class="transition-colors hover:text-accent">
-                      {row.title}
-                    </a>
-                  ) : (
-                    row.title
-                  )}
-                </span>
-                <span class="rail hidden sm:flex sm:items-center sm:gap-2">
-                  {row.kind && <KindBadge kind={row.kind} />}
-                  {row.categoryLabel}
-                </span>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </section>
-    )
-  }
 </Base>

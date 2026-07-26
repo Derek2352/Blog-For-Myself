@@ -22,10 +22,31 @@ import Base from '@/layouts/Base.astro';
     </header>
 
     <div id="search" class="mt-8"></div>
+    {/* This fallback unhides whenever the index fails to load — in dev that
+        means "not built yet", but on the deployed site it means something
+        actually broke, and a visitor shouldn't be handed shell commands. */}
     <p id="search-fallback" class="mt-8 text-muted" hidden>
-      Search is generated at build time — run <code class="font-mono text-sm">npm run build</code>
-      &amp; <code class="font-mono text-sm">npm run preview</code> to try it locally. It works on
-      the deployed site.
+      {
+        import.meta.env.DEV ? (
+          <>
+            Search is generated at build time — run{' '}
+            <code class="font-mono text-sm">npm run build</code> &amp;{' '}
+            <code class="font-mono text-sm">npm run preview</code> to try it locally.
+          </>
+        ) : (
+          <>
+            Search isn’t loading right now. The{' '}
+            <a href="/timeline/" class="text-accent hover:underline">
+              timeline
+            </a>{' '}
+            lists everything in one place, and{' '}
+            <a href="/tags/" class="text-accent hover:underline">
+              tags
+            </a>{' '}
+            group it by subject.
+          </>
+        )
+      }
     </p>
   </div>
 </Base>

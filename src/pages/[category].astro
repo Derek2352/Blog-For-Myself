@@ -66,10 +66,24 @@ const wash = resolveWash(category);
             ))}
           </div>
         ) : (
-          <p class="text-muted">
-            Nothing published here yet — <code class="font-mono text-sm">npm run new-entry</code>{' '}
-            starts one.
-          </p>
+          /* Visitor-facing: this page is reachable by URL, sitemap and search,
+             so the author-only hint stays behind the DEV flag (same pattern as
+             PhotoPlan.astro). */
+          <div class="max-w-prose">
+            <p class="font-display text-2xl italic leading-snug">Nothing here yet.</p>
+            <p class="mt-3 text-sm leading-relaxed text-muted">
+              This part of the site is still being filled in. The{' '}
+              <a href="/timeline/" class="text-accent hover:underline">
+                timeline
+              </a>{' '}
+              has everything published so far.
+            </p>
+            {import.meta.env.DEV && (
+              <p class="rail mt-4 text-signal-text">
+                dev note: npm run new-entry starts one here
+              </p>
+            )}
+          </div>
         )
       }
     </section>
@@ -85,10 +99,14 @@ const wash = resolveWash(category);
             ))}
           </div>
         ) : (
-          <p class="mt-4 text-muted">
-            No logs in this category yet — <code class="font-mono text-sm">npm run new-log</code>{' '}
-            adds one in under a minute.
-          </p>
+          <>
+            <p class="mt-4 text-sm leading-relaxed text-muted">
+              No monthly notes filed under this one yet.
+            </p>
+            {import.meta.env.DEV && (
+              <p class="rail mt-3 text-signal-text">dev note: npm run new-log adds one</p>
+            )}
+          </>
         )
       }
     </section>

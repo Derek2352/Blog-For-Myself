@@ -87,6 +87,13 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    /* A single long token used to push whole pages sideways on a 320px phone:
+       "Cantonese/English/Traditional-Chinese" in one summary overflowed the
+       narrow timeline column by 40px, and nothing between it and <html> clipped.
+       Breaking as a last resort keeps any future entry text from doing that
+       again — normal words are unaffected, since this only applies when a word
+       cannot otherwise fit. */
+    overflow-wrap: break-word;
   }
 
   ::selection {
@@ -553,10 +560,6 @@
     html:not(.a11y-motion) .lift { transition: transform 0.25s cubic-bezier(0.2, 0.6, 0.2, 1); }
     html:not(.a11y-motion) .lift:hover { transform: translateY(-3px); }
 
-    /* ledger rows nudge forward */
-    html:not(.a11y-motion) .ledger-row > div { transition: transform 0.2s cubic-bezier(0.2, 0.6, 0.2, 1); }
-    html:not(.a11y-motion) .ledger-row:hover > div { transform: translateX(4px); }
-
     /* the 404 plane leans into takeoff */
     html:not(.a11y-motion) .fly-hint svg { transition: transform 0.3s cubic-bezier(0.2, 0.6, 0.2, 1); }
     html:not(.a11y-motion) .fly-hint:hover svg { transform: translate(4px, -4px) rotate(-12deg); }
@@ -610,10 +613,6 @@ summary:active,
 .lift:has(:active) {
   border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-line));
 }
-.ledger-row:has(:active) > div {
-  color: var(--color-accent);
-}
-
 /* Cards carry no border, so a tint is what actually reads on them — and it
    works with motion disabled, where the sink transform is dropped. */
 .card:has(:active),
@@ -677,9 +676,6 @@ summary:active,
      zoomed and its row still nudged — the gesture read as unresolved. */
   html:not(.a11y-motion) .card:has(:active) .card-cover img {
     transform: scale(1.004);
-  }
-  html:not(.a11y-motion) .ledger-row:has(:active) > div {
-    transform: translateX(1px);
   }
 }
 

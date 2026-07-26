@@ -3,9 +3,20 @@ import ThemeToggle from './ThemeToggle.astro';
 import A11yControls from './A11yControls.astro';
 import TabBar from './TabBar.astro';
 import { site } from '@/data/site';
+import { getLogs } from '@/lib/content';
+
+/**
+ * Monthly earns its nav slot only once there are enough monthly logs for it to
+ * show something Timeline doesn't. Below the threshold the two pages are nearly
+ * the same list, which just makes a visitor click both to find out. The route
+ * always exists; this only decides whether it's advertised, and it starts
+ * appearing by itself as logs get written.
+ */
+const MONTHLY_NAV_MIN_LOGS = 4;
+const showMonthly = (await getLogs()).length >= MONTHLY_NAV_MIN_LOGS;
 
 const utility: { href: string; label: string; title?: string }[] = [
-  { href: '/monthly/', label: 'Monthly' },
+  ...(showMonthly ? [{ href: '/monthly/', label: 'Monthly' }] : []),
   { href: '/timeline/', label: 'Timeline' },
   { href: '/about/', label: 'About' },
   { href: '/search/', label: 'Search', title: 'Press / to search' },
