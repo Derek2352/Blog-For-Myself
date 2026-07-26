@@ -475,6 +475,15 @@
     display: none !important;
   }
   .reveal, .reveal-2, .reveal-3 { animation: none !important; opacity: 1 !important; }
+  /* Scroll-revealed blocks sit at opacity 0 until they enter the viewport — and
+     printing never scrolls. Without this a timeline or a reflection printed
+     without being read through comes out blank. */
+  [data-io-reveal],
+  [data-io-text],
+  [data-io-stagger] > * {
+    opacity: 1 !important;
+    transform: none !important;
+  }
   a { text-decoration: none; color: inherit; }
   .prose-reflection a { color: var(--color-accent); text-decoration: underline; }
 }
@@ -539,15 +548,40 @@
   .js [data-io-stagger].io-in > *:nth-child(5) { transition-delay: 0.14s; }
   .js [data-io-stagger].io-in > *:nth-child(n + 6) { transition-delay: 0.175s; }
 
+  /* Text arriving as you read down to it. Shorter move and quicker settle than a
+     card: prose has to be in place by the time the eye lands on it, or the page
+     feels like it is chasing the reader. Applied by the script only to blocks
+     below the fold, so nothing already on screen ever blinks out. */
+  .js [data-io-text] {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  .js [data-io-text].io-in {
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity 0.3s ease,
+      transform 0.3s cubic-bezier(0.2, 0.6, 0.2, 1);
+  }
+
   /* honour reduced motion for scroll + reveals (native or the a11y toggle) */
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
     .js [data-io-reveal],
+    .js [data-io-text],
     .js [data-io-stagger] > * {
       opacity: 1 !important;
       transform: none !important;
       transition: none !important;
     }
+  }
+  /* The a11y toggle only zeroes transition durations, so a reveal that never
+     entered view would stay at opacity 0 for good. Treat it like the OS setting. */
+  html.a11y-motion [data-io-reveal],
+  html.a11y-motion [data-io-text],
+  html.a11y-motion [data-io-stagger] > * {
+    opacity: 1 !important;
+    transform: none !important;
   }
 
   /* Hover motion. Scoped with html:not(.a11y-motion) for the same reason the

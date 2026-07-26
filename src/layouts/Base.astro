@@ -185,11 +185,44 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <WelcomeNote />
 
     <script>
+      import { motionReduced } from '@/lib/a11y-prefs';
+
       // Scroll-reveal for [data-io-reveal] elements (timeline frames, period
-      // reels). Reduced-motion or no-IO browsers just see everything.
-      const REVEAL_SEL = '[data-io-reveal], [data-io-stagger]';
+      // reels), [data-io-stagger] grids, and [data-io-text] blocks tagged below.
+      // Reduced-motion or no-IO browsers just see everything.
+      const REVEAL_SEL = '[data-io-reveal], [data-io-stagger], [data-io-text]';
       const revealAll = () =>
         document.querySelectorAll(REVEAL_SEL).forEach((el) => el.classList.add('io-in'));
+
+      /**
+       * Tag content blocks so they arrive as the reader reaches them.
+       *
+       * Two rules earn their keep. **Only below the fold**: the CSS drops opacity
+       * to 0 the moment the attribute lands, so tagging something already on
+       * screen would blink it out and fade it back on every page load. And
+       * **leaf-most wins**: a candidate that contains another candidate is
+       * dropped, which gives paragraph-level arrival inside a reflection and
+       * section-level arrival on pages without prose, never both nested.
+       */
+      function markTextReveals(): void {
+        const fold = window.innerHeight;
+        const candidates = [
+          ...document.querySelectorAll<HTMLElement>('.prose-reflection > *, main section'),
+        ].filter((el) => {
+          if (el.hasAttribute('data-io-reveal') || el.hasAttribute('data-io-text')) return false;
+          // staggered grids animate their own children; the sticky jump rail must
+          // not move at all
+          if (el.closest('[data-io-stagger], .jump-rail')) return false;
+          const box = el.getBoundingClientRect();
+          if (box.height === 0) return false;
+          return box.top > fold; // strictly below the first screen
+        });
+        // drop any candidate that wraps another — keep the innermost
+        const leaves = candidates.filter(
+          (el) => !candidates.some((other) => other !== el && el.contains(other)),
+        );
+        for (const el of leaves) el.setAttribute('data-io-text', '');
+      }
 
       // Retire the previous page's observer on navigation: elements that never
       // scrolled into view stay observed, so without this each client-side
@@ -199,13 +232,14 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
       function setupReveals(): void {
         revealIo?.disconnect();
         revealIo = null;
-        if (
-          matchMedia('(prefers-reduced-motion: reduce)').matches ||
-          !('IntersectionObserver' in window)
-        ) {
+        // motionReduced() covers the OS setting *and* the site's own toggle, which
+        // reveals used to ignore entirely — the toggle only zeroes transition
+        // durations, so a block that never scrolled into view stayed invisible.
+        if (motionReduced() || !('IntersectionObserver' in window)) {
           revealAll();
           return;
         }
+        markTextReveals();
         const io = new IntersectionObserver(
           (entries) => {
             for (const e of entries) {
@@ -215,7 +249,10 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
               }
             }
           },
-          { rootMargin: '0px 0px -8% 0px' },
+          // Trigger a little *before* a block scrolls in rather than 8% after, so
+          // prose has settled by the time the eye arrives. Text that catches up
+          // late reads as jank, which is the opposite of the point.
+          { rootMargin: '0px 0px 6% 0px' },
         );
         document
           .querySelectorAll(`${REVEAL_SEL}`)

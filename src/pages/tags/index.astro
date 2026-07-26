@@ -15,7 +15,10 @@ const tags = await allTags();
         The same interests keep surfacing across categories. Pull a thread:
       </p>
     </header>
-    <div class="mt-8 flex flex-wrap gap-2">
+    {/* This page is a single div with no <section>, so the automatic text reveal
+        in Base.astro finds nothing to hold on to. Stagger the chips instead —
+        the same settle the entry and category grids use. */}
+    <div class="mt-8 flex flex-wrap gap-2" data-io-stagger>
       {tags.map((tag) => <TagChip tag={tag} />)}
     </div>
   </div>
