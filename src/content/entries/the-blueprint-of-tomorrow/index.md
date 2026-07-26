@@ -1,10 +1,13 @@
 ---
 # Facts confirmed from CV (Jul 2026): Champion · Feb–Jun 2026 · CGDFF · HKIoD recognition.
-# The HKIoD Annual Dinner showcase is from your own notes (not on the CV) — adjust freely.
+# Body rewritten Jul 2026 from Derek's own production document (structure, metaphors,
+# tooling, song). Withheld from the page by his decision: the rubric-mapping framing,
+# the pre-submission checklist, and the full VO script / lyrics / pitch script.
 title: "The Blueprint of Tomorrow"
 category: "creative-ai"
 date: 2026-02-01
 endDate: 2026-06-30
+updated: 2026-07-26
 role: "Champion"
 organization: "“What is Corporate Governance?” Creative Video Contest 2026 — Corporate Governance Development Foundation Fund Limited"
 location: "Hong Kong"
@@ -19,48 +22,65 @@ featured: false
 draft: false
 ---
 
-<!-- FIRST-PASS DRAFT (from your CV + research) — edit freely in your own voice.
-     "How it felt" especially is a placeholder; make it yours. -->
-
 ## What it was
 
-The "What is Corporate Governance?" Creative Video Contest 2026, run by the Corporate
-Governance Development Foundation Fund, set an unusually hard brief: make one of the driest
-subjects in business — corporate governance — genuinely *watchable* for the public. **The
-Blueprint of Tomorrow** is my answer: a solo AI-animated short that won **Champion** against
-university-wide entries, with recognition from **The Hong Kong Institute of Directors**, the
-professional body representing Hong Kong's company directors.
+The Corporate Governance Development Foundation Fund ran a creative video contest with an
+unusually hard brief: make corporate governance *watchable*. Two to three minutes, English
+voiceover with Chinese and English subtitles, judged by HSUHK academics and by directors from
+**The Hong Kong Institute of Directors** — people who do governance for a living and would
+notice immediately if I got it wrong.
 
-Governance sounds abstract until you remember what it's actually for: keeping boards and
-management accountable to the people whose money and trust they hold. That's the story I
-wanted to tell.
+Governance sounds abstract until you remember what it's for: keeping boards and management
+accountable to the people whose money and trust they hold. So I built the film around a
+single decision. A young startup CEO, Alex, is offered a contract she shouldn't sign — and
+the timeline splits on her choice.
+
+> "Every big idea starts with a choice. Not just what you build… but *how* you build it."
 
 ## What I did
 
-I architected a **dual-narrative structure** — mapping each governance pillar (risk
-management, ESG, disclosure, accountability) to a *tangible business consequence*, so the
-principle and its real-world stakes ran side by side. Abstract idea on one track, human
-outcome on the other, the two meeting at each turn.
+Two worlds, same company. In the first, the rules get ignored and the collapse arrives as
+falling black dominoes — cold light, restless cuts, each failure knocking over the next until
+it stops being a business problem and becomes a community one. Then time rewinds, the same
+company chooses differently, and a golden seed grows into a tree of light, shot warm and
+slow, until the tree becomes the Hong Kong skyline.
 
-Then I produced the whole thing solo as an AI-animated film — script, visual direction,
-prompt engineering, edit — folding my finance and FinTech background into the writing so the
-governance content was actually correct, not just decorative. Recognition from HKIoD meant
-the film had to satisfy people who do this for a living.
+Every principle had to land as something you could *see* rather than a caption. A red audit
+folder tossed aside; the green one actually read. One founder shouting down the room; three
+founders voting. Documents shredded; an email to investors that tells them the truth. A toxic
+alleyway; a zero-emission plant. Riders protesting outside the office; a rider paid a bonus.
+
+The craft problems were the interesting part. AI drifts — the same character comes back two
+shots later with a different face — so I locked Alex, Ben and Chloe into fixed blueprints and
+held them across every generation with Midjourney's `--cref` character reference. Stills then
+went through an image-to-video pass in Luma and Runway.
+
+The shot the whole ending rests on, the tree becoming the city, was the one thing the models
+simply couldn't do: they won't morph one object into another cleanly. Rather than keep
+fighting it, I generated both pushes separately and cross-dissolved them over three seconds
+in the edit. It reads as intentional now, which is the only test that matters.
+
+The theme song is original too — a 125 bpm anthem written for the film and produced with
+Suno, fading in on the rewind and carrying the final act.
+
+> *"We're leaving all the secrets in the past! / With fairness in our hands and hearts to
+> follow…"*
+
+AI use had to be declared to the judges, which I think is exactly as it should be.
 
 ## What I learned
 
-The core discipline was **translation without dilution**: making ESG and disclosure
-accessible to a general audience without flattening what they mean. Blending analytical
-framing with creative execution turned out to be the hardest and most rewarding part — every
-simplification had to stay true. It's also the clearest proof yet of my dual identity
-working as one thing rather than two: the finance student and the AI filmmaker made this
-film *together*, and neither could have made it alone.
+The real discipline was **translation without dilution**: making ESG and disclosure legible
+to a general audience without flattening what they actually mean. Every simplification had to
+survive contact with someone who knows the subject cold — and that constraint is why the
+finance side and the film side stopped feeling like two separate things. The writing had to
+be *correct* before it was allowed to be moving.
+
+I also learned to treat a model's limitation as a design brief rather than a defect. The
+cross-dissolve isn't a workaround I'm hiding; it's the edit the material asked for once I
+stopped insisting the tool do something it can't.
 
 ## How it felt
-
-<!-- Placeholder — rewrite this honestly in your own words. Prompts if useful:
-     hearing "Champion"; recognition from HKIoD's directors; the pillar that was hardest
-     to dramatise; showing it to people who know governance cold. -->
 
 Winning Champion — and being recognised by the people who practise governance
 professionally — was the moment my two worlds stopped feeling like a split and started
