@@ -1,6 +1,6 @@
 ---
 title: "NextGen Video Challenge: Powered by AI"
-category: "competitions"
+category: "creative-ai"
 date: 2025-11-01
 role: "Winner — First Runner-up (Individual), with Dean's Recommendation"
 organization: "HSUHK School of Business"

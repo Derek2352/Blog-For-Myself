@@ -1,6 +1,6 @@
 ---
 title: "From Cherry to Cup – Ai"
-category: "competitions"
+category: "creative-ai"
 date: 2026-01-01
 endDate: 2026-02-28
 role: "Winner — Third Place (Global)"
