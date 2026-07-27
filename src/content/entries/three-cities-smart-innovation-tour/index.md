@@ -46,12 +46,21 @@ that makes Hong Kong feel careful, and District 1 of the International Trade Cit
 district, and you still don't finish it. Hangzhou closed the loop at Alibaba's headquarters
 and its AI workshop.
 
-Two frames came back with me. The first is **shelf commerce against content commerce**: Hong
-Kong still largely sells from a static list you have to go and search, while Hangzhou and
-Yiwu have moved to selling inside a scene you happen to be watching. The second is **人貨場 —
-people, goods, scene** — where "goods" no longer means what a buyer's instinct says will sell.
-Product selection runs off backend data, and the people doing it treat a hunch as a hypothesis
-rather than a decision.
+Two frames came back with me. The first is **shelf commerce against content commerce** —
+Amazon and Walmart on one side, TikTok and Coupang on the other. Hong Kong still largely sells
+from a static list you have to go and search; Hangzhou and Yiwu have moved to selling inside a
+scene you happen to be watching.
+
+The second is **人貨場 — people, goods, scene**, and the chairman of the Cross-Border
+E-commerce Association took it apart in a way I hadn't seen it done. Each of the three has two
+faces. *People* is not one audience but two: who you are selling to, and who you are sourcing
+from on the ground. *Goods* should start from something you actually care about —
+興趣是最好的老師, interest is the best teacher — because you will be looking at this category for a very
+long time, and product selection now runs off backend data rather than a buyer's instinct
+anyway. *Scene* is your own storefront and which tier of the market you buy in — Yiwu carries
+everything down to 尾貨, the clearance end — and, if you are selling live, which kind of live:
+店播 from a fixed studio, 場播 from the market floor, 走播 walking the aisles with a camera.
+Three different crafts, and people choose between them deliberately.
 
 The part that belongs to my degree started with me not understanding something. A speaker in
 Yiwu described SMEs struggling to get money back into the mainland, and my first reaction was
@@ -105,8 +114,14 @@ seam between the physical and the digital.
 
 The chairman put a question to us I haven't been able to put down:
 「你是來學經驗還是來賺錢？這是兩碼事。」 *Are you here to learn, or here to earn? They're two
-different things.* Starting pay in Yiwu is low, he said, but you learn how the entire supply
-chain works — and at the start of a career you don't get to optimise for both.
+different things.*
+
+Then he made it concrete in a way that stopped the room. Yiwu is a county-level city and pay
+is low to match — some of the people working alongside him hold master's degrees, from British
+universities and mainland ones, and take home somewhere around ¥7,000 a month. Several of them
+used to earn three to five times that before the economy turned. They stay because they are
+learning an entire supply chain from the inside, and they treat the gap as 「學習的付費」 —
+tuition, paid in salary. At the start of a career you don't get to optimise for both.
 
 That landed harder than I expected, because it named something I hadn't admitted. As a Hong
 Kong business student it is easy to weigh a first job by its salary and its 光環, the halo of
