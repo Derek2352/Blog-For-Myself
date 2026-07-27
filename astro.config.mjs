@@ -33,6 +33,19 @@ export default defineConfig({
     // the published page source. Strip them at build time instead of relying on
     // remembering to delete each one.
     remarkPlugins: [remarkStripComments],
+    /**
+     * Shiki's default single theme bakes `background-color` and `color` into an
+     * inline style on the <pre>, which beats the stylesheet and drops a slab of
+     * GitHub-dark grey into the middle of a cream paper page. `defaultColor:
+     * false` emits `--shiki-light` / `--shiki-dark` custom properties instead
+     * and applies nothing itself, so global.css keeps the container in the site
+     * palette while token colours still follow the theme (see
+     * `.prose-reflection pre.astro-code`).
+     */
+    shikiConfig: {
+      themes: { light: 'github-light', dark: 'github-dark' },
+      defaultColor: false,
+    },
   },
   vite: {
     plugins: [tailwindcss()],

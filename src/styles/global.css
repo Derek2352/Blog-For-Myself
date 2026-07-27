@@ -442,6 +442,17 @@
     overflow-x: auto;
   }
   .prose-reflection pre code { border: 0; background: transparent; padding: 0; }
+  /* Shiki runs with `defaultColor: false` (astro.config.mjs), so it only hands
+     us the per-token colours as custom properties — the container above stays
+     paper, and we opt each token into the theme that matches the page. */
+  .prose-reflection pre.astro-code,
+  .prose-reflection pre.astro-code span {
+    color: var(--shiki-light);
+  }
+  :where(html.dark) .prose-reflection pre.astro-code,
+  :where(html.dark) .prose-reflection pre.astro-code span {
+    color: var(--shiki-dark);
+  }
   .prose-reflection img {
     border: 1px solid var(--color-line);
     border-radius: var(--radius-chip);
