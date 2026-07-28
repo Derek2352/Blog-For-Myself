@@ -5,6 +5,11 @@
 # calls Claude or DeepSeek and refuses to run without a key (src/cli.py:731) —
 # it's the scrape/embed/cluster stages that are API-free. "Playwright-rendered
 # PNGs" was checked and is correct (src/render/core.py drives headless Chromium).
+# Figures corrected Jul 28: the first pass took them from the repo's README
+# ("34 registered scrapers across 4 regions"), which is a summary of the code and
+# understates it. Importing src/regions/registry.py and src/scrape/registry.py
+# gives 19 regions, 104 source configs, 36 implemented scrapers, 52 opt-in only
+# on ToS grounds, and 22 excluded by the no-API constraint.
 # Withheld: which specific sources are ToS-flagged (the mechanism is the story,
 # the list isn't), the repo's internal planning notes, and env var names.
 title: "Market Analysis Pipeline"
@@ -12,7 +17,7 @@ category: "creative-ai"
 date: 2026-05-17
 endDate: 2026-05-20
 updated: 2026-07-28
-summary: "A research tool that turns public online discussion into cited personas and journey maps — 34 scrapers across four regions, local embeddings and clustering, synthesis where every claim must name its source, and a web UI to run it from. Built in a four-day sprint."
+summary: "A research tool that turns public online discussion into cited personas and journey maps — a register of 19 regions and 104 sources, 36 of them implemented, local embeddings and clustering, synthesis where every claim must name its source, and a web UI to run it from. Built in a four-day sprint."
 cover: "./images/cover.svg"
 gallery: []
 tags: ["nlp", "embeddings", "clustering", "python", "llm"]
@@ -32,10 +37,13 @@ public discussion and turn it into personas I could actually defend. The design 
 strict — **traceable, reproducible, cheap** — because a persona nobody can check is just
 a nicely typeset opinion.
 
-Then it kept going. What's in the repo now isn't a script but a tool: four regions wired
-(Hong Kong, Taiwan, Japan, the US), 34 registered scrapers, a FastAPI service, a Next.js
-front end, an export path to PNG and PDF, and a Windows launcher so it runs on a machine
-with no Python on it. Ninety commits over four days in May.
+Then it kept going. What's in the repo now isn't a script but a tool. The source register
+covers **19 regions and 104 sources**, of which **36 have a scraper written for them**;
+four of those regions — Hong Kong, Taiwan, Japan and the US — have parsers built for the
+specific sites people there actually argue on, and the rest reach them through generic
+scrapers that work anywhere. On top of that: a FastAPI service, a Next.js front end, an
+export path to PNG and PDF, and a Windows launcher so it runs on a machine with no Python
+on it. Ninety commits over four days in May.
 
 ## What I did
 
@@ -49,8 +57,15 @@ to call an outlier an outlier. **Synthesise** personas and journey maps. **Rende
 one to a deterministic PNG through headless Chromium, CJK glyphs and all, with no network
 call at render time.
 
-Everything up to synthesis runs on my own machine with no API and no per-token cost. The
-synthesis step is the exception and I'd rather say so plainly: it calls Claude, or
+Everything up to synthesis runs on my own machine with no API and no per-token cost, and
+that isn't incidental — it's a rule the registry enforces. Sources that would need an
+official platform API are catalogued with their access method and then switched off by
+that constraint: **22 of them**, documented rather than deleted, so the reasoning survives
+for whoever reads it next. It's why Reddit comes in through `old.reddit.com` HTML instead
+of the API, and why the ranking of which Hong Kong sources to build first looks the way it
+does.
+
+The synthesis step is the one exception and I'd rather say so plainly: it calls Claude, or
 DeepSeek if you'd rather. That's also where the cost work went — the system prompt and
 evidence pack are cached and shipped once per cluster rather than per request, which
 takes roughly 70% off the journey call.
@@ -71,14 +86,15 @@ claim.
 ## What I learned
 
 The most useful thing I built has nothing to do with machine learning. Scraping raises a
-question every project quietly skips: *are you allowed to?* So the source registry
+question every project quietly skips: *are you allowed to?* So the source register
 records, per source, what the terms of service actually say, whether robots.txt permits
-it, when I last checked, and when the parser last worked. Sources whose terms prohibit
-scraping can't be switched on by default — not by convention, but because the schema
-refuses to construct that object at all, so the only way to run one is to name it
-explicitly on the command line and own the decision. Author identities are hashed with a
-per-install salt. The tests run against stored fixtures, so the suite never touches a
-live site.
+it, when I last checked, and when the parser last worked. **Half of the 104 sources —
+52 — came back as prohibited**, and rather than drop them from the catalogue I kept them
+listed and made them impossible to run by accident: the schema refuses to construct a
+source that is both prohibited and enabled by default. Not a warning, not a convention —
+the object will not exist. The only way to use one is to name it on the command line,
+which means someone has decided to. Author identities are hashed with a per-install salt.
+The tests run against stored fixtures, so the suite never touches a live site.
 
 Writing that validator taught me more than any of the modelling did. An intention lives
 in your head and decays; a constraint in the schema is still there in six months when
