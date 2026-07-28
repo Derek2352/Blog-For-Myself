@@ -3,9 +3,9 @@
 # corrects the earlier draft's claim that Wan 2.5 produced synchronised audio in
 # one pass — the music came from Suno, the VO from a separate script, and the
 # SFX were layered by hand.
-# Title: he chose "Ai (愛)", but src/lib/og.ts loads latin-only font subsets, so
-# the share card rendered the character as a tofu box. "(Love)" until the OG
-# pipeline carries a CJK face.
+# Title: restored to his chosen "Ai (愛)" on 28 Jul, once src/lib/og.ts learned to
+# load Noto Sans TC subsets on demand. It had been "(Love)" because the share
+# card rendered the character as a tofu box.
 # Sections extended Jul 2026 from Derek's reflection on the project. It also
 # corrected the origin: the fruit/gummy-bear version was a rebuild of an existing
 # commercial, not his own abandoned concept, so the entry no longer implies the
@@ -22,7 +22,7 @@
 # full (only the shipped lines are quoted), the Instagram / TikTok / LinkedIn copy
 # and all hashtags, the Alibaba Cloud submission and gratitude statement, the
 # 300-word brief, the cover-art direction, and the "actionable next steps".
-title: "From Cherry to Cup: Ai (Love)"
+title: "From Cherry to Cup: Ai (愛)"
 category: "creative-ai"
 date: 2026-01-01
 endDate: 2026-02-28
