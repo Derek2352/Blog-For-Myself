@@ -4,6 +4,7 @@ import mdx from '@astrojs/mdx';
 import sitemap from '@astrojs/sitemap';
 import tailwindcss from '@tailwindcss/vite';
 import remarkStripComments from './plugins/remark-strip-comments.mjs';
+import { paperLight, paperDark } from './plugins/shiki-paper-theme.mjs';
 
 // Set this to your production URL before deploying (also update public/robots.txt).
 // Cloudflare Pages default: https://<project>.pages.dev
@@ -41,9 +42,12 @@ export default defineConfig({
      * and applies nothing itself, so global.css keeps the container in the site
      * palette while token colours still follow the theme (see
      * `.prose-reflection pre.astro-code`).
+     *
+     * The themes are ours rather than GitHub's: on this site's surfaces the
+     * bundled ones fail contrast (details in plugins/shiki-paper-theme.mjs).
      */
     shikiConfig: {
-      themes: { light: 'github-light', dark: 'github-dark' },
+      themes: { light: paperLight, dark: paperDark },
       defaultColor: false,
     },
   },
