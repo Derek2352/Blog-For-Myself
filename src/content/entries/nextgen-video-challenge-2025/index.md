@@ -3,10 +3,17 @@
 # first pass, which described the brief as digital-media marketing and said the
 # judges rewarded "pairing AI craft with a marketing strategy" — both invented
 # from a CV line. The competition ran on Theme 2, Student Learning Experience.
-# Deliberately withheld: the abandoned first narrative ("The Unseen Anchor") and
-# its character names, the full VO script and title cards, and the submitted
-# 300-word write-up and SBUS interview answers verbatim — their substance is
-# rewritten here, not quoted.
+# "How it felt" extended Jul 2026 from Derek's reflection on the project, which
+# also reframed the pivot: he dropped the earlier story to a deadline, not to a
+# considered judgement about the brief.
+# Deliberately withheld: the abandoned first narrative ("The Unseen Anchor"), its
+# character names, and its premise — an earlier pass described it as "about not
+# being wanted", which is more than the one-clause-no-plot he asked for, so that
+# characterisation is gone. Also withheld: the full VO script and title cards,
+# and the submitted 300-word write-up and SBUS interview answers verbatim —
+# their substance is rewritten here, not quoted. The disappointment at second
+# place is published; his note that it stung more than simpler entries deserved
+# is not, by his decision.
 title: "NextGen Video Challenge: Powered by AI"
 category: "creative-ai"
 date: 2025-11-01
@@ -42,8 +49,9 @@ The idea I'm proudest of is a costume change. Theo starts in a charcoal hoodie w
 unbrushed and ends in a bomber jacket in HSUHK's deep green and warm gold. Growth and
 belonging become the same visual fact, so the film never has to say either one out loud.
 
-It didn't begin here. The first version was a different and much more personal story, and I
-set it aside because it wasn't what a competition about student growth was asking for.
+It didn't begin here. I was some way into a different and much more personal story when the
+competition email landed, and I dropped it — not because I'd stopped liking it, but because
+it wasn't what the brief was asking for and there wasn't time to have both.
 
 ## What I did
 
@@ -104,6 +112,11 @@ Audio taught me the same lesson from the other side. I'd have said sound was the
 percent of a video; it's closer to half, and it's the half nobody credits. A clean duck and
 a theme that changes shape as the story does are worth more than another pass of upscaling.
 
+I also learned that a deadline is a legitimate reason to abandon something good. I liked the
+story I dropped. There wasn't a version of that month where I finished both, and choosing
+the one the brief was actually asking for turned out to be a skill rather than a compromise
+— the sort of thing that's obvious in hindsight and genuinely hard at the time.
+
 There's an odd through-line here too. I used a design tool to think spatially on this
 project — FigJam as a place to block shots — about a year before I ended up using Figma as a
 programmable environment on the Ah Gaap work. The instinct that a design surface is for
@@ -114,14 +127,37 @@ thinking in rather than drawing in started here.
 I wrote a first-year student who feels invisible, and I did not have to research him. My own
 submission says the film came from the universal anxiety of arriving somewhere new *and from
 personal experience*, which was a careful way of saying I knew exactly what the ghost in the
-hallway felt like. The story I set aside to make this one was about not being wanted; the
-one I made instead was about being uncertain and finding a way through. They're closer
-relatives than the pivot made them look.
+hallway felt like. The story I'd set aside came from the same place, which is probably why
+losing it was survivable.
 
-There's something slightly vertiginous about the result. I took my own unease, gave it to a
-character, dressed that character in the university's colours, and the university gave me a
-prize for it. I don't think that's cynical — the feeling in the film is real, and Theo's
+Until that email arrived, this had been play. Characters, storylines, nothing due, no one
+waiting. Then it was sixty seconds, a three-hundred-word write-up and a date, and the gear
+change was violent. My first honest thought was that I had no idea whether a film could be
+built in the time available.
+
+The middle of it disappeared. Weeks of running one shot through Kling and then Seedance to
+see which understood the motion, re-reading lines in ElevenLabs until the sad Theo sounded
+sad rather than merely slow, nudging the song, painting out a glitch, watching the same
+sixty seconds for the four-hundredth time. Somewhere in there I stopped feeling like a
+student with a project and started feeling like a very small studio.
+
+Then the part nobody photographs: showing drafts to anyone who would watch, and bracing.
+Would they notice the speed-up? The lip-sync going soft on one line? A typo on a title card?
+When you have made every frame yourself there is nowhere to look away to, and every flaw is
+in your own handwriting.
+
+There's something slightly vertiginous about the result, too. I took my own unease, gave it
+to a character, dressed that character in the university's colours, and the university gave
+me a prize for it. I don't think that's cynical — the feeling in the film is real, and Theo's
 ending is one I'd genuinely wish on a first-year watching it. But I noticed.
+
+The result itself arrived as two feelings about a second apart. First Runner-up, and real
+elation. Then: not first. I'd built the whole thing end to end and some part of me had
+quietly decided that ought to settle it — and it doesn't, because a placing is what a panel
+thought on one particular afternoon. It took a few days, and writing the winners' interview,
+to land somewhere better: the medal is theirs to give, the workflow is mine and it travels.
+There's an iPad Air on my desk from it that I like a great deal, and it is not the part I
+kept.
 
 What outlasted the sixty seconds was bigger than the placing: a formal **Recommendation
 Letter signed by the Dean of the School of Business**, and a funded study tour across
