@@ -3,104 +3,66 @@
  * npm run studio — a local authoring UI (dev-only).
  *
  * One page at http://127.0.0.1:4455 where you can create and edit entries
- * and logs, type every field and the reflection sections, and drag in
- * photos / video. It writes straight to src/content/… — the same files the
- * scaffold scripts produce — so the main site (npm run dev / build) picks
- * everything up unchanged. It binds to localhost only and is never part of
- * the built site.
+ * and logs, type every field and the reflection sections, and place photos /
+ * video. It writes straight to src/content/… — the same files the scaffold
+ * scripts produce — so the main site (npm run dev / build) picks everything up
+ * unchanged. It binds to localhost only and is never part of the built site.
+ *
+ * Two ways to add media, both landing in the same place:
+ *   - drop a file on a slot, or click the slot for the OS file dialog
+ *   - drag a batch into `_inbox/` from your file manager and pick each file's
+ *     destination from the tray at the top of the Media panel — no dialog, and
+ *     you can see the page you're filling while you choose
+ *
+ * Frontmatter is updated in place (see ./frontmatter.mjs): comments and keys the
+ * studio doesn't manage survive a save.
  */
 import { createServer } from 'node:http';
-import { readFile, writeFile, readdir, mkdir, rm } from 'node:fs/promises';
+import { readFile, writeFile, readdir, mkdir, rm, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { slugify, placeholderSVG, loadCategories, appendCategory } from './lib.mjs';
+import {
+  SECTIONS,
+  ENTRY_KEYS,
+  LOG_KEYS,
+  parseFrontmatter,
+  splitSections,
+  rewriteFrontmatter,
+  buildEntryFrontmatter,
+  buildLogFrontmatter,
+  buildEntryBody,
+  withFrontmatter,
+} from './frontmatter.mjs';
 
-const ROOT = new URL('..', import.meta.url).pathname;
+// fileURLToPath, not .pathname: on Windows a file: URL's pathname is
+// "/C:/Users/..." and path.join turns that into "\C:\Users\..." — an invalid
+// path on the current drive root, so every read and write failed. The same
+// applies anywhere the repo path contains a space (it arrives percent-encoded).
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const CONTENT = path.join(ROOT, 'src/content');
+const INBOX = path.join(ROOT, '_inbox');
 const PORT = 4455;
 const MAX_EDGE = 2000;
 const MAX_BYTES = 2 * 1024 * 1024;
 const KINDS = ['workshop', 'short-course', 'talk', 'certification', 'milestone', 'other'];
-const SECTIONS = ['What it was', 'What I did', 'What I learned', 'How it felt'];
+const PHOTO_EXT = /\.(jpe?g|png|webp|avif|gif|svg)$/i;
+const VIDEO_EXT = /\.(mp4|mov|webm|m4v)$/i;
+const MIME = {
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+  '.webp': 'image/webp', '.avif': 'image/avif', '.gif': 'image/gif',
+  '.svg': 'image/svg+xml', '.mp4': 'video/mp4', '.webm': 'video/webm',
+  '.mov': 'video/quicktime', '.m4v': 'video/mp4',
+};
 
 const json = (res, code, obj) => {
   res.writeHead(code, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(obj));
 };
-const q = (s) => `"${String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 
 /* ------------------------------- read ------------------------------- */
-
-function parseFrontmatter(src) {
-  const m = src.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
-  if (!m) return { data: {}, body: src };
-  const block = m[1];
-  const body = m[2] ?? '';
-  const data = {};
-  const lines = block.split('\n');
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (/^\s*#/.test(line) || !line.trim()) continue;
-    const kv = line.match(/^([a-zA-Z_][\w-]*):\s*(.*)$/);
-    if (!kv) continue;
-    const key = kv[1];
-    let rest = kv[2].replace(/\s+#.*$/, '').trim(); // strip trailing inline comment
-    if (key === 'gallery' && rest === '') {
-      const items = [];
-      while (i + 1 < lines.length && /^\s+-\s+src:/.test(lines[i + 1])) {
-        const item = {};
-        const srcm = lines[++i].match(/src:\s*"(.*)"/);
-        if (srcm) item.src = srcm[1];
-        while (i + 1 < lines.length && /^\s+(alt|caption):/.test(lines[i + 1])) {
-          const am = lines[++i].match(/^\s+(alt|caption):\s*"(.*)"$/);
-          if (am) item[am[1]] = am[2];
-        }
-        items.push(item);
-      }
-      data.gallery = items;
-      continue;
-    }
-    if (key === 'links' && rest === '') {
-      const items = [];
-      while (i + 1 < lines.length && /^\s+-\s+label:/.test(lines[i + 1])) {
-        const item = {};
-        const lm = lines[i + 1].match(/label:\s*"(.*)"/);
-        i++;
-        if (lm) item.label = lm[1];
-        if (i + 1 < lines.length && /^\s+url:/.test(lines[i + 1])) {
-          const um = lines[++i].match(/url:\s*"(.*)"/);
-          if (um) item.url = um[1];
-        }
-        items.push(item);
-      }
-      data.links = items;
-      continue;
-    }
-    if (rest.startsWith('[') && rest.endsWith(']')) {
-      const inner = rest.slice(1, -1).trim();
-      data[key] = inner ? inner.split(',').map((s) => s.trim().replace(/^"|"$/g, '')) : [];
-      continue;
-    }
-    if (rest.startsWith('"') && rest.endsWith('"')) {
-      data[key] = rest.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-      continue;
-    }
-    if (rest === 'true' || rest === 'false') data[key] = rest === 'true';
-    else data[key] = rest;
-  }
-  return { data, body };
-}
-
-function splitSections(body) {
-  const out = { preamble: '', sections: {} };
-  const parts = body.split(/^##\s+(.+)$/m);
-  out.preamble = (parts[0] ?? '').trim();
-  for (let i = 1; i < parts.length; i += 2) {
-    out.sections[parts[i].trim()] = (parts[i + 1] ?? '').trim();
-  }
-  return out;
-}
 
 const stripComments = (s) => (s || '').replace(/<!--[\s\S]*?-->/g, '').trim();
 
@@ -134,78 +96,44 @@ async function collect(kind) {
   return out;
 }
 
+/** Files waiting in _inbox/ — the folder you drag things into from Explorer. */
+async function listInbox() {
+  if (!existsSync(INBOX)) return [];
+  const out = [];
+  for (const d of await readdir(INBOX, { withFileTypes: true })) {
+    if (!d.isFile() || d.name.startsWith('.') || /^readme\.md$/i.test(d.name)) continue;
+    const isPhoto = PHOTO_EXT.test(d.name);
+    const isVideo = VIDEO_EXT.test(d.name);
+    if (!isPhoto && !isVideo) continue;
+    const s = await stat(path.join(INBOX, d.name)).catch(() => null);
+    out.push({ name: d.name, type: isVideo ? 'video' : 'photo', bytes: s?.size ?? 0, mtime: s?.mtimeMs ?? 0 });
+  }
+  out.sort((a, b) => b.mtime - a.mtime);
+  return out;
+}
+
 async function getState() {
   const { cats } = await loadCategories();
-  const [entries, logs] = await Promise.all([collect('entries'), collect('logs')]);
-  return { categories: cats, kinds: KINDS, sections: SECTIONS, entries, logs };
+  const [entries, logs, inbox] = await Promise.all([collect('entries'), collect('logs'), listInbox()]);
+  return { categories: cats, kinds: KINDS, sections: SECTIONS, entries, logs, inbox };
 }
 
 /* ------------------------------- write ------------------------------ */
 
-function buildEntryFrontmatter(d) {
-  const L = ['---'];
-  L.push(`title: ${q(d.title || 'Untitled')}`);
-  L.push(`category: ${q(d.category || '')}`);
-  L.push(`date: ${d.date}`);
-  if (d.endDate) L.push(`endDate: ${d.endDate}`);
-  if (d.updated) L.push(`updated: ${d.updated}`);
-  if (d.role) L.push(`role: ${q(d.role)}`);
-  if (d.organization) L.push(`organization: ${q(d.organization)}`);
-  if (d.location) L.push(`location: ${q(d.location)}`);
-  L.push(`summary: ${q(d.summary || '')}`);
-  if (d.note) L.push(`note: ${q(d.note)}`);
-  if (d.video) L.push(`video: ${q(d.video)}`);
-  L.push(`cover: ${q(d.cover || './images/cover.svg')}`);
-  if (Array.isArray(d.gallery) && d.gallery.length) {
-    L.push('gallery:');
-    for (const g of d.gallery) {
-      L.push(`  - src: ${q(g.src)}`);
-      L.push(`    alt: ${q(g.alt || '')}`);
-      if (g.caption) L.push(`    caption: ${q(g.caption)}`);
+/**
+ * Write frontmatter back into an existing file without disturbing anything the
+ * studio doesn't manage, or build it fresh when the file is new.
+ */
+async function writeItemFile(indexPath, isEntry, data, bodyText) {
+  const keys = isEntry ? ENTRY_KEYS : LOG_KEYS;
+  if (existsSync(indexPath)) {
+    const { block } = parseFrontmatter(await readFile(indexPath, 'utf8'));
+    if (block !== null) {
+      return writeFile(indexPath, withFrontmatter(rewriteFrontmatter(block, data, keys), bodyText));
     }
-  } else {
-    L.push('gallery: []');
   }
-  L.push(`tags: [${(d.tags || []).map(q).join(', ')}]`);
-  if (Array.isArray(d.links) && d.links.length) {
-    L.push('links:');
-    for (const l of d.links) {
-      L.push(`  - label: ${q(l.label)}`);
-      L.push(`    url: ${q(l.url)}`);
-    }
-  } else {
-    L.push('links: []');
-  }
-  L.push(`featured: ${d.featured ? 'true' : 'false'}`);
-  L.push(`draft: ${d.draft ? 'true' : 'false'}`);
-  if (d.order !== undefined && d.order !== null && d.order !== '') L.push(`order: ${Number(d.order)}`);
-  L.push('---');
-  return L.join('\n');
-}
-
-function buildLogFrontmatter(d) {
-  const L = ['---'];
-  L.push(`title: ${q(d.title || 'Untitled')}`);
-  L.push(`category: ${q(d.category || '')}`);
-  L.push(`date: ${d.date}`);
-  L.push(`kind: ${q(d.kind || 'other')}`);
-  L.push(`summary: ${q(d.summary || '')}`);
-  if (d.image) L.push(`image: ${q(d.image)}`);
-  if (d.link) L.push(`link: ${q(d.link)}`);
-  L.push(`tags: [${(d.tags || []).map(q).join(', ')}]`);
-  L.push(`draft: ${d.draft ? 'true' : 'false'}`);
-  L.push('---');
-  return L.join('\n');
-}
-
-function buildEntryBody(sections) {
-  return (
-    '\n' +
-    SECTIONS.map((h) => {
-      const found = (sections || []).find((s) => s.heading === h);
-      return `## ${h}\n\n${(found?.text || '').trim()}\n`;
-    }).join('\n')
-  );
+  const fm = isEntry ? buildEntryFrontmatter(data) : buildLogFrontmatter(data);
+  return writeFile(indexPath, fm + '\n' + bodyText);
 }
 
 async function saveItem(payload) {
@@ -236,12 +164,10 @@ async function saveItem(payload) {
         await writeFile(path.join(imagesDir, 'cover.svg'), placeholderSVG({ bottom: slug, seed: slug }));
       }
     }
-    const md = buildEntryFrontmatter(data) + '\n' + buildEntryBody(payload.sections);
-    await writeFile(path.join(dir, 'index.md'), md);
+    await writeItemFile(path.join(dir, 'index.md'), true, data, buildEntryBody(payload.sections));
   } else {
     const body = (payload.body || '').trim();
-    const md = buildLogFrontmatter(data) + '\n\n' + (body ? body + '\n' : '');
-    await writeFile(path.join(dir, 'index.md'), md);
+    await writeItemFile(path.join(dir, 'index.md'), false, data, '\n' + (body ? body + '\n' : ''));
   }
   return slug;
 }
@@ -301,12 +227,34 @@ async function placeUpload({ kind, id, role, filename, buffer, alt, caption }) {
     }
   }
 
-  // rewrite the file with updated frontmatter, body preserved
-  const md = isEntry
-    ? buildEntryFrontmatter(data) + '\n' + (body.trim() ? body.replace(/^\n+/, '\n') : buildEntryBody())
-    : buildLogFrontmatter(data) + '\n\n' + body.trim() + (body.trim() ? '\n' : '');
-  await writeFile(indexPath, md);
+  // frontmatter updated in place; the body — and every comment and unmanaged
+  // key in the frontmatter — is left exactly as it was
+  const bodyText = isEntry
+    ? body.trim()
+      ? body.replace(/^\n+/, '\n')
+      : buildEntryBody()
+    : '\n' + body.trim() + (body.trim() ? '\n' : '');
+  await writeItemFile(indexPath, isEntry, data, bodyText);
   return id;
+}
+
+/**
+ * Take a file the user dropped into _inbox/ from File Explorer and place it on
+ * a page. Same destination logic and same resizing as a browser upload — this
+ * just reads the bytes off disk and removes the original once it has landed.
+ */
+async function assignFromInbox({ file, kind, id, role, alt, caption }) {
+  const name = path.basename(file); // never let a path escape the inbox
+  const src = path.join(INBOX, name);
+  if (!existsSync(src)) throw new Error(`"${name}" is no longer in _inbox.`);
+  const isVideo = VIDEO_EXT.test(name);
+  if (role === 'video' && !isVideo) throw new Error(`"${name}" is not a video file.`);
+  if (role !== 'video' && isVideo) throw new Error(`"${name}" is a video — use the video slot.`);
+
+  const buffer = await readFile(src);
+  await placeUpload({ kind, id, role, filename: name, buffer, alt, caption });
+  await rm(src, { force: true });
+  return name;
 }
 
 /* ------------------------------ server ------------------------------ */
@@ -347,9 +295,41 @@ const server = createServer(async (req, res) => {
       const allowed = resolved.startsWith(path.resolve(CONTENT)) || resolved.startsWith(path.resolve(path.join(ROOT, 'public/videos')));
       if (!allowed || !existsSync(resolved)) return json(res, 404, { error: 'not found' });
       const ext = path.extname(resolved).toLowerCase();
-      const types = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.avif': 'image/avif', '.gif': 'image/gif', '.svg': 'image/svg+xml', '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime' };
-      res.writeHead(200, { 'Content-Type': types[ext] || 'application/octet-stream', 'Cache-Control': 'no-store' });
+      res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': 'no-store' });
       return res.end(await readFile(resolved));
+    }
+    if (req.method === 'GET' && url.pathname === '/api/inbox') {
+      return json(res, 200, { inbox: await listInbox(), path: INBOX });
+    }
+    if (req.method === 'GET' && url.pathname === '/__inbox') {
+      // preview a file still sitting in _inbox/ (basename only — no traversal)
+      const name = path.basename(url.searchParams.get('f') || '');
+      const resolved = path.resolve(path.join(INBOX, name));
+      if (!resolved.startsWith(path.resolve(INBOX)) || !existsSync(resolved)) {
+        return json(res, 404, { error: 'not found' });
+      }
+      const ext = path.extname(resolved).toLowerCase();
+      res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': 'no-store' });
+      return res.end(await readFile(resolved));
+    }
+    if (req.method === 'POST' && url.pathname === '/api/inbox/assign') {
+      const p = JSON.parse((await readBody(req)).toString('utf8'));
+      await assignFromInbox(p);
+      return json(res, 200, {
+        ok: true,
+        id: p.id,
+        item: await collectItem(p.kind === 'entry' ? 'entries' : 'logs', p.id),
+        inbox: await listInbox(),
+      });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/inbox/discard') {
+      const p = JSON.parse((await readBody(req)).toString('utf8'));
+      const name = path.basename(p.file || '');
+      const resolved = path.resolve(path.join(INBOX, name));
+      if (resolved.startsWith(path.resolve(INBOX)) && existsSync(resolved)) {
+        await rm(resolved, { force: true });
+      }
+      return json(res, 200, { ok: true, inbox: await listInbox() });
     }
     if (req.method === 'POST' && url.pathname === '/api/save') {
       const payload = JSON.parse((await readBody(req)).toString('utf8'));
@@ -386,7 +366,9 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`\n  Content Studio  →  http://127.0.0.1:${PORT}\n`);
-  console.log('  Create/edit entries & logs, type text, drag in photos & video.');
+  console.log('  Create/edit entries & logs, type text, place photos & video.');
+  console.log('  Media: drag files into _inbox/ from your file manager, then pick');
+  console.log('  where each one goes from the tray on the page (or drop straight in).');
   console.log('  Writes to src/content/… — run "npm run dev" in another tab to preview.');
   console.log('  Local only; Ctrl+C to stop.\n');
 });

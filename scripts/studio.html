@@ -4,6 +4,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Content Studio · local</title>
+    <!-- inline, so the browser never requests /favicon.ico and 404s into the console -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%238e2f45'/%3E%3Crect x='4' y='4.5' width='8' height='1.6' fill='%23fffcf5'/%3E%3Crect x='4' y='7.2' width='8' height='1.6' fill='%23fffcf5'/%3E%3Crect x='4' y='9.9' width='5' height='1.6' fill='%23fffcf5'/%3E%3C/svg%3E"
+    />
     <style>
       :root {
         --ground: #f9f4ea; --surface: #fffcf5; --ink: #2a241e; --muted: #6e6257;
@@ -54,6 +59,20 @@
       .chip button { border: 0; background: none; padding: 0; color: var(--muted); font-size: 0.9rem; line-height: 1; }
       .dropzone { border: 1.5px dashed var(--line); border-radius: 10px; padding: 1rem; text-align: center; color: var(--muted); font-size: 0.82rem; cursor: pointer; transition: 0.15s; }
       .dropzone.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); color: var(--accent); }
+      /* --- _inbox tray: files dragged in from File Explorer --- */
+      .tray { margin-top: 0.5rem; border: 1px solid var(--line); border-radius: 10px; background: var(--ground); padding: 0.6rem 0.7rem; }
+      .tray-head { display: flex; align-items: center; gap: 0.5rem; font-size: 0.76rem; color: var(--muted); }
+      .tray-head strong { color: var(--ink); font-weight: 600; }
+      .tray-head .spacer { flex: 1; }
+      .tray-head button { font-size: 0.72rem; padding: 0.2rem 0.5rem; }
+      .tray-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.55rem; }
+      .tray-card { width: 108px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+      .tray-card img, .tray-card video { display: block; width: 108px; height: 72px; object-fit: cover; background: var(--line); }
+      .tray-card .name { font-family: var(--mono); font-size: 0.62rem; padding: 0.25rem 0.3rem 0; color: var(--muted); word-break: break-all; line-height: 1.25; }
+      .tray-card .acts { display: flex; gap: 0.15rem; padding: 0.25rem 0.3rem 0.3rem; }
+      .tray-card .acts button { flex: 1; font-size: 0.66rem; padding: 0.15rem 0; border-radius: 5px; }
+      .tray-empty { font-size: 0.76rem; color: var(--muted); margin-top: 0.4rem; }
+      .tray-empty code { font-family: var(--mono); font-size: 0.72rem; }
       .thumb { display: inline-block; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; vertical-align: top; }
       .thumb img { display: block; width: 130px; height: 90px; object-fit: cover; }
       .gallery-item { display: flex; gap: 0.7rem; align-items: flex-start; padding: 0.6rem 0; border-bottom: 1px solid var(--line); }
@@ -234,14 +253,18 @@
         h += '<fieldset><legend>Media</legend>';
         if (current.isNew) {
           h += '<p class="hint">Save first, then drop photos/video here.</p>';
-        } else if (isE) {
-          h += '<label>Cover</label>' + coverBox();
-          h += '<label style="margin-top:1rem">Gallery</label><div id="gallery-list"></div>' + dropBox('gallery', 'Drop gallery photos (you\'ll add alt text)');
-          h += '<label style="margin-top:1rem">Video (screens on the page)</label>';
-          h += '<input type="text" id="f_video" value="' + escapeHtml(current.data.video || '') + '" placeholder="paste a YouTube/Vimeo/Bilibili link…">';
-          h += dropBox('video', '…or drop a video file');
         } else {
-          h += '<label>Photo (optional)</label>' + (current.data.image ? thumb(current.data.image) : '') + dropBox('image', 'Drop one photo');
+          // one tray for the whole page — pick a file, pick its destination
+          h += tray();
+          if (isE) {
+            h += '<label style="margin-top:1.1rem">Cover</label>' + coverBox();
+            h += '<label style="margin-top:1rem">Gallery</label><div id="gallery-list"></div>' + dropBox('gallery', 'Drop gallery photos, or click to browse');
+            h += '<label style="margin-top:1rem">Video (screens on the page)</label>';
+            h += '<input type="text" id="f_video" value="' + escapeHtml(current.data.video || '') + '" placeholder="paste a YouTube/Vimeo/Bilibili link…">';
+            h += dropBox('video', '…or drop a video file / click to browse');
+          } else {
+            h += '<label style="margin-top:1.1rem">Photo (optional)</label>' + (current.data.image ? thumb(current.data.image) : '') + dropBox('image', 'Drop one photo, or click to browse');
+          }
         }
         h += '</fieldset>';
 
@@ -257,10 +280,53 @@
         const c = current.data.cover || '';
         const isPlaceholder = c.endsWith('.svg');
         const preview = c ? '<div style="margin:.4rem 0">' + thumb(c) + '</div>' : '';
-        return preview + '<div class="hint">current: <code>' + escapeHtml(c || '(none)') + '</code>' + (isPlaceholder ? ' — placeholder' : '') + '</div>' + dropBox('cover', 'Drop a cover image (replaces the placeholder)');
+        return preview + '<div class="hint">current: <code>' + escapeHtml(c || '(none)') + '</code>' + (isPlaceholder ? ' — placeholder' : '') + '</div>'
+          + dropBox('cover', 'Drop a cover image, or click to browse');
       }
       function dropBox(role, text) {
         return '<div class="dropzone" data-role="' + role + '">' + text + '</div>';
+      }
+
+      /**
+       * The _inbox tray — one per page, not one per slot.
+       *
+       * Drag a batch of media into the repo's `_inbox/` folder from File
+       * Explorer, and every file shows up here with its destinations on it: a
+       * photo can become the cover or a gallery item, a video goes to the video
+       * slot. Choosing happens next to the page you're filling, and no OS file
+       * dialog is involved.
+       */
+      function tray() {
+        const isE = current.kind === 'entry';
+        const files = state.inbox || [];
+        const kb = (n) => (n > 1024 * 1024 ? (n / 1024 / 1024).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB');
+        let h = '<div class="tray" data-tray><div class="tray-head">';
+        h += '<strong>_inbox</strong><span>· ' + (files.length || 'nothing') + (files.length ? ' file' + (files.length === 1 ? '' : 's') + ' waiting' : ' waiting') + '</span>';
+        h += '<span class="spacer"></span><button class="ghost" data-tray-refresh>refresh</button></div>';
+        if (!files.length) {
+          h += '<p class="tray-empty">Drop photos or video into <code>_inbox/</code> from File Explorer, then hit refresh — they appear here and you pick where each one goes.</p>';
+        } else {
+          h += '<div class="tray-grid">' + files.map((f) => {
+            const src = '/__inbox?f=' + encodeURIComponent(f.name);
+            const nm = escapeHtml(f.name);
+            // no loading="lazy": placing a file moves it, and a deferred request
+            // would then fire against a path that no longer exists
+            const media = f.type === 'video'
+              ? '<video src="' + src + '" muted preload="metadata" data-inbox="' + nm + '"></video>'
+              : '<img src="' + src + '" alt="" data-inbox="' + nm + '">';
+            const dest = f.type === 'video'
+              ? (isE ? [['video', 'video']] : [])
+              : isE ? [['cover', 'cover'], ['gallery', 'gallery']] : [['image', 'photo']];
+            const acts = dest.length
+              ? dest.map(([role, label]) => '<button data-use="' + nm + '" data-role="' + role + '">' + label + '</button>').join('')
+              : '<button disabled title="a log has no video slot">—</button>';
+            return '<div class="tray-card">' + media +
+              '<div class="name" title="' + nm + ' · ' + kb(f.bytes) + '">' + nm + '</div>' +
+              '<div class="acts">' + acts +
+              '<button class="danger" data-toss="' + nm + '" title="delete from _inbox">×</button></div></div>';
+          }).join('') + '</div>';
+        }
+        return h + '</div>';
       }
 
       function renderGallery() {
@@ -324,6 +390,69 @@
         };
         // dropzones
         document.querySelectorAll('.dropzone').forEach(wireDrop);
+        wireTrays();
+      }
+
+      function wireTrays() {
+        // A file can leave _inbox behind our back — placed from another tray, or
+        // moved in File Explorer while this page is open. Drop its card rather
+        // than leaving a broken thumbnail sitting there.
+        document.querySelectorAll('[data-inbox]').forEach((el) => el.onerror = () => {
+          const name = el.dataset.inbox;
+          state.inbox = (state.inbox || []).filter((f) => f.name !== name);
+          document.querySelectorAll('[data-inbox]').forEach((other) => {
+            if (other.dataset.inbox === name) other.closest('.tray-card')?.remove();
+          });
+        });
+        document.querySelectorAll("[data-tray-refresh]").forEach((el) => el.onclick = async () => {
+          try {
+            const r = await api('/api/inbox');
+            state.inbox = r.inbox;
+            renderForm();
+            toast(r.inbox.length ? r.inbox.length + ' file(s) in _inbox' : '_inbox is empty');
+          } catch (e) { toast(e.message, true); }
+        });
+        document.querySelectorAll('[data-use]').forEach((el) => el.onclick = async () => {
+          const file = el.dataset.use;
+          const role = el.dataset.role;
+          if (current.isNew) { toast('Save the item first, then add media.', true); return; }
+          if (dirty) {
+            if (!confirm('Placing media saves the current item first. Continue?')) return;
+            await doSave(true);
+          }
+          let alt = '', caption = '';
+          if (role === 'gallery') {
+            alt = prompt('Alt text for ' + file + " (what's in the photo?):") || '';
+            caption = prompt('Caption (optional):') || '';
+          }
+          try {
+            toast('Placing ' + file + '…');
+            const r = await api('/api/inbox/assign', { file, kind: current.kind, id: current.id, role, alt, caption });
+            applyFresh(r.item);
+            state.inbox = r.inbox;
+            renderForm();
+            await loadState();
+            toast(file + ' → ' + role);
+          } catch (e) { toast(e.message, true); }
+        });
+        document.querySelectorAll('[data-toss]').forEach((el) => el.onclick = async () => {
+          const file = el.dataset.toss;
+          if (!confirm('Delete ' + file + ' from _inbox? The file is removed from disk.')) return;
+          try {
+            const r = await api('/api/inbox/discard', { file });
+            state.inbox = r.inbox;
+            renderForm();
+            toast(file + ' discarded');
+          } catch (e) { toast(e.message, true); }
+        });
+      }
+
+      /** Adopt server truth for the current item after a media change. */
+      function applyFresh(fresh) {
+        if (!fresh) return;
+        current.data = fresh.data;
+        if (fresh.sections) current.sections = fresh.sections;
+        if (fresh.body !== undefined) current.body = fresh.body;
       }
 
       function wireDrop(zone) {
@@ -353,11 +482,7 @@
             toast('Uploading ' + file.name + '…');
             const dataBase64 = await toBase64(file);
             const r = await api('/api/upload', { kind: current.kind, id: current.id, role, filename: file.name, dataBase64, alt, caption });
-            // refresh current from server truth
-            const fresh = r.item;
-            current.data = fresh.data;
-            if (fresh.sections) current.sections = fresh.sections;
-            if (fresh.body !== undefined) current.body = fresh.body;
+            applyFresh(r.item); // server truth
             renderForm();
             await loadState();
             renderList();

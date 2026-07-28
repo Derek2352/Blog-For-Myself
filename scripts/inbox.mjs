@@ -14,11 +14,14 @@
 import { readdir, readFile, writeFile, rename, unlink, mkdir, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { loadCategories, makePrompter, yamlQuote } from './lib.mjs';
 import { photoPlan } from './photo-rules.mjs';
 
-const ROOT = new URL('..', import.meta.url).pathname;
+// see the note in studio.mjs: a file: URL's .pathname is "/C:/…" on Windows and
+// percent-encodes spaces everywhere, so path.join builds an unusable path
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const INBOX = path.join(ROOT, '_inbox');
 const PHOTO_EXT = /\.(jpe?g|png|webp|avif|gif|svg)$/i;
 const VIDEO_EXT = /\.(mp4|mov|webm|m4v)$/i;
