@@ -5,7 +5,7 @@
 # supplied. Nothing about him here is inferred: a web search for "Vincent Tam"
 # returns several different people, so his role and qualifications come from the
 # profile Derek sent, and his location, contact details and photograph are left out.
-date: 2026-06-02 # TODO: verify dates
+date: 2026-05-21
 title: "Career Advisory — Mr. Vincent Tam"
 category: "career"
 updated: 2026-07-28

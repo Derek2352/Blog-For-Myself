@@ -7,7 +7,7 @@
 # advice to attribute to a named HR director is not a gap I'm willing to fill.
 # Biography is limited to name, title and employer, which is all his LinkedIn
 # profile carries.
-date: 2026-06-03 # TODO: verify dates
+date: 2026-06-15
 title: "Career Advisory — Mr. Daniel Yen"
 category: "career"
 updated: 2026-07-28
@@ -111,4 +111,4 @@ thing I do on purpose at a specific desk, in a specific department, most days.
 And one honest admission, since this site is supposed to be honest. I kept the substance
 of what he told me and lost the wording, and I've had to rebuild the reasoning myself to
 write this. It's a small argument for writing things down closer to when they happen —
-which, as it turns out, is the exact thing another adviser told me a day or two earlier.
+which, as it turns out, is the exact thing another adviser told me a few weeks later.

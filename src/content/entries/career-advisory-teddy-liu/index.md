@@ -5,7 +5,7 @@
 # people, biography comes only from documents Derek provides.
 # His HKICPA Council term (2021-2023) is written in the past tense — the supplied
 # bio was drafted while it was still current.
-date: 2026-06-01 # TODO: verify dates
+date: 2026-07-08
 title: "Career Advisory — Mr. Teddy Liu"
 category: "career"
 updated: 2026-07-28
