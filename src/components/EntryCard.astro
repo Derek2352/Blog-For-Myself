@@ -64,7 +64,10 @@ const coverFit = orientation(entry.data.cover) === 'wide' ? 'object-cover' : 'ob
       </a>
     </article>
   ) : (
-    <article class="card lift group">
+    // min-w-0: the meta line below never wraps, so without it a grid track sized
+    // `1fr` grows to fit the longest role and the card pushes past the viewport
+    // on a phone.
+    <article class="card lift group min-w-0">
       <a href={href} class="block">
         <div class="frame card-cover overflow-hidden" transition:name={`cover-${entry.id}`}>
           <Image
@@ -76,19 +79,31 @@ const coverFit = orientation(entry.data.cover) === 'wide' ? 'object-cover' : 'ob
             loading={eager ? 'eager' : 'lazy'}
           />
         </div>
-        <p class="rail mt-3 flex flex-wrap gap-x-2 gap-y-0.5">
-          <span>{range}</span>
+        {/* One line, always. This used to wrap, and a role long enough to push
+            the code onto a second row dropped that card's title below its
+            neighbours' — three cards side by side with three different title
+            baselines. Now the role is the only shrinkable part: date and code
+            hold their place, and the role gets whatever is left before it
+            ellipsizes (the full string stays in the title attribute). */}
+        <p class="rail mt-3 flex flex-nowrap items-baseline gap-x-2">
+          <span class="shrink-0">{range}</span>
           {entry.data.role && (
             <>
-              <span aria-hidden="true">·</span>
-              <span class="inline-block max-w-[26ch] truncate align-bottom" title={entry.data.role}>
+              <span aria-hidden="true" class="shrink-0">
+                ·
+              </span>
+              <span class="min-w-0 truncate" title={entry.data.role}>
                 {entry.data.role}
               </span>
             </>
           )}
-          {entry.data.draft && <span class="text-signal-text">· draft</span>}
-          <span aria-hidden="true">·</span>
-          <span aria-hidden="true">{code}</span>
+          {entry.data.draft && <span class="shrink-0 text-signal-text">· draft</span>}
+          <span aria-hidden="true" class="shrink-0">
+            ·
+          </span>
+          <span aria-hidden="true" class="shrink-0">
+            {code}
+          </span>
         </p>
         <h3 class="mt-1.5 font-display text-[1.35rem] leading-tight transition-colors group-hover:text-accent">
           {entry.data.title}

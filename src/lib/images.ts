@@ -13,3 +13,19 @@ export function orientation(img: { width: number; height: number }): Orientation
   if (ratio < 0.9) return 'tall';
   return 'square';
 }
+
+/**
+ * Is this cover still the generated placeholder?
+ *
+ * `npm run new-entry` writes a drawn SVG so a fresh entry has something in the
+ * frame; every real cover is a photograph. The rule is the file type, which was
+ * already the test used by the dev-only photo nudge — this only gives it a name
+ * so layouts can use it too, and so it is checked in one place.
+ *
+ * Astro copies SVGs through the build without transforming them, so the
+ * extension survives hashing; `format` is checked first for the cases where a
+ * loader supplies it.
+ */
+export function isPlaceholderCover(img: { src: string; format?: string }): boolean {
+  return img.format === 'svg' || img.src.split('?')[0].endsWith('.svg');
+}

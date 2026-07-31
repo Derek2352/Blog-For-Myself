@@ -9,6 +9,7 @@ import { orientation } from '@/lib/images';
 import { personSchema } from '@/lib/schema';
 import { lqipStyle } from '@/lib/lqip';
 import { monthKey } from '@/lib/format';
+import { balancedCols } from '@/lib/layout';
 
 const entries = await getEntries();
 
@@ -26,6 +27,15 @@ const catIndex = (await getCategoryIndex()).filter((c) => c.entryCount + c.logCo
 // tab bar; listing them here as well named every category three times over.
 const primaryCats = catIndex.filter((c) => c.primary);
 const browseCats = primaryCats.length ? primaryCats : catIndex;
+// Column count follows the card count, so the last row is never a single card
+// beside empty cells. The classes are written out because Tailwind reads source
+// text — an interpolated `lg:grid-cols-${n}` would never be generated.
+const BROWSE_COLS: Record<number, string> = {
+  1: '',
+  2: 'sm:grid-cols-2',
+  3: 'sm:grid-cols-2 lg:grid-cols-3',
+};
+const browseCols = BROWSE_COLS[balancedCols(browseCats.length)] ?? BROWSE_COLS[3];
 ---
 
 <Base schema={personSchema(Astro.site)}>
@@ -115,7 +125,7 @@ const browseCats = primaryCats.length ? primaryCats : catIndex;
   <section class="wrap mt-20" aria-labelledby="browse-h">
     <p class="kicker">by category</p>
     <h2 id="browse-h" class="mt-1 font-display text-3xl">Or wander by subject</h2>
-    <ul class="mt-6 grid list-none gap-4 p-0 sm:grid-cols-2 lg:grid-cols-3" data-io-stagger>
+    <ul class:list={['mt-6 grid list-none gap-4 p-0', browseCols]} data-io-stagger>
       {
         browseCats.map((c) => (
           <li>

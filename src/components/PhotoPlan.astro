@@ -7,6 +7,7 @@
  */
 import { photoPlan } from '../../scripts/photo-rules.mjs';
 import type { Entry } from '@/lib/content';
+import { isPlaceholderCover } from '@/lib/images';
 
 interface Props {
   entry: Entry;
@@ -16,7 +17,7 @@ const { entry } = Astro.props;
 const dev = import.meta.env.DEV;
 
 const plan = photoPlan({ category: entry.data.category, featured: entry.data.featured });
-const placeholderCover = entry.data.cover.src.endsWith('.svg');
+const placeholderCover = isPlaceholderCover(entry.data.cover);
 const missing = Math.max(0, plan.targetGallery - entry.data.gallery.length);
 const show = dev && (placeholderCover || missing > 0);
 ---

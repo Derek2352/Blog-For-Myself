@@ -5,76 +5,94 @@
  * category's entries (its "sub-tabs"), collapsing when the pointer leaves.
  * Keyboard users get the same via :focus-within. On touch devices the
  * flyout is disabled and tapping the tab just opens the category page.
- * Wraps on wide screens, scrolls horizontally on narrow ones.
+ *
+ * Two tiers, one per row on wide screens. All seven tabs on a single row need
+ * 1214px and the content column gives them 1104px, so the bar always wrapped —
+ * leaving one tab stranded alone on a second row, at every desktop width, since
+ * `.wrap` is capped and a wider screen never helped. Trimming the type and
+ * padding only bought enough room to break again on the next category. So the
+ * second row is deliberate instead of accidental: flagship categories
+ * (`primary` in src/data/categories.ts) lead, the rest sit beneath in smaller,
+ * quieter type — a hierarchy the tab colours already implied. Each row has room
+ * to grow, and a new category joins one of them by itself.
+ *
+ * Narrow screens are unchanged: the rows go `display: contents` so every tab
+ * lands back in one horizontally scrolling strip.
  */
 import { getNavTree, categoryHref, entryHref } from '@/lib/content';
 
 const tabs = await getNavTree();
 const path = Astro.url.pathname.replace(/\/?$/, '/');
+
+// An empty tier drops out rather than leaving a blank row behind.
+const rows = [
+  { tier: 'primary', tabs: tabs.filter((t) => t.primary) },
+  { tier: 'secondary', tabs: tabs.filter((t) => !t.primary) },
+].filter((row) => row.tabs.length > 0);
 ---
 
 <nav aria-label="Categories" class="tabbar" data-tabbar>
   {
-    tabs.map((tab) => {
-      const href = categoryHref(tab.slug);
-      const active = path === href;
-      const hasFlyout = tab.entries.length > 0 || tab.logCount > 0;
-      const flyoutId = `flyout-${tab.slug}`;
-      return (
-        <div class="tab-group">
-          <a
-            href={href}
-            aria-current={active ? 'page' : undefined}
-            aria-describedby={hasFlyout ? flyoutId : undefined}
-            class:list={[
-              'relative block whitespace-nowrap px-3 py-2.5 text-sm transition-colors',
-              active
-                ? 'font-medium text-ink'
-                : tab.primary
-                  ? 'text-ink hover:text-accent'
-                  : 'text-muted hover:text-ink',
-            ]}
-          >
-            {tab.label}
-            {active && (
-              <span
-                class="absolute inset-x-3 bottom-0 h-[2px] bg-accent"
-                transition:name="active-tab"
-                aria-hidden="true"
-              />
-            )}
-          </a>
-          {hasFlyout && (
-            <div class="tab-flyout" id={flyoutId}>
-              <div class="tab-flyout-inner">
-                <a class="flyout-head" href={href}>
-                  all →
-                </a>
-                {tab.entries.length > 0 && (
-                  <ul class="flyout-list">
-                    {tab.entries.map((e) => (
-                      <li>
-                        <a href={entryHref(e)}>{e.data.title}</a>
-                      </li>
-                    ))}
-                  </ul>
+    rows.map((row) => (
+      <div class:list={['tabbar-row', `tabbar-row-${row.tier}`]}>
+        {row.tabs.map((tab) => {
+          const href = categoryHref(tab.slug);
+          const active = path === href;
+          const hasFlyout = tab.entries.length > 0 || tab.logCount > 0;
+          const flyoutId = `flyout-${tab.slug}`;
+          return (
+            <div class="tab-group">
+              <a
+                href={href}
+                aria-current={active ? 'page' : undefined}
+                aria-describedby={hasFlyout ? flyoutId : undefined}
+                class:list={[
+                  'relative block whitespace-nowrap transition-colors',
+                  active
+                    ? 'font-medium text-ink'
+                    : tab.primary
+                      ? 'text-ink hover:text-accent'
+                      : 'text-muted hover:text-ink',
+                ]}
+              >
+                {tab.label}
+                {active && (
+                  <span class="tab-underline" transition:name="active-tab" aria-hidden="true" />
                 )}
-                {tab.entryCount > tab.entries.length && (
-                  <a class="flyout-more" href={href}>
-                    View all {tab.entryCount} entries →
-                  </a>
-                )}
-                {tab.logCount > 0 && (
-                  <a class="flyout-more" href={`${href}#monthly-log-h`}>
-                    + {tab.logCount} monthly {tab.logCount === 1 ? 'log' : 'logs'} →
-                  </a>
-                )}
-              </div>
+              </a>
+              {hasFlyout && (
+                <div class="tab-flyout" id={flyoutId}>
+                  <div class="tab-flyout-inner">
+                    <a class="flyout-head" href={href}>
+                      all →
+                    </a>
+                    {tab.entries.length > 0 && (
+                      <ul class="flyout-list">
+                        {tab.entries.map((e) => (
+                          <li>
+                            <a href={entryHref(e)}>{e.data.title}</a>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {tab.entryCount > tab.entries.length && (
+                      <a class="flyout-more" href={href}>
+                        View all {tab.entryCount} entries →
+                      </a>
+                    )}
+                    {tab.logCount > 0 && (
+                      <a class="flyout-more" href={`${href}#monthly-log-h`}>
+                        + {tab.logCount} monthly {tab.logCount === 1 ? 'log' : 'logs'} →
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      );
-    })
+          );
+        })}
+      </div>
+    ))
   }
 </nav>
 

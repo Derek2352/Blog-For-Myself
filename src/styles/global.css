@@ -212,7 +212,8 @@
     pointer-events: none;
   }
 
-  /* category tab strip: wraps on wide screens, scrolls on narrow */
+  /* category tab strip: two deliberate tiers on wide screens, one scrolling
+     strip on narrow ones (see src/components/TabBar.astro for why). */
   .tabbar {
     display: flex;
     gap: 0.25rem;
@@ -221,7 +222,43 @@
     scrollbar-width: none;
   }
   .tabbar::-webkit-scrollbar { display: none; }
-  @media (min-width: 768px) { .tabbar { flex-wrap: wrap; overflow-x: visible; } }
+  /* Below the tier breakpoint the rows dissolve so every tab is a direct flex
+     child of the scrolling bar again — one strip, exactly as before. */
+  .tabbar-row { display: contents; }
+  .tabbar { --tab-pad: 0.75rem; --tab-size: 0.875rem; }
+  .tab-group > a {
+    padding-inline: var(--tab-pad);
+    padding-block: 0.625rem;
+    font-size: var(--tab-size);
+  }
+  /* the active-tab underline tracks whatever padding its tier uses */
+  .tab-underline {
+    position: absolute;
+    inset-inline: var(--tab-pad);
+    bottom: 0;
+    height: 2px;
+    background: var(--color-accent);
+  }
+
+  @media (min-width: 768px) {
+    .tabbar {
+      display: block;
+      overflow-x: visible;
+    }
+    .tabbar-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25rem;
+    }
+    /* Flagship categories lead; the rest read as a quieter second tier. */
+    .tabbar-row-secondary {
+      --tab-pad: 0.625rem;
+      --tab-size: 0.8125rem;
+      margin-top: -0.15rem;
+      padding-bottom: 0.15rem;
+    }
+    .tabbar-row-secondary .tab-group > a { padding-block: 0.4rem; }
+  }
 
   /* ---- hover flyout: each tab expands to its entries (sub-tabs) ---- */
   .tab-group { position: relative; }

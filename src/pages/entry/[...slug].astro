@@ -21,7 +21,7 @@ import {
 } from '@/lib/content';
 import { categoryBySlug } from '@/data/categories';
 import { resolveWash } from '@/lib/wash';
-import { orientation } from '@/lib/images';
+import { isPlaceholderCover, orientation } from '@/lib/images';
 import { entrySchema, breadcrumbSchema } from '@/lib/schema';
 import { lqipStyle } from '@/lib/lqip';
 
@@ -53,6 +53,7 @@ const next = index >= 0 && index < siblings.length - 1 ? siblings[index + 1] : u
 const prevCode = prev ? await entryCode(prev) : '';
 const nextCode = next ? await entryCode(next) : '';
 const coverLqip = await lqipStyle("entries", entry.id, "cover");
+const placeholderCover = isPlaceholderCover(entry.data.cover);
 ---
 
 <Base
@@ -133,11 +134,17 @@ const coverLqip = await lqipStyle("entries", entry.id, "cover");
             alt={`${entry.data.title} — cover image`}
             widths={[720, 1100, 1600]}
             sizes="(min-width: 1280px) 72rem, 94vw"
-            class:list={
-              orientation(entry.data.cover) === 'wide'
-                ? 'w-full'
-                : 'mx-auto w-auto max-h-[75vh]'
-            }
+            class:list={[
+              orientation(entry.data.cover) === 'wide' ? 'w-full' : 'mx-auto w-auto max-h-[75vh]',
+              // An entry whose cover is still the placeholder put a 690px empty
+              // frame between the summary and the first sentence — more than a
+              // screen of scrolling before the writing starts, on every entry.
+              // Placeholders keep their place as an anchor (and as the target
+              // the card's cover morphs into) at a fraction of the height. A
+              // real photograph is not capped: this reverts by itself the
+              // moment one lands, with no frontmatter change.
+              placeholderCover && 'max-h-[13rem] object-cover sm:max-h-[15rem]',
+            ]}
             loading="eager"
             fetchpriority="high"
           />

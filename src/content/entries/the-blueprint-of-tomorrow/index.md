@@ -38,7 +38,9 @@ note: "Shot 35 took the longest and shows the least — the model kept handing m
 # video: ""  # paste the film link — it will screen here in place of the cover
 cover: "./images/cover.svg"
 gallery: []
-tags: ["ai-film", "corporate-governance", "esg", "champion"]
+# "champion" was here too, which printed a CHAMPION chip next to a #CHAMPION tag
+# on the mobile entry header — the role above already says it.
+tags: ["ai-film", "corporate-governance", "esg"]
 links: []
 featured: false
 draft: false
