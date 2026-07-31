@@ -7,6 +7,7 @@ import {
   levelFor,
   levelName,
   captionFor,
+  tallyFor,
   isComplete,
 } from '@/lib/cat-game';
 import { categories } from '@/data/categories';
@@ -102,6 +103,28 @@ describe('levelName / captionFor', () => {
 
   it('does not print more found than exist', () => {
     expect(captionFor(9, 6)).toBe('6 / 6 · yours');
+  });
+});
+
+describe('tallyFor', () => {
+  it('names what the dots are counting', () => {
+    // the whole reason this exists: paws alone said nothing
+    expect(tallyFor(2, 7)).toContain('treats');
+  });
+
+  it('reads as a tally at both ends', () => {
+    expect(tallyFor(0, 7)).toBe('0 / 7 treats');
+    expect(tallyFor(7, 7)).toBe('7 / 7 treats');
+  });
+
+  it('clamps rather than printing nonsense', () => {
+    expect(tallyFor(9, 6)).toBe('6 / 6 treats');
+    expect(tallyFor(-3, 6)).toBe('0 / 6 treats');
+    expect(tallyFor(1, -2)).toBe('0 / 0 treats');
+  });
+
+  it('survives a site with nothing to collect', () => {
+    expect(tallyFor(0, 0)).toBe('0 / 0 treats');
   });
 });
 

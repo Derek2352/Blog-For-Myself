@@ -43,6 +43,17 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
         class="cat-body"
         d="M14 29.5 C10 28.5 9.5 20 16 16.4 C18.5 15.3 21 15 24 15 L45 15 C52 15.5 55 19 55 23.5 L55 26.5 C55 28.5 53.5 29.5 51.5 29.5 Z">
       </path>
+      {/* Earned, not decorative: this only appears once every treat is found.
+          The affection tiers otherwise only widen an idle animation repertoire,
+          which is close to invisible — a collar is a change to the cat you can
+          actually point at. */}
+      <path
+        class="cat-collar"
+        d="M47.5 15.5 C48.5 19.5 49 21 49.5 22.5"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.6"
+        stroke-linecap="round"></path>
       <g class="cat-head">
         <path class="cat-ear ear-far" d="M48 9 L49.5 1.5 L54 6.5 Z"></path>
         <path class="cat-ear ear-near" d="M56.5 6.5 L61 1.5 L62.5 9 Z"></path>
@@ -65,7 +76,12 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
 
 {/* Progress. Decorative and aria-hidden: it's an easter egg, not information a
     screen-reader user is missing out on, and announcing level-ups mid-read would
-    be an intrusion rather than a reward. */}
+    be an intrusion rather than a reward.
+
+    It used to stay hidden until the first find, on the theory that an empty row
+    would be furniture nobody could explain. The row is now explained — the line
+    under it always reads "n / N treats" — so it shows from the first page load
+    instead, as an invitation. A visitor who never sees the row can't play. */}
 <div id="cat-score" transition:persist="cat-score" aria-hidden="true" data-empty>
   <div class="cat-paws">
     {tabs.map((slug) => <span class="cat-paw" data-slug={slug}></span>)}
@@ -185,11 +201,11 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
     border-radius: var(--radius-chip);
     padding: 0.4rem 0.55rem;
   }
+  /* `data-empty` now only means "there is nothing to collect on this site at
+     all" — no categories, so no paws. With paws to show, the row shows. */
   #cat-score[data-empty] {
     display: none;
   }
-  /* Once anything has been found the row stays put — a tally you can only see for
-     three seconds after earning it is no tally at all. Only the caption fades. */
   #cat-score:not([data-empty]) {
     opacity: 1;
   }
@@ -207,13 +223,16 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
   .cat-paw.got {
     background: var(--color-accent);
   }
+  /* Always readable. This is the line that says what the paws are; hiding it
+     between finds was what left seven bare dots on the screen. It swaps to the
+     level phrase for a few seconds on a find, then goes back to the tally. */
   .cat-caption {
     margin-top: 0.3rem;
     white-space: nowrap;
-    opacity: 0;
+    color: var(--color-muted);
   }
   #cat-score.announce .cat-caption {
-    opacity: 1;
+    color: var(--color-accent);
   }
   .cat-hearts {
     position: absolute;
@@ -224,6 +243,14 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
     border-radius: 50%;
     background: var(--color-accent);
     opacity: 0;
+  }
+  /* The collar is the top-level reward, so it is off until the cat is `yours`. */
+  .cat-collar {
+    display: none;
+    color: var(--color-accent);
+  }
+  #site-cat.lv6 .cat-collar {
+    display: block;
   }
   .cat-leg,
   .cat-tail,
@@ -316,7 +343,7 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
       transition: opacity 0.45s ease;
     }
     .cat-caption {
-      transition: opacity 0.45s ease;
+      transition: color 0.45s ease;
     }
     .cat-paw {
       transition:
@@ -326,6 +353,21 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
     .cat-paw.just-got {
       transform: scale(1.5);
     }
+    /* the full set: every paw answers at once, left to right */
+    #cat-score.complete .cat-paw {
+      animation: paw-wave 0.9s ease-out;
+    }
+    #cat-score.complete .cat-paw:nth-child(2) { animation-delay: 0.06s; }
+    #cat-score.complete .cat-paw:nth-child(3) { animation-delay: 0.12s; }
+    #cat-score.complete .cat-paw:nth-child(4) { animation-delay: 0.18s; }
+    #cat-score.complete .cat-paw:nth-child(5) { animation-delay: 0.24s; }
+    #cat-score.complete .cat-paw:nth-child(6) { animation-delay: 0.3s; }
+    #cat-score.complete .cat-paw:nth-child(n + 7) { animation-delay: 0.36s; }
+  }
+
+  @keyframes paw-wave {
+    0%, 100% { transform: translateY(0) scale(1); }
+    40% { transform: translateY(-6px) scale(1.4); }
   }
 
   @keyframes cat-blink {
@@ -398,10 +440,22 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
 
 <script>
   import { motionReduced } from '@/lib/a11y-prefs';
-  import { resolveTreat, captionFor, levelFor, isComplete } from '@/lib/cat-game';
+  import { resolveTreat, captionFor, tallyFor, levelFor, isComplete } from '@/lib/cat-game';
 
   const CAT_W = 48;
   const CAT_H = 30;
+
+  /**
+   * Below this the room is too small for the edge repertoire.
+   *
+   * Climbing a side wall and slipping out of the room were written for a desktop,
+   * where the margins are empty and the cat reaches an edge maybe once a minute.
+   * On a 390px floor it reaches one every few seconds: measured over 150 seconds
+   * on a phone, the cat spent 9% of the time flat against a wall, 7% partly
+   * off-screen, and 17% within 8px of an edge. Same behaviour, a third of the
+   * visit. Narrow screens get the floor only.
+   */
+  const ROOMY_W = 720;
 
   /**
    * Session progress. Module scope on purpose: Astro runs this script once per
@@ -428,10 +482,19 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
       .filter(Boolean);
   }
 
-  /** Which tab this page belongs to, if any. */
+  /**
+   * Which tab this page belongs to, if any.
+   *
+   * Read from `data-cat-tab` on the body, which Base.astro stamps from the page's
+   * own category. This used to take the first path segment, so only the seven
+   * category index pages hid anything — and those are pages a visitor passes
+   * through on the way to an entry, not pages they stop on. Most visits never
+   * triggered the game at all. An entry or a log now counts towards its section,
+   * which is what "looked around the site" ought to mean.
+   */
   function currentTab(tabs: string[]): string | null {
-    const first = location.pathname.split('/').filter(Boolean)[0] ?? '';
-    return tabs.includes(first) ? first : null;
+    const tab = document.body.dataset.catTab ?? '';
+    return tabs.includes(tab) ? tab : null;
   }
 
   interface CatState {
@@ -494,19 +557,42 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
      */
     const CORNER_GUARD = 68; // 1rem gap + 2.6rem button + a little air
     const cornerBusy = () => !!document.querySelector('.to-top.show');
-    const maxX = () => viewportW() - CAT_W - (cornerBusy() ? CORNER_GUARD : 0);
 
-    // the visitor's pointer is, as far as the cat is concerned, a mouse
-    const prey = { x: -9999, y: -9999, t: 0 };
-    window.addEventListener(
-      'pointermove',
-      (e) => {
-        prey.x = e.clientX;
-        prey.y = e.clientY;
-        prey.t = performance.now();
-      },
-      { passive: true },
-    );
+    /** Is there room for the wall-climb and the off-screen exit? */
+    const roomy = () => viewportW() >= ROOMY_W;
+    /**
+     * How far the patrol stops short of each wall. A cat pressed flat into the
+     * corner of a phone reads as stuck rather than as a cat; on a wide screen a
+     * token gap is enough, because the walls are nowhere near the reading.
+     */
+    const edgeInset = () => (roomy() ? 6 : 18);
+    const minX = () => edgeInset();
+    const maxX = () => viewportW() - CAT_W - edgeInset() - (cornerBusy() ? CORNER_GUARD : 0);
+
+    /**
+     * The visitor's pointer is, as far as the cat is concerned, a mouse.
+     *
+     * `hold` is how long this sighting stays interesting. A moving cursor
+     * re-reports itself constantly, so it only needs a short window; a tap
+     * reports once, and without a longer window the cat would give up crossing
+     * the room before it arrived.
+     */
+    const prey = { x: -9999, y: -9999, t: 0, hold: 2500 };
+    const sight = (x: number, y: number, hold = 2500) => {
+      prey.x = x;
+      prey.y = y;
+      prey.hold = hold;
+      prey.t = performance.now();
+    };
+    window.addEventListener('pointermove', (e) => sight(e.clientX, e.clientY), { passive: true });
+
+    /**
+     * How far up the page the cat bothers to notice you. The fonder it is the
+     * higher it looks — which, along with how hard it then runs, is what the
+     * treats actually buy. Both the cursor hunt and a tap-to-summon measure
+     * against this, so what the cat responds to is one rule rather than two.
+     */
+    const withinNotice = (y: number) => y > window.innerHeight - (150 + game.level * 14);
 
     const setClasses = () => {
       // `walking` can never apply under reduced motion, whatever the state
@@ -547,12 +633,19 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
     const treat = () => (treatRef = live(treatRef, 'cat-treat'));
     const scoreBox = () => (scoreRef = live(scoreRef, 'cat-score'));
 
-    /** Paint the paw row. Length follows the tab count, so it can't go stale. */
+    /**
+     * Paint the paw row. Length follows the tab count, so it can't go stale.
+     *
+     * The line under the paws is the whole difference between a tally and seven
+     * unexplained dots, so it is always populated: `2 / 7 treats` at rest, and the
+     * level phrase for a few seconds after a find.
+     */
     const renderScore = () => {
       const scoreEl = scoreBox();
       if (!scoreEl) return;
       const total = game.tabs.length;
       if (total === 0) {
+        // nothing published to hunt for — no paws, so nothing to explain
         scoreEl.setAttribute('data-empty', '');
         return;
       }
@@ -560,28 +653,41 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
         paw.classList.toggle('got', game.found.has(paw.dataset.slug!));
       });
       const caption = scoreEl.querySelector('.cat-caption')!;
-      caption.textContent = captionFor(game.found.size, total);
-      // Only show the row once there's something to show; an empty row on a first
-      // visit would just be furniture nobody can explain.
-      if (game.found.size > 0) scoreEl.removeAttribute('data-empty');
+      caption.textContent = scoreEl.classList.contains('announce')
+        ? captionFor(game.found.size, total)
+        : tallyFor(game.found.size, total);
+      scoreEl.removeAttribute('data-empty');
     };
 
-    /** Flash the row and its caption, then let them fade back out. */
+    /** Swap the tally for the level phrase for a beat, then put it back. */
     let announceTimer: number | undefined;
     const announce = () => {
       const scoreEl = scoreBox();
       if (!scoreEl) return;
       scoreEl.classList.add('announce');
+      renderScore();
       clearTimeout(announceTimer);
-      // the paws stay; only the words go
-      announceTimer = window.setTimeout(() => scoreEl.classList.remove('announce'), 3200);
+      announceTimer = window.setTimeout(() => {
+        scoreEl.classList.remove('announce');
+        renderScore();
+      }, 3200);
     };
+
+    /**
+     * The tab whose treat is currently out, so leaving can still credit it.
+     * Crossing a wide floor at a trot takes a few seconds, and a visitor who
+     * clicks on before the cat arrives was losing the find entirely — which made
+     * the reward for looking round the site depend on how slowly you browse.
+     * Visiting earns the treat; the cat fetching it is the flourish.
+     */
+    let pending: string | null = null;
 
     const hideTreat = () => {
       const treatEl = treat();
       treatEl?.setAttribute('hidden', '');
       treatEl?.classList.remove('show', 'taken');
       s.treatX = -1;
+      pending = null;
       if (s.mode === 'fetch') {
         s.mode = 'walk';
         setClasses();
@@ -602,6 +708,11 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
       if (isComplete(game.found.size, game.tabs.length) && !game.celebrated) {
         game.celebrated = true;
         purr(2200); // it has decided you're worth keeping
+        // and it says so: every paw answers at once, and the collar (lv6, set by
+        // setClasses above) appears on the cat for the rest of the session.
+        const scoreEl = scoreBox();
+        scoreEl?.classList.add('complete');
+        setTimeout(() => scoreEl?.classList.remove('complete'), 1400);
       }
     };
 
@@ -623,19 +734,19 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
        * little over half a screen of wherever the cat already is, still random
        * enough that it isn't always underfoot.
        */
-      const lo = 70;
-      const hi = Math.max(lo + 40, maxX() - 70);
-      const reach = (hi - lo) * 0.55;
+      const lo = minX() + 54;
+      const hi = Math.max(lo + 40, maxX() - 54);
+      const reach = (hi - lo) * 0.42;
       const near = s.x + (Math.random() * 2 - 1) * reach;
       s.treatX = Math.min(hi, Math.max(lo, near));
+      pending = slug;
       treatEl.style.transform = `translateX(${s.treatX}px)`;
       treatEl.removeAttribute('hidden');
       requestAnimationFrame(() => treatEl.classList.add('show'));
       // food beats everything short of a climb
       if (s.mode !== 'climb') {
         s.mode = 'fetch';
-        s.speed = 132; // a trot, not a stroll — it can see food
-
+        s.speed = 186; // it can see food; a stroll across the room read as a stall
         setClasses();
       }
     };
@@ -657,14 +768,12 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
      */
     const hunt = (now: number, dt: number): boolean => {
       if (petting) return true; // being fussed over; hold still
-      const preyFresh = now - prey.t < 2500;
-      // The fonder it is, the further up the page it will notice you — and the
-       // harder it runs. This is what the treats actually buy.
-      const preyLow = prey.y > window.innerHeight - (150 + game.level * 14);
+      const preyFresh = now - prey.t < prey.hold;
+      const preyLow = withinNotice(prey.y);
       const canHunt = s.mode === 'walk' || s.mode === 'idle' || s.mode === 'chase';
 
       if (canHunt && preyFresh && preyLow) {
-        const target = Math.min(maxX(), Math.max(0, prey.x - CAT_W / 2));
+        const target = Math.min(maxX(), Math.max(minX(), prey.x - CAT_W / 2));
         const dx = target - s.x;
         if (s.mode !== 'chase' && Math.abs(dx) > 34) {
           s.mode = 'chase';
@@ -685,7 +794,7 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
           }
           s.dir = dx > 0 ? 1 : -1;
           const sprint = Math.min(210, 62 + game.level * 6 + Math.abs(dx) * 0.35);
-          s.x = Math.max(0, Math.min(maxX(), s.x + s.dir * sprint * dt));
+          s.x = Math.max(minX(), Math.min(maxX(), s.x + s.dir * sprint * dt));
           root.classList.toggle('face-left', s.dir === -1);
           return true;
         }
@@ -742,7 +851,14 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
         // a short scramble up the side edge: rotate to vertical, feet on the wall
         const rot = s.climbSide === 1 ? -90 : 90;
         const cx = s.climbSide === 1 ? viewportW() - CAT_W / 2 - CAT_H / 2 : CAT_H / 2 - CAT_W / 2;
-        root.style.transform = `translate(${cx}px, ${-s.climbY}px) rotate(${rot}deg)`;
+        /*
+         * Rotating a 48x30 box a quarter turn about its own centre leaves the
+         * visual bottom (CAT_W - CAT_H) / 2 below where the unrotated box sat —
+         * which is the floor. Without this lift the cat starts every climb with
+         * 9px of itself buried under the bottom of the window.
+         */
+        const sink = (CAT_W - CAT_H) / 2;
+        root.style.transform = `translate(${cx}px, ${-s.climbY - sink}px) rotate(${rot}deg)`;
       } else {
         root.style.transform = `translateX(${s.x}px)`;
       }
@@ -781,7 +897,7 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
           setClasses();
         } else {
           s.dir = dx > 0 ? 1 : -1;
-          s.x = Math.max(0, Math.min(maxX(), s.x + s.dir * s.speed * dt));
+          s.x = Math.max(minX(), Math.min(maxX(), s.x + s.dir * s.speed * dt));
           root.classList.toggle('face-left', s.dir === -1);
         }
         render();
@@ -798,13 +914,19 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
       if (s.mode === 'walk' || s.mode === 'away') {
         s.x += s.dir * s.speed * dt;
         if (s.mode === 'walk') {
-          if ((s.dir === 1 && s.x >= maxX() - 4) || (s.dir === -1 && s.x <= 4)) {
+          if ((s.dir === 1 && s.x >= maxX() - 4) || (s.dir === -1 && s.x <= minX() + 4)) {
             const roll = Math.random();
+            // In a small room the wall is the edge of someone's reading, so the
+            // cat neither climbs it nor walks out through it: on a phone it stays
+            // in the room and simply turns around. On a wide screen both are
+            // exactly as they were.
+            const climbs = roomy() && roll < 0.3;
+            const leaves = roomy() && roll < 0.55;
             if (s.dir === 1 && cornerBusy()) {
               // Climbing this edge or slipping out through it would both take the
               // cat behind the back-to-top button. Just turn around.
               s.dir = -1;
-            } else if (roll < 0.3) {
+            } else if (climbs) {
               // climb a little way up this edge
               s.mode = 'climb';
               s.climbSide = s.dir === 1 ? 1 : -1;
@@ -813,7 +935,7 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
               s.until = now + 12000;
               // face "up" the wall
               s.dir = s.climbSide === 1 ? -1 : 1;
-            } else if (roll < 0.55) {
+            } else if (leaves) {
               // slip out of the room, come back from the other side
               s.mode = 'away';
               s.until = now + rand(2800, 7000);
@@ -861,7 +983,7 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
           if (s.climbY <= 0) {
             s.climbY = 0;
             s.mode = 'walk';
-            s.x = s.climbSide === 1 ? maxX() - 6 : 6;
+            s.x = s.climbSide === 1 ? maxX() - 6 : minX() + 6;
             s.dir = s.climbSide === 1 ? -1 : 1; // walk back into the room
             s.until = now + rand(3000, 6500);
             setClasses();
@@ -887,15 +1009,37 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
       setClasses();
     };
 
+    /**
+     * A boop. Touching the cat used to *always* send it running for up to nine
+     * seconds, which made the one interaction a phone had into a punishment: the
+     * only thing you could do to the cat was drive it away. Now it mostly startles
+     * and stays — and purrs if it likes you — and only occasionally bolts, which
+     * is what makes bolting read as a mood rather than a rule.
+     */
+    const boop = () => {
+      if (s.mode === 'climb') return;
+      if (Math.random() < 0.18) {
+        scamper();
+        return;
+      }
+      root.classList.add('startled');
+      setTimeout(() => root.classList.remove('startled'), 380);
+      s.mode = 'idle';
+      s.until = performance.now() + 1400;
+      setClasses();
+      if (game.level >= 2) purr(900);
+    };
+
     // Mouse: the cat is a real hit target, so clicking it boops the cat and
     // deliberately does not fall through to whatever is behind it.
-    root.querySelector('.cat-svg')?.addEventListener('click', () => scamper());
+    root.querySelector('.cat-svg')?.addEventListener('click', () => boop());
 
     /*
-     * Petting: rest the pointer on the cat for a beat and it purrs instead of
-     * bolting. Mouse only, and that is not an oversight — on touch the cat is
-     * `pointer-events: none` so it can never swallow a tap meant for a link
-     * underneath, and re-introducing a touch hold would undo that fix.
+     * Petting, mouse version: rest the pointer on the cat for a beat and it purrs
+     * instead of bolting. This one hangs off the cat element because a mouse has a
+     * hover to hang it on. Touch gets the same thing from the hit-test further
+     * down — the cat stays `pointer-events: none` there, so a hold still can't
+     * swallow a tap meant for a link underneath.
      */
     let petTimer: number | undefined;
     const svg = root.querySelector('.cat-svg');
@@ -920,20 +1064,64 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
       clearTimeout(petTimer);
     });
 
-    // Touch: the cat is not a hit target (see the CSS note), so hit-test its box
-    // here instead. The tap still reaches the link underneath — it just startles
-    // the cat on the way past.
+    /**
+     * Touch play.
+     *
+     * The cat is `pointer-events: none` on touch so it can never swallow a tap
+     * meant for a link, which left a phone with no way to play with it at all:
+     * no cursor to chase, no hover to pet, and a tap that only made it flee.
+     * Everything below is passive and hit-tested here, so nothing is consumed —
+     * a link under your finger still gets its tap, the cat just reacts on the way
+     * past.
+     *
+     * Two things you can do. Touch the cat: boop, and hold for a moment to pet it.
+     * Tap the floor near it: it comes over and pounces, which is the same
+     * chase-and-pounce a mouse gets, driven from one sighting instead of a stream
+     * of them.
+     */
+    const INTERACTIVE = 'a, button, input, select, textarea, summary, label, [role="button"]';
+    let touchPetTimer: number | undefined;
+    const endTouchPet = () => {
+      petting = false;
+      clearTimeout(touchPetTimer);
+    };
+
     window.addEventListener(
       'pointerdown',
       (e) => {
         if (e.pointerType === 'mouse') return;
+        if (s.mode === 'climb') return;
         const b = root.getBoundingClientRect();
-        if (e.clientX >= b.left && e.clientX <= b.right && e.clientY >= b.top && e.clientY <= b.bottom) {
-          scamper();
+        const onCat =
+          e.clientX >= b.left && e.clientX <= b.right && e.clientY >= b.top && e.clientY <= b.bottom;
+
+        if (onCat) {
+          boop();
+          // hold it and it settles into a purr instead
+          petting = true;
+          clearTimeout(touchPetTimer);
+          touchPetTimer = window.setTimeout(() => {
+            if (petting) {
+              root.classList.remove('startled');
+              purr(1400);
+            }
+          }, 450);
+          return;
         }
+
+        // A tap on a link is that link's tap, not an invitation to the cat.
+        if ((e.target as Element | null)?.closest?.(INTERACTIVE)) return;
+        // and only down here, where the cat lives — a tap at the top of a page
+        // has nothing to do with it
+        if (!withinNotice(e.clientY)) return;
+        // One sighting has to last the whole crossing, so it is held far longer
+        // than a cursor's would be.
+        sight(e.clientX, e.clientY, 5200);
       },
       { passive: true },
     );
+    window.addEventListener('pointerup', endTouchPet, { passive: true });
+    window.addEventListener('pointercancel', endTouchPet, { passive: true });
 
     const start = () => {
       if (running || motionReduced()) return;
@@ -963,6 +1151,9 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
      */
     onPage = () => {
       game.tabs = readTabs();
+      // A treat still on the floor of the page being left is credited now: you
+      // were there, which is the thing being rewarded.
+      if (pending) collect(pending);
       game.level = levelFor(game.found.size, game.tabs.length);
       renderScore();
       const tab = currentTab(game.tabs);
@@ -985,7 +1176,7 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
       // Park bottom-*left*. The right corner is where the back-to-top button
       // appears once you scroll, and a parked cat can't step out of its way —
       // it would simply end up sitting underneath it for the whole visit.
-      s.x = 20;
+      s.x = minX() + 6;
       s.mode = 'idle'; // keep the state machine honest, or setClasses re-walks it
       render();
       parkIdle();

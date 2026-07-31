@@ -63,6 +63,7 @@ const placeholderCover = isPlaceholderCover(entry.data.cover);
   ogImageAlt={`${entry.data.title} — ${category?.label ?? entry.data.category}`}
   ogType="article"
   hue={wash.hue}
+  tab={entry.data.category}
   schema={[
     entrySchema(entry, {
       url: new URL(Astro.url.pathname, Astro.site).toString(),

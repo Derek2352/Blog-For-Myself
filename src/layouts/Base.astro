@@ -27,6 +27,15 @@ interface Props {
   ogType?: 'website' | 'article';
   /** Warm wash hue (see src/lib/wash.ts). Category pages pass their own. */
   hue?: number;
+  /**
+   * Which category tab this page belongs to, if any. Only the cat's treat hunt
+   * reads it (as `data-cat-tab` on the body). It used to work the tab out from
+   * the first path segment, which meant only the seven category index pages ever
+   * hid a treat — and those are pages people pass through, not pages they read.
+   * An entry or a log naming its own category here is what lets reading anything
+   * count towards its section.
+   */
+  tab?: string;
   /** Optional JSON-LD structured data — one object or several. */
   schema?: Record<string, unknown> | Record<string, unknown>[];
 }
@@ -38,6 +47,7 @@ const {
   ogImageAlt,
   ogType = 'website',
   hue = 32,
+  tab,
   schema,
 } = Astro.props;
 const schemas = schema ? (Array.isArray(schema) ? schema : [schema]) : [];
@@ -154,7 +164,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
       )
     }
   </head>
-  <body class="flex min-h-full flex-col">
+  <body class="flex min-h-full flex-col" data-cat-tab={tab}>
     <div
       class:list={['page-bg', 'wash']}
       style={`--hue: ${hue}`}

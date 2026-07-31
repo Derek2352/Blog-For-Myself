@@ -44,6 +44,7 @@ const wash = resolveWash(category);
   description={category.blurb || undefined}
   ogImage={new URL(`/og/category/${category.slug}.png`, Astro.site).toString()}
   hue={wash.hue}
+  tab={category.slug}
 >
   <div class="wrap py-10">
     <header class="max-w-3xl">

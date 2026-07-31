@@ -67,6 +67,21 @@ export function captionFor(found: number, total: number): string {
   return `${clamped} / ${Math.max(0, total)} · ${levelName(clamped, total)}`;
 }
 
+/**
+ * `"3 / 6 treats"` — the line that sits under the paw row the rest of the time.
+ *
+ * The row used to be paws alone once the level-up caption had faded, which left a
+ * visitor looking at six 9px dots with nothing anywhere saying what they were. The
+ * word is the whole point of this function: it is what turns the dots into a tally
+ * of something. `captionFor` still supplies the flavour for the few seconds after a
+ * find.
+ */
+export function tallyFor(found: number, total: number): string {
+  const cap = Math.max(0, total);
+  const clamped = Math.max(0, Math.min(found, cap));
+  return `${clamped} / ${cap} treats`;
+}
+
 /** True once every tab's treat has been found (and there was anything to find). */
 export function isComplete(found: number, total: number): boolean {
   return total > 0 && found >= total;
