@@ -6,10 +6,13 @@ import tailwindcss from '@tailwindcss/vite';
 import remarkStripComments from './plugins/remark-strip-comments.mjs';
 import { paperLight, paperDark } from './plugins/shiki-paper-theme.mjs';
 
-// Set this to your production URL before deploying (also update public/robots.txt).
-// Cloudflare Pages default: https://<project>.pages.dev
+// The live origin. Astro bakes this into every absolute URL it generates —
+// canonical links, og:image and twitter:image, og:url, the JSON-LD `url`, the
+// sitemap and the RSS feed. If it doesn't match where the site is actually
+// served, all of those point at a host that doesn't resolve and the build says
+// nothing. Change it here and in public/robots.txt together.
 export default defineConfig({
-  site: 'https://blog-for-myself.pages.dev',
+  site: 'https://derekyung.ai.studio',
   output: 'static',
   /**
    * Preload internal pages before they're clicked, so browsing feels instant.
