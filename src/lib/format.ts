@@ -1,4 +1,16 @@
-/** Date helpers. All formatting is UTC-based so `2026-07-01` never drifts a day. */
+/** Formatting helpers. Date formatting is UTC-based so `2026-07-01` never drifts a day. */
+
+/** Estimated reading time from a markdown body: "~N min" (min 1). */
+export function readingTime(text: string): string {
+  const stripped = text
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/^##?\s.*$/gm, '')
+    .replace(/!?\[.*?\]\(.*?\)/g, '')
+    .trim();
+  const words = stripped.split(/\s+/).filter(Boolean).length;
+  const minutes = Math.max(1, Math.round(words / 200));
+  return `~${minutes} min`;
+}
 
 /** "2026-07" — used for month grouping keys and the mono rail. */
 export const monthKey = (d: Date): string => d.toISOString().slice(0, 7);

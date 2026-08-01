@@ -5,10 +5,10 @@
  * signature element in its full form.
  */
 import type { Entry } from '@/lib/content';
-import { entryCode, categoryHref } from '@/lib/content';
+import { entryCode, categoryHref, reflectionWritten } from '@/lib/content';
 import { categoryBySlug } from '@/data/categories';
 import { resolvePeriod } from '@/lib/periods';
-import { railRange, humanRange, monthKey } from '@/lib/format';
+import { railRange, humanRange, monthKey, readingTime } from '@/lib/format';
 import TagChip from './TagChip.astro';
 import LinkPill from './LinkPill.astro';
 
@@ -21,6 +21,8 @@ const d = entry.data;
 const code = await entryCode(entry);
 const category = categoryBySlug(d.category);
 const period = resolvePeriod(d.date);
+const hasReflection = reflectionWritten(entry);
+const readTime = hasReflection && entry.body ? readingTime(entry.body) : null;
 ---
 
 <aside
@@ -39,6 +41,14 @@ const period = resolvePeriod(d.date);
       </dd>
       <dd class="mt-0.5 text-muted">{humanRange(d.date, d.endDate)}</dd>
     </div>
+    {
+      readTime && (
+        <div class="py-3">
+          <dt class="rail">Read</dt>
+          <dd class="mt-1">{readTime}</dd>
+        </div>
+      )
+    }
     <div class="py-3">
       <dt class="rail">Period</dt>
       <dd class="mt-1">

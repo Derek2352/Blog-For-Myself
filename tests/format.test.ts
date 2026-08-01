@@ -6,6 +6,7 @@ import {
   humanMonth,
   humanRange,
   railRange,
+  readingTime,
 } from '@/lib/format';
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
@@ -39,5 +40,33 @@ describe('format helpers (UTC-stable)', () => {
     expect(railRange(d('2026-04-01'))).toBe('2026-04');
     expect(railRange(d('2026-04-01'), d('2026-04-20'))).toBe('2026-04'); // same month collapses
     expect(railRange(d('2026-04-01'), d('2026-06-01'))).toBe('2026-04 → 2026-06');
+  });
+});
+
+describe('readingTime', () => {
+  it('returns ~1 min for empty or very short text', () => {
+    expect(readingTime('')).toBe('~1 min');
+    expect(readingTime('Hello world')).toBe('~1 min');
+  });
+
+  it('estimates longer text at 200 wpm', () => {
+    const words = Array.from({ length: 600 }, (_, i) => `word${i}`).join(' ');
+    expect(readingTime(words)).toBe('~3 min');
+  });
+
+  it('strips markdown headings and HTML comments from the count', () => {
+    const body = [
+      '<!-- FIRST-PASS DRAFT -->',
+      '## What happened',
+      ...Array.from({ length: 200 }, (_, i) => `word${i}`),
+      '## How it felt',
+      '<!-- Placeholder -->',
+    ].join('\n');
+    expect(readingTime(body)).toBe('~1 min');
+  });
+
+  it('rounds to the nearest minute', () => {
+    const words = Array.from({ length: 350 }, (_, i) => `word${i}`).join(' ');
+    expect(readingTime(words)).toBe('~2 min');
   });
 });

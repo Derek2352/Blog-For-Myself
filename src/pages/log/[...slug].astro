@@ -15,7 +15,7 @@ import { categoryBySlug } from '@/data/categories';
 import { resolveWash } from '@/lib/wash';
 import { resolvePeriod } from '@/lib/periods';
 import { orientation } from '@/lib/images';
-import { isoDay } from '@/lib/format';
+import { isoDay, readingTime } from '@/lib/format';
 
 export async function getStaticPaths() {
   const logs = (await getLogs()).filter(logHasBody);
@@ -36,6 +36,7 @@ const ogImage = log.data.image
   : undefined;
 const wash = resolveWash(category ?? { slug: log.data.category });
 const imageLqip = log.data.image ? await lqipStyle("logs", log.id, "image") : undefined;
+const readTime = log.body ? readingTime(log.body) : null;
 ---
 
 <Base
@@ -71,6 +72,7 @@ const imageLqip = log.data.image ? await lqipStyle("logs", log.id, "image") : un
             </a>
           )
         }
+        {readTime && <span>{readTime}</span>}
       </p>
       {log.data.summary && <p class="mt-4 text-lg leading-relaxed text-muted">{log.data.summary}</p>}
     </header>

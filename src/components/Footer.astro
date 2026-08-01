@@ -11,7 +11,7 @@ const linkedin: string = site.linkedin;
       <p class="font-display text-xl">Derek Yung</p>
       <p class="mt-1 max-w-[28ch] text-muted">{site.tagline}</p>
     </div>
-    <div class="rail flex flex-col items-start gap-2" aria-label="Contact">
+    <nav class="rail flex flex-col items-start gap-2" aria-label="Contact">
       <a href={`mailto:${site.email}`}>{site.email}</a>
       <a href={site.github} target="_blank" rel="noopener">GitHub ↗</a>
       {linkedin && <a href={linkedin} target="_blank" rel="noopener">LinkedIn ↗</a>}
@@ -20,7 +20,7 @@ const linkedin: string = site.linkedin;
       {/* Without this the colophon was orphaned — built and searchable, but
           unreachable by clicking from anywhere on the site. */}
       <a href="/colophon/">How this site is made</a>
-    </div>
+    </nav>
     <div class="rail sm:text-right">
       <p>© {year} {site.name}</p>
     </div>
