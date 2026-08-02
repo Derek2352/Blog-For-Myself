@@ -212,6 +212,26 @@
     pointer-events: none;
   }
 
+  /* sticky header: always reachable, hides on scroll-down, returns on scroll-up */
+  body > header {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: color-mix(in srgb, var(--color-ground) 82%, transparent);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+  body > header.header-scrolled {
+    box-shadow: 0 1px 8px -2px rgb(30 20 10 / 0.08);
+  }
+  html.dark body > header.header-scrolled {
+    box-shadow: 0 1px 8px -2px rgb(0 0 0 / 0.25);
+  }
+  body > header.header-tucked {
+    transform: translateY(-100%);
+    pointer-events: none;
+  }
+
   /* category tab strip: two deliberate tiers on wide screens, one scrolling
      strip on narrow ones (see src/components/TabBar.astro for why). */
   .tabbar {
@@ -579,6 +599,21 @@
     from { opacity: 0; transform: translateY(8px); }
   }
 
+  /* header stays perfectly still while content transitions beneath it */
+  body > header { view-transition-name: site-header; }
+  ::view-transition-old(site-header),
+  ::view-transition-new(site-header) {
+    animation: none;
+    mix-blend-mode: normal;
+  }
+
+  /* header hide/show: smooth transform */
+  html:not(.a11y-motion) body > header {
+    transition:
+      transform 0.3s cubic-bezier(0.2, 0.6, 0.2, 1),
+      box-shadow 0.3s ease;
+  }
+
   /* smooth in-page anchor scrolling (jump rails, back-to-top, #links) */
   html { scroll-behavior: smooth; }
 
@@ -658,8 +693,18 @@
     html:not(.a11y-motion) .card:hover .card-cover img { transform: scale(1.02); }
 
     /* cards rise to meet the cursor */
-    html:not(.a11y-motion) .lift { transition: transform 0.25s cubic-bezier(0.2, 0.6, 0.2, 1); }
-    html:not(.a11y-motion) .lift:hover { transform: translateY(-3px); }
+    html:not(.a11y-motion) .lift {
+      transition:
+        transform 0.25s cubic-bezier(0.2, 0.6, 0.2, 1),
+        box-shadow 0.25s cubic-bezier(0.2, 0.6, 0.2, 1);
+    }
+    html:not(.a11y-motion) .lift:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 25px -8px rgb(30 20 10 / 0.10);
+    }
+    html.dark:not(.a11y-motion) .lift:hover {
+      box-shadow: 0 8px 25px -8px rgb(0 0 0 / 0.30);
+    }
 
     /* the 404 plane leans into takeoff */
     html:not(.a11y-motion) .fly-hint svg { transition: transform 0.3s cubic-bezier(0.2, 0.6, 0.2, 1); }
@@ -761,7 +806,8 @@ summary:active,
   html:not(.a11y-motion) [data-lb-open] {
     transition:
       transform 0.12s cubic-bezier(0.2, 0.6, 0.2, 1),
-      border-color 0.12s ease;
+      border-color 0.12s ease,
+      box-shadow 0.25s cubic-bezier(0.2, 0.6, 0.2, 1);
   }
   html:not(.a11y-motion) .card:has(:active),
   html:not(.a11y-motion) .panel:has(:active),

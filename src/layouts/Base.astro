@@ -279,6 +279,33 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
       document.addEventListener('astro:page-load', setupReveals);
       document.addEventListener('astro:page-load', setupBlurup);
 
+      // Sticky header: hide on scroll-down, show on scroll-up. Registered once
+      // on document (survives client-side navigation), same pattern as the
+      // reading progress bar. The header element is re-queried each frame.
+      let lastY = 0;
+      function onHeaderScroll(): void {
+        const header = document.querySelector<HTMLElement>('body > header');
+        if (!header) return;
+        const y = window.scrollY;
+        if (y <= 80) {
+          header.classList.remove('header-tucked', 'header-scrolled');
+        } else if (y > lastY + 5) {
+          if (!motionReduced()) header.classList.add('header-tucked');
+          header.classList.add('header-scrolled');
+        } else if (y < lastY - 5) {
+          header.classList.remove('header-tucked');
+          header.classList.add('header-scrolled');
+        }
+        lastY = y;
+      }
+      document.addEventListener('scroll', onHeaderScroll, { passive: true });
+
+      document.addEventListener('astro:page-load', () => {
+        lastY = window.scrollY;
+        const header = document.querySelector<HTMLElement>('body > header');
+        if (header) header.classList.remove('header-tucked');
+      });
+
       // After a client-side navigation, move focus to <main> and announce the
       // page title, so screen-reader users learn the page changed.
       document.addEventListener('astro:after-swap', () => {
