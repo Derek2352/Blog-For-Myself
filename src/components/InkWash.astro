@@ -1,10 +1,12 @@
 ---
 /**
- * 潑墨 — the ink wash behind the hero text.
+ * 飛白 — the brush stroke across the top of the hero.
  *
- * A wash anchored off the left edge whose edges breathe, plus a bloom that
- * follows the cursor and dries in about two seconds. All of the shape-making
- * lives in src/lib/ink.ts; this file is plumbing.
+ * One calligraphic sweep that paints itself on when you arrive, leaves splatter
+ * as the brush passes, and then keeps bleeding very slowly at the edges. The
+ * cursor flicks its own droplets, which dry in about two seconds.
+ *
+ * All of the shape-making lives in src/lib/ink.ts; this file is plumbing.
  *
  * Starts `hidden`, and only the script reveals it. So a reader with reduced
  * motion — or with JS off — gets no canvas at all rather than an empty one.
@@ -16,41 +18,45 @@
 <script>
   import { motionReduced } from '@/lib/a11y-prefs';
   import {
-    ENTRANCE_STAGGER_MS,
     INK_PEAK_ALPHA,
     INK_SEED,
+    STROKE_BAND,
     TRAIL_MS,
-    bloomLayout,
-    bloomOutline,
+    bristles,
+    creep,
     entrance,
+    splatter,
+    strokeSpine,
     trailAlpha,
-    type Bloom,
+    type Bristle,
+    type Splat,
+    type SpinePoint,
   } from '@/lib/ink';
 
-  /** Internal render scale. Ink is soft, so the upscale on blit *is* the blur. */
-  const SCALE = 0.3;
-  /** Ink drift is slow; 60fps would buy nothing and cost battery. */
-  const FRAME_MS = 1000 / 15;
-  const SEGMENTS = 72;
-  const DAB_SEGMENTS = 28;
-  /** Hard cap, so a fast scribble cannot grow the per-frame cost without limit. */
-  const MAX_DABS = 20;
-  /** Minimum travel between dabs, in buffer pixels. */
-  const DAB_GAP = 6;
   /**
-   * Breathing rate, in noise units per millisecond. The lattice is unit-spaced,
-   * so this crosses one cell roughly every six seconds — slow enough to never
-   * catch the eye, fast enough that the edge is visibly not where it was.
+   * Render at full size. The blooms this replaced rendered at 0.3× because the
+   * upscale doubled as their blur; a brush stroke is defined by crisp torn edges
+   * and hair-fine striations, so the same trick would erase the whole point.
+   * Canvas antialiases strokes natively, so nothing reads as harsh.
    */
-  const BREATH = 0.00016;
+  const SCALE = 1;
+  /** Ink creeps slowly; 60fps would buy nothing and cost battery. */
+  const FRAME_MS = 1000 / 15;
+  const SPINE_SAMPLES = 90;
+  const BRISTLES = 42;
+  const SPLATS = 90;
+  /** Hard cap, so a fast scribble cannot grow the per-frame cost without limit. */
+  const MAX_DABS = 22;
+  /** Minimum travel between cursor splats, in pixels. */
+  const DAB_GAP = 26;
+  /** How far the outer hairs trail the centre, as a fraction of the path. */
+  const TIP_ROUND = 0.03;
 
   interface Dab {
     x: number;
     y: number;
     r: number;
     born: number;
-    phase: number;
-    wobble: number;
   }
 
   let canvas: HTMLCanvasElement | null = null;
@@ -58,17 +64,19 @@
   let buf: HTMLCanvasElement | null = null;
   let bufCtx: CanvasRenderingContext2D | null = null;
   let host: HTMLElement | null = null;
-  let blooms: Bloom[] = [];
+  let spine: SpinePoint[] = [];
+  let hairs: Bristle[] = [];
+  let splats: Splat[] = [];
   let dabs: Dab[] = [];
   let raf = 0;
   let last = 0;
   let onScreen = false;
   let lastDabX = 0;
   let lastDabY = 0;
-  /** When the wash started arriving. 0 until the first painted frame. */
-  let arrivedAt = 0;
   let ink = '42, 36, 30';
   let io: IntersectionObserver | null = null;
+  /** When the brush started travelling. 0 until the first painted frame. */
+  let arrivedAt = 0;
 
   // Capability, not width: this is the correct question for "is there a real
   // cursor". A phone drag over the hero means "scroll", and painting with it
@@ -92,82 +100,98 @@
   }
 
   /**
-   * Fill one bloom: a closed curve through the displaced outline, filled with a
-   * radial gradient. Midpoint quadratics rather than straight segments — at 0.3×
-   * a 72-gon still shows its facets once blown back up.
+   * Draw the brush.
+   *
+   * Each hair is walked along the spine and emitted as a run of subpaths,
+   * broken wherever that hair ran dry. Those breaks are the white — nothing
+   * here draws a striation, it just declines to draw the hair.
+   *
+   * `reach` is how far along the path the brush has travelled, which is what
+   * makes the entrance a stroke being made rather than a shape fading up.
    */
-  function paint(
-    ctx: CanvasRenderingContext2D,
-    cx: number,
-    cy: number,
-    radii: number[],
-    base: number,
-    alpha: number,
-  ): void {
-    const n = radii.length;
-    if (n < 3 || alpha <= 0) return;
-    const px = new Array<number>(n);
-    const py = new Array<number>(n);
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2;
-      px[i] = cx + Math.cos(a) * radii[i]!;
-      py[i] = cy + Math.sin(a) * radii[i]!;
+  function drawBrush(ctx: CanvasRenderingContext2D, reach: number, now: number): void {
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const hair of hairs) {
+      let open = false;
+      let runAlpha = 0;
+      // The brush head is round, so its outer hairs trail its centre. Stopping
+      // every hair at the same instant gave the travelling stroke a hard
+      // vertical leading edge that read as a clipping mask; letting the edges
+      // lag shapes a real tip, for the same reason the striations work — model
+      // the brush and the look follows.
+      const tip = reach - Math.abs(hair.offset) * TIP_ROUND;
+      for (let i = 0; i < spine.length; i++) {
+        const p = spine[i]!;
+        const inkLeft = hair.breaks[i]!;
+        // past this hair's tip, or it has no ink here
+        if (p.t > tip || inkLeft <= 0) {
+          if (open) {
+            ctx.globalAlpha = runAlpha;
+            ctx.stroke();
+            open = false;
+          }
+          continue;
+        }
+        const off = (hair.offset + creep(p.t, now, INK_SEED)) * p.width;
+        const x = p.x + p.nx * off;
+        const y = p.y + p.ny * off;
+        if (!open) {
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineWidth = Math.max(0.6, (p.width * 2) / hairs.length + 0.5);
+          runAlpha = inkLeft;
+          open = true;
+        } else {
+          ctx.lineTo(x, y);
+          // a run takes the darkest ink it passed through
+          if (inkLeft > runAlpha) runAlpha = inkLeft;
+        }
+      }
+      if (open) {
+        ctx.globalAlpha = runAlpha;
+        ctx.stroke();
+      }
     }
+    ctx.globalAlpha = 1;
+  }
+
+  /** Hard-edged droplet. No gradient — a soft dot beside a dry brush reads wrong. */
+  function drawSplat(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, a: number): void {
+    if (a <= 0 || r <= 0) return;
+    ctx.globalAlpha = a;
     ctx.beginPath();
-    ctx.moveTo((px[n - 1]! + px[0]!) / 2, (py[n - 1]! + py[0]!) / 2);
-    for (let i = 0; i < n; i++) {
-      const j = (i + 1) % n;
-      ctx.quadraticCurveTo(px[i]!, py[i]!, (px[i]! + px[j]!) / 2, (py[i]! + py[j]!) / 2);
-    }
-    ctx.closePath();
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(1, base));
-    g.addColorStop(0, `rgba(${ink}, ${alpha})`);
-    g.addColorStop(0.5, `rgba(${ink}, ${alpha * 0.42})`);
-    g.addColorStop(1, `rgba(${ink}, 0)`);
-    ctx.fillStyle = g;
+    ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
+    ctx.globalAlpha = 1;
   }
 
   function draw(now: number): void {
     if (!bufCtx || !buf || !view || !canvas) return;
-    const t = now * BREATH;
     // Anchored to the first painted frame rather than to mount, so arriving with
     // the hero already scrolled past does not spend the entrance unseen.
     if (!arrivedAt) arrivedAt = now;
-    const age = now - arrivedAt;
+    const { spread, soak } = entrance(now - arrivedAt);
 
     bufCtx.clearRect(0, 0, buf.width, buf.height);
-    for (let i = 0; i < blooms.length; i++) {
-      const b = blooms[i]!;
-      const { spread, soak } = entrance(age, i * ENTRANCE_STAGGER_MS);
-      if (soak <= 0) continue;
-      // The strike is small and concentrated; the paper opens it out.
-      const r = b.r * (0.12 + 0.88 * spread);
-      const shape: Bloom = { ...b, r };
-      paint(bufCtx, b.x, b.y, bloomOutline(shape, t + b.phase, SEGMENTS), r, b.weight * soak);
+    bufCtx.strokeStyle = `rgba(${ink}, 1)`;
+    bufCtx.fillStyle = `rgba(${ink}, 1)`;
+
+    drawBrush(bufCtx, spread, now);
+    for (const s of splats) {
+      if (s.at <= spread) drawSplat(bufCtx, s.x, s.y, s.r, 1);
     }
 
-    // Dabs are drawn after the wash and aged out here, so the list can never
-    // outlive the ink that justifies it.
+    // Cursor droplets are drawn after the stroke and aged out here, so the list
+    // can never outlive the ink that justifies it.
     if (dabs.length) {
       dabs = dabs.filter((d) => now - d.born < TRAIL_MS);
-      for (const d of dabs) {
-        const a = trailAlpha(now - d.born);
-        const shape: Bloom = {
-          x: d.x,
-          y: d.y,
-          r: d.r,
-          weight: 1,
-          phase: d.phase,
-          wobble: d.wobble,
-        };
-        paint(bufCtx, d.x, d.y, bloomOutline(shape, t + d.phase, DAB_SEGMENTS), d.r, a * 0.85);
-      }
+      for (const d of dabs) drawSplat(bufCtx, d.x, d.y, d.r, trailAlpha(now - d.born));
     }
 
-    // One place, and only one, decides how dark this layer is ever allowed to be.
+    // One place, and only one, decides how present this layer is on the page.
     view.clearRect(0, 0, canvas.width, canvas.height);
-    view.globalAlpha = INK_PEAK_ALPHA;
+    view.globalAlpha = INK_PEAK_ALPHA * soak;
     view.drawImage(buf, 0, 0, canvas.width, canvas.height);
     view.globalAlpha = 1;
   }
@@ -209,36 +233,50 @@
     const rect = canvas.getBoundingClientRect();
     const w = Math.max(1, Math.round(rect.width));
     const h = Math.max(1, Math.round(rect.height));
-    // DPR is ignored on purpose: this layer is blurred by design, so paying for
-    // retina pixels would buy nothing visible.
+    // DPR is ignored on purpose: this sits behind text at a third opacity, so
+    // retina pixels would cost real memory for nothing anyone can see.
     canvas.width = w;
     canvas.height = h;
     buf.width = Math.max(1, Math.round(w * SCALE));
     buf.height = Math.max(1, Math.round(h * SCALE));
-    blooms = bloomLayout(buf.width, buf.height, INK_SEED);
+    // Measure where the hero's content actually starts rather than assuming a
+    // fraction of its height. The two disagree badly between breakpoints: the
+    // stacked mobile hero is much taller, so a fixed fraction reached well past
+    // its kicker and laid the stroke over the headline.
+    const first = host?.querySelector<HTMLElement>(':scope > *:not(canvas)') ?? null;
+    const contentTop = first
+      ? first.getBoundingClientRect().top - rect.top
+      : buf.height * STROKE_BAND;
+    const band = Math.max(24, Math.min(buf.height * STROKE_BAND, contentTop - 8));
+
+    // Computed once, never per frame. Re-deriving the hair pattern each frame
+    // would make the striations crawl like static instead of holding still
+    // while only the wet edge moves.
+    spine = strokeSpine(buf.width, buf.height, INK_SEED, SPINE_SAMPLES, band);
+    hairs = bristles(spine, BRISTLES, INK_SEED);
+    splats = splatter(spine, SPLATS, INK_SEED, band);
     if (raf) draw(performance.now());
   }
 
   function onPointerMove(e: PointerEvent): void {
-    if (!canvas || !buf || dabs.length >= MAX_DABS) return;
+    if (!canvas || dabs.length >= MAX_DABS) return;
     const rect = canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
-    const x = ((e.clientX - rect.left) / rect.width) * buf.width;
-    const y = ((e.clientY - rect.top) / rect.height) * buf.height;
-    if (x < 0 || y < 0 || x > buf.width || y > buf.height) return;
+    const x = ((e.clientX - rect.left) / rect.width) * canvas.width * SCALE;
+    const y = ((e.clientY - rect.top) / rect.height) * canvas.height * SCALE;
+    if (x < 0 || y < 0 || x > canvas.width * SCALE || y > canvas.height * SCALE) return;
     if (Math.hypot(x - lastDabX, y - lastDabY) < DAB_GAP) return;
     lastDabX = x;
     lastDabY = y;
-    const span = Math.max(buf.width, buf.height);
-    dabs.push({
-      x,
-      y,
-      r: span * (0.035 + Math.random() * 0.025),
-      born: performance.now(),
-      phase: Math.random() * Math.PI * 2,
-      wobble: 0.38 + Math.random() * 0.16,
-    });
-    // A dab dropped while the loop is parked would otherwise sit unpainted.
+    // Scaled from the brush's own head, not from the viewport. Sizing these off
+    // the canvas made them roughly five times the brush's splatter — blobs
+    // beside fine mist, which read as two different media on one surface.
+    // Deliberately a little larger than that mist, since a flick you cannot see
+    // is not worth the listener.
+    const scale = spine[0]?.width ?? 12;
+    const u = Math.random();
+    dabs.push({ x, y, r: scale * (0.08 + u * u * u * 0.5), born: performance.now() });
+    // A droplet flicked while the loop is parked would otherwise sit unpainted.
     sync();
   }
 
@@ -266,7 +304,7 @@
 
     window.addEventListener('resize', resize, { passive: true });
     // The canvas is pointer-events:none, so the hero section carries the
-    // listener. Passive — painting must never interfere with scrolling.
+    // listener. Passive — flicking ink must never interfere with scrolling.
     if (finePointer.matches && host) {
       host.addEventListener('pointermove', onPointerMove, { passive: true });
     }
@@ -293,11 +331,13 @@
     buf = null;
     bufCtx = null;
     host = null;
-    blooms = [];
+    spine = [];
+    hairs = [];
+    splats = [];
     dabs = [];
     onScreen = false;
-    // Landing on the page again should look like landing on it, so the wash
-    // arrives from nothing rather than snapping back to wherever it left off.
+    // Landing on the page again should look like landing on it, so the brush
+    // travels again rather than snapping back to a finished stroke.
     arrivedAt = 0;
   }
 
@@ -317,15 +357,15 @@
 
   document.addEventListener('visibilitychange', sync);
 
-  // Both halves of motionReduced() can change while the page is open: the OS
-  // setting, and the site's own "Reduce motion" toggle (an <html> class). The
-  // same observer catches the theme class, which is when the ink colour flips.
   finePointer.addEventListener('change', () => {
     if (!host) return;
     host.removeEventListener('pointermove', onPointerMove);
     if (finePointer.matches) host.addEventListener('pointermove', onPointerMove, { passive: true });
   });
 
+  // Both halves of motionReduced() can change while the page is open: the OS
+  // setting, and the site's own "Reduce motion" toggle (an <html> class). The
+  // same observer catches the theme class, which is when the ink colour flips.
   matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', syncMotion);
   new MutationObserver(syncMotion).observe(document.documentElement, {
     attributes: true,

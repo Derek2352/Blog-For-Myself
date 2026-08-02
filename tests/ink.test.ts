@@ -1,17 +1,25 @@
 import { describe, it, expect } from 'vitest';
 import {
+  CREEP_MAX,
   ENTRANCE_MS,
   INK_PEAK_ALPHA,
   INK_SEED,
+  STROKE_BAND,
   TRAIL_MS,
-  mulberry32,
-  valueNoise2,
-  fbm,
-  bloomLayout,
-  bloomOutline,
+  bristles,
+  creep,
   entrance,
+  fbm,
+  mulberry32,
+  splatter,
+  strokeSpine,
   trailAlpha,
+  valueNoise2,
 } from '@/lib/ink';
+
+const W = 1152;
+const H = 520;
+const spine = strokeSpine(W, H);
 
 describe('mulberry32', () => {
   it('is deterministic for a given seed', () => {
@@ -49,8 +57,6 @@ describe('noise', () => {
   });
 
   it('valueNoise2 is continuous — neighbours never jump', () => {
-    // the edge of a bloom is built from this, so a discontinuity would show as
-    // a notch in the outline
     let prev = valueNoise2(0, 0.5, INK_SEED);
     for (let i = 1; i <= 200; i++) {
       const v = valueNoise2(i * 0.01, 0.5, INK_SEED);
@@ -61,102 +67,226 @@ describe('noise', () => {
 
   it('fbm stays in [0,1] and is deterministic', () => {
     for (let i = 0; i < 200; i++) {
-      const x = i * 0.13;
-      const y = i * 0.29;
-      const v = fbm(x, y, INK_SEED);
+      const v = fbm(i * 0.13, i * 0.29, INK_SEED);
       expect(v).toBeGreaterThanOrEqual(0);
       expect(v).toBeLessThanOrEqual(1);
-      expect(fbm(x, y, INK_SEED)).toBe(v);
+      expect(fbm(i * 0.13, i * 0.29, INK_SEED)).toBe(v);
     }
   });
 });
 
-describe('bloomLayout', () => {
-  const W = 800;
-  const H = 500;
-
+describe('strokeSpine', () => {
   it('is deterministic for the shipped seed', () => {
-    expect(bloomLayout(W, H)).toEqual(bloomLayout(W, H, INK_SEED));
+    expect(strokeSpine(W, H)).toEqual(strokeSpine(W, H, INK_SEED));
   });
 
-  it('anchors the primary wash off the left edge', () => {
-    // the composition depends on the big bloom arriving from outside the frame;
-    // a positive centre would read as a blot sitting in the middle
-    const [primary] = bloomLayout(W, H);
-    expect(primary!.x).toBeLessThanOrEqual(0);
-    expect(primary!.weight).toBe(1);
-  });
-
-  it('keeps every satellite in the left half, clear of the photo column', () => {
-    const [, ...satellites] = bloomLayout(W, H);
-    expect(satellites.length).toBeGreaterThanOrEqual(2);
-    for (const s of satellites) {
-      expect(s.x).toBeGreaterThan(0);
-      expect(s.x).toBeLessThan(W * 0.5);
+  it('travels left to right without doubling back', () => {
+    for (let i = 1; i < spine.length; i++) {
+      expect(spine[i]!.x).toBeGreaterThan(spine[i - 1]!.x);
     }
   });
 
-  it('gives every bloom a usable radius, weight and wobble', () => {
-    for (const b of bloomLayout(W, H)) {
-      expect(b.r).toBeGreaterThan(0);
-      expect(b.weight).toBeGreaterThan(0);
-      expect(b.weight).toBeLessThanOrEqual(1);
-      // wobble >= 1 would let the outline collapse through zero
-      expect(b.wobble).toBeGreaterThan(0);
-      expect(b.wobble).toBeLessThan(1);
-      expect(b.y).toBeGreaterThan(0);
-      expect(b.y).toBeLessThan(H);
+  it('enters and leaves the frame rather than starting inside it', () => {
+    // a stroke that begins and ends on screen reads as a shape, not a gesture
+    expect(spine[0]!.x).toBeLessThan(0);
+    expect(spine[spine.length - 1]!.x).toBeGreaterThan(W);
+  });
+
+  it('stays in the top band, clear of the headline', () => {
+    // Everything below STROKE_BAND is the kicker and the h1. The stroke plus its
+    // own half-width must clear that, and must also not run off the top — a
+    // stroke clipped by the canvas edge reads as a mistake rather than a mark.
+    // `OrEqual` because the fit maps the extremes exactly onto the band — the
+    // mark is sized to the space rather than fitting inside it by luck.
+    for (const p of spine) {
+      expect(p.y - p.width).toBeGreaterThan(0);
+      expect(p.y + p.width).toBeLessThanOrEqual(H * STROKE_BAND);
     }
   });
 
-  it('scales with the box it is given', () => {
-    const small = bloomLayout(400, 250)[0]!;
-    const large = bloomLayout(800, 500)[0]!;
-    expect(large.r).toBeGreaterThan(small.r);
-  });
-});
-
-describe('bloomOutline', () => {
-  const bloom = bloomLayout(800, 500)[0]!;
-
-  it('returns one radius per segment, all positive', () => {
-    const radii = bloomOutline(bloom, 0, 64);
-    expect(radii).toHaveLength(64);
-    for (const r of radii) expect(r).toBeGreaterThan(0);
-  });
-
-  it('stays within the wobble envelope', () => {
-    const lo = bloom.r * (1 - bloom.wobble);
-    const hi = bloom.r * (1 + bloom.wobble);
-    for (const t of [0, 0.7, 3.2, 11.5]) {
-      for (const r of bloomOutline(bloom, t, 64)) {
-        expect(r).toBeGreaterThanOrEqual(lo);
-        expect(r).toBeLessThanOrEqual(hi);
+  it('fits the band for any seed and any box, not just the shipped one', () => {
+    // The fit is done by rescaling to measured extent rather than by picking
+    // constants that happen to land inside. If that ever regresses to tuned
+    // numbers, some seed will clip and nobody will notice until it ships.
+    for (const seed of [1, 42, 20260802, 99991, 123456789]) {
+      for (const [w, h] of [[1152, 520], [390, 700], [768, 460], [1600, 600]]) {
+        for (const p of strokeSpine(w, h, seed)) {
+          expect(p.y - p.width).toBeGreaterThanOrEqual(0);
+          expect(p.y + p.width).toBeLessThanOrEqual(h * STROKE_BAND + 0.001);
+        }
       }
     }
   });
 
-  it('closes seamlessly — the last segment meets the first', () => {
-    // noise is sampled on a circle so the outline wraps; a seam would show as a
-    // crease running out from the centre
-    const radii = bloomOutline(bloom, 1.3, 128);
-    const step = Math.abs(radii[0]! - radii[1]!);
-    const wrap = Math.abs(radii[0]! - radii[radii.length - 1]!);
-    expect(wrap).toBeLessThan(step * 3 + bloom.r * 0.01);
+  it('honours an explicit band, which is how the phone layout is kept clear', () => {
+    // The component measures where the hero's content starts and passes it in;
+    // the height fraction is only a fallback. A stacked mobile hero is taller
+    // than the desktop one while its kicker sits higher, so the fraction alone
+    // laid the stroke across the headline at 390px.
+    for (const band of [40, 64, 90]) {
+      for (const p of strokeSpine(390, 760, INK_SEED, 90, band)) {
+        expect(p.y - p.width).toBeGreaterThanOrEqual(0);
+        expect(p.y + p.width).toBeLessThanOrEqual(band + 0.001);
+      }
+    }
   });
 
-  it('breathes — the edge moves as t advances, deterministically', () => {
-    const a = bloomOutline(bloom, 0, 64);
-    const b = bloomOutline(bloom, 2.5, 64);
-    expect(b).not.toEqual(a);
-    expect(bloomOutline(bloom, 2.5, 64)).toEqual(b);
+  it('leaves headroom at the top so the head is not clipped', () => {
+    // bristle offset, creep and line width all reach past the spine half-width
+    const highest = Math.min(...spine.map((p) => p.y - p.width));
+    expect(highest).toBeGreaterThan(H * STROKE_BAND * 0.05);
   });
 
-  it('does not drift the centre — only the radius changes', () => {
-    // guards the "breathes in place" decision: bloomOutline may never return
-    // anything that would move the bloom, so its only output is radii
-    const radii = bloomOutline(bloom, 4, 32);
-    expect(radii.every((r) => typeof r === 'number')).toBe(true);
+  it('runs t from 0 to 1 in order', () => {
+    expect(spine[0]!.t).toBe(0);
+    expect(spine[spine.length - 1]!.t).toBe(1);
+    for (let i = 1; i < spine.length; i++) {
+      expect(spine[i]!.t).toBeGreaterThan(spine[i - 1]!.t);
+    }
+  });
+
+  it('tapers from a loaded head to a dry tail', () => {
+    const head = spine[0]!.width;
+    const tail = spine[spine.length - 1]!.width;
+    expect(head).toBeGreaterThan(0);
+    expect(tail).toBeGreaterThan(0);
+    expect(tail).toBeLessThan(head * 0.4);
+  });
+
+  it('carries a unit normal at every sample', () => {
+    for (const p of spine) {
+      expect(Math.hypot(p.nx, p.ny)).toBeCloseTo(1, 6);
+    }
+  });
+
+  it('scales with the box it is given', () => {
+    const small = strokeSpine(600, 260);
+    expect(small[0]!.width).toBeLessThan(spine[0]!.width);
+  });
+});
+
+describe('bristles — where the 飛白 comes from', () => {
+  const hairs = bristles(spine, 42);
+
+  it('is deterministic', () => {
+    expect(bristles(spine, 42)).toEqual(bristles(spine, 42, INK_SEED));
+  });
+
+  it('spans the brush without escaping it', () => {
+    for (const h of hairs) {
+      expect(h.offset).toBeGreaterThanOrEqual(-1);
+      expect(h.offset).toBeLessThanOrEqual(1);
+    }
+    // hairs on both sides of the spine
+    expect(hairs.some((h) => h.offset < -0.3)).toBe(true);
+    expect(hairs.some((h) => h.offset > 0.3)).toBe(true);
+  });
+
+  it('gives one ink value per spine sample, all in [0,1]', () => {
+    for (const h of hairs) {
+      expect(h.breaks).toHaveLength(spine.length);
+      for (const v of h.breaks) {
+        expect(v).toBeGreaterThanOrEqual(0);
+        expect(v).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it('actually breaks — otherwise there is no white', () => {
+    // the entire effect is hairs declining to draw; a brush with no gaps is a
+    // ribbon
+    const total = hairs.length * spine.length;
+    const dry = hairs.reduce((n, h) => n + h.breaks.filter((v) => v === 0).length, 0);
+    expect(dry).toBeGreaterThan(total * 0.15);
+    expect(dry).toBeLessThan(total * 0.9);
+  });
+
+  it('dries out toward the tail', () => {
+    // the head should hold far more ink than the tail, which is what makes it
+    // read as one loaded stroke rather than as hatching
+    const third = Math.floor(spine.length / 3);
+    const inkOver = (from: number, to: number) =>
+      hairs.reduce((sum, h) => sum + h.breaks.slice(from, to).reduce((a, b) => a + b, 0), 0);
+    expect(inkOver(0, third)).toBeGreaterThan(inkOver(spine.length - third, spine.length) * 2);
+  });
+
+  it('frays at the edges before the middle', () => {
+    const mid = hairs.filter((h) => Math.abs(h.offset) < 0.3);
+    const edge = hairs.filter((h) => Math.abs(h.offset) > 0.7);
+    const meanInk = (set: typeof hairs) =>
+      set.reduce((s, h) => s + h.breaks.reduce((a, b) => a + b, 0) / h.breaks.length, 0) /
+      (set.length || 1);
+    expect(meanInk(mid)).toBeGreaterThan(meanInk(edge));
+  });
+});
+
+describe('splatter', () => {
+  const ceiling = H * STROKE_BAND;
+  const splats = splatter(spine, 90, INK_SEED, ceiling);
+
+  it('is deterministic', () => {
+    expect(splats).toEqual(splatter(spine, 90, INK_SEED, ceiling));
+  });
+
+  it('respects the ceiling — droplets were what landed on the headline', () => {
+    // splatter is thrown further than the stroke is wide by definition, so the
+    // band that constrains the spine cannot constrain this for free
+    for (const s of splats) {
+      expect(s.y + s.r).toBeLessThanOrEqual(ceiling);
+    }
+  });
+
+  it('still produces a full set under the ceiling', () => {
+    // the bounded retry must not quietly return half a scatter
+    expect(splats.length).toBe(90);
+  });
+
+  it('is mostly fine mist with a few fat drops', () => {
+    // an even distribution reads as polka dots
+    const radii = splats.map((s) => s.r).sort((a, b) => a - b);
+    const median = radii[Math.floor(radii.length / 2)]!;
+    const largest = radii[radii.length - 1]!;
+    expect(largest).toBeGreaterThan(median * 3);
+    expect(radii.filter((r) => r < median * 1.5).length).toBeGreaterThan(splats.length * 0.5);
+  });
+
+  it('gives every drop a positive radius and a moment it was flicked', () => {
+    for (const s of splats) {
+      expect(s.r).toBeGreaterThan(0);
+      expect(s.at).toBeGreaterThanOrEqual(0);
+      expect(s.at).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('scatters near the stroke rather than across the whole box', () => {
+    const head = spine[0]!.width;
+    for (const s of splats) {
+      const nearest = Math.min(...spine.map((p) => Math.hypot(p.x - s.x, p.y - s.y)));
+      expect(nearest).toBeLessThan(head * 8);
+    }
+  });
+});
+
+describe('creep — the wet edge', () => {
+  it('stays inside its bound, so it can never restructure the gesture', () => {
+    for (let t = 0; t <= 1; t += 0.02) {
+      for (const ms of [0, 1200, 45_000, 600_000]) {
+        const c = creep(t, ms);
+        expect(Math.abs(c)).toBeLessThanOrEqual(CREEP_MAX);
+      }
+    }
+  });
+
+  it('varies along the stroke, not just over time', () => {
+    // a uniform value would inflate and deflate the whole shape, which reads as
+    // breathing rather than as ink soaking outward
+    const sampled = new Set<number>();
+    for (let t = 0; t <= 1; t += 0.05) sampled.add(Number(creep(t, 5000).toFixed(6)));
+    expect(sampled.size).toBeGreaterThan(10);
+  });
+
+  it('is deterministic', () => {
+    expect(creep(0.4, 9000)).toBe(creep(0.4, 9000, INK_SEED));
   });
 });
 
@@ -166,14 +296,6 @@ describe('entrance', () => {
     expect(entrance(-100)).toEqual({ spread: 0, soak: 0 });
     expect(entrance(ENTRANCE_MS)).toEqual({ spread: 1, soak: 1 });
     expect(entrance(ENTRANCE_MS * 10)).toEqual({ spread: 1, soak: 1 });
-  });
-
-  it('holds at nothing until its delay has passed', () => {
-    const delay = 500;
-    expect(entrance(delay - 1, delay).soak).toBe(0);
-    expect(entrance(delay + 1, delay).soak).toBeGreaterThan(0);
-    // a staggered bloom finishes later than an unstaggered one
-    expect(entrance(ENTRANCE_MS, delay).spread).toBeLessThan(1);
   });
 
   it('both envelopes rise monotonically and stay in [0,1]', () => {
@@ -190,18 +312,20 @@ describe('entrance', () => {
     }
   });
 
-  it('commits the mark before it spreads', () => {
-    // the whole point: ink is dark on landing and *then* opens out. If soak
-    // ever trailed spread the wash would read as an image fading in.
+  it('does not rush the travel — the stroke must be watchable', () => {
+    // An ease-out had the tip 72% along by a third of the way through, which
+    // made the entrance look like a finished stroke fading up.
+    expect(entrance(ENTRANCE_MS / 3).spread).toBeLessThan(0.4);
+    expect(entrance(ENTRANCE_MS / 2).spread).toBeCloseTo(0.5, 1);
+  });
+
+  it('commits the mark before the brush finishes travelling', () => {
+    // if soak ever trailed spread, the stroke would read as an image fading in
+    // rather than as a brush being drawn across the paper
     for (let ms = 25; ms < ENTRANCE_MS; ms += 25) {
       const { spread, soak } = entrance(ms);
       expect(soak).toBeGreaterThan(spread);
     }
-  });
-
-  it('is fully opaque by a third of the way in', () => {
-    expect(entrance(ENTRANCE_MS / 3).soak).toBeCloseTo(1, 5);
-    expect(entrance(ENTRANCE_MS / 3).spread).toBeLessThan(0.75);
   });
 });
 
@@ -225,15 +349,10 @@ describe('trailAlpha', () => {
 });
 
 describe('the alpha ceiling', () => {
-  it('never exceeds half the page wash', () => {
-    // the wash gradient sits at 0.10; the whole design rests on the ink being
-    // quieter than it. Raising this is a design decision, not a tuning tweak.
-    expect(INK_PEAK_ALPHA).toBeLessThanOrEqual(0.05);
-  });
-
-  it('keeps every bloom at or under the ceiling once weighted', () => {
-    for (const b of bloomLayout(800, 500)) {
-      expect(b.weight * INK_PEAK_ALPHA).toBeLessThanOrEqual(INK_PEAK_ALPHA);
-    }
+  it('stays a background, not a foreground', () => {
+    // "confident, a real graphic element" — clearly ink, still clearly behind
+    // the words. Raising this past a third is a design decision, not a tweak.
+    expect(INK_PEAK_ALPHA).toBeLessThanOrEqual(0.35);
+    expect(INK_PEAK_ALPHA).toBeGreaterThan(0.2);
   });
 });
