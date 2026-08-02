@@ -17,6 +17,12 @@ export const INK_PEAK_ALPHA = 0.05;
 /** How long a cursor dab takes to dry, in milliseconds. */
 export const TRAIL_MS = 2000;
 
+/** How long the wash takes to spread when you arrive on the page. */
+export const ENTRANCE_MS = 2200;
+
+/** Each bloom lands this much later than the one before it. */
+export const ENTRANCE_STAGGER_MS = 190;
+
 /** The one composition every visitor sees. */
 export const INK_SEED = 20260802;
 
@@ -156,6 +162,33 @@ export function bloomOutline(
     out[i] = b.r * (1 - b.wobble + b.wobble * 2 * n);
   }
   return out;
+}
+
+/**
+ * The arrival: ink meeting paper.
+ *
+ * Two envelopes rather than one, because a wash that simply faded up would read
+ * as an image loading. Real ink is dark the instant it lands and *then* spreads,
+ * so `soak` (opacity) runs to full in the first third while `spread` (radius) is
+ * still travelling — the mark commits, then it blooms outward and slows as the
+ * paper takes it.
+ *
+ * Both are 0 before `delayMs`, so staggering the blooms makes the wash land in
+ * pieces instead of inflating as one shape.
+ */
+export function entrance(
+  elapsedMs: number,
+  delayMs = 0,
+): { spread: number; soak: number } {
+  const p = (elapsedMs - delayMs) / ENTRANCE_MS;
+  if (p <= 0) return { spread: 0, soak: 0 };
+  if (p >= 1) return { spread: 1, soak: 1 };
+  const k = 1 - p;
+  // cubic ease-out: fast strike, long settle
+  const spread = 1 - k * k * k;
+  const s = Math.min(1, p * 3);
+  const soak = 1 - (1 - s) * (1 - s);
+  return { spread, soak };
 }
 
 /**

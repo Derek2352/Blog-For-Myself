@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  ENTRANCE_MS,
   INK_PEAK_ALPHA,
   INK_SEED,
   TRAIL_MS,
@@ -8,6 +9,7 @@ import {
   fbm,
   bloomLayout,
   bloomOutline,
+  entrance,
   trailAlpha,
 } from '@/lib/ink';
 
@@ -155,6 +157,51 @@ describe('bloomOutline', () => {
     // anything that would move the bloom, so its only output is radii
     const radii = bloomOutline(bloom, 4, 32);
     expect(radii.every((r) => typeof r === 'number')).toBe(true);
+  });
+});
+
+describe('entrance', () => {
+  it('starts from nothing and finishes fully arrived', () => {
+    expect(entrance(0)).toEqual({ spread: 0, soak: 0 });
+    expect(entrance(-100)).toEqual({ spread: 0, soak: 0 });
+    expect(entrance(ENTRANCE_MS)).toEqual({ spread: 1, soak: 1 });
+    expect(entrance(ENTRANCE_MS * 10)).toEqual({ spread: 1, soak: 1 });
+  });
+
+  it('holds at nothing until its delay has passed', () => {
+    const delay = 500;
+    expect(entrance(delay - 1, delay).soak).toBe(0);
+    expect(entrance(delay + 1, delay).soak).toBeGreaterThan(0);
+    // a staggered bloom finishes later than an unstaggered one
+    expect(entrance(ENTRANCE_MS, delay).spread).toBeLessThan(1);
+  });
+
+  it('both envelopes rise monotonically and stay in [0,1]', () => {
+    let prevSpread = 0;
+    let prevSoak = 0;
+    for (let ms = 0; ms <= ENTRANCE_MS; ms += 25) {
+      const { spread, soak } = entrance(ms);
+      expect(spread).toBeGreaterThanOrEqual(prevSpread);
+      expect(soak).toBeGreaterThanOrEqual(prevSoak);
+      expect(spread).toBeLessThanOrEqual(1);
+      expect(soak).toBeLessThanOrEqual(1);
+      prevSpread = spread;
+      prevSoak = soak;
+    }
+  });
+
+  it('commits the mark before it spreads', () => {
+    // the whole point: ink is dark on landing and *then* opens out. If soak
+    // ever trailed spread the wash would read as an image fading in.
+    for (let ms = 25; ms < ENTRANCE_MS; ms += 25) {
+      const { spread, soak } = entrance(ms);
+      expect(soak).toBeGreaterThan(spread);
+    }
+  });
+
+  it('is fully opaque by a third of the way in', () => {
+    expect(entrance(ENTRANCE_MS / 3).soak).toBeCloseTo(1, 5);
+    expect(entrance(ENTRANCE_MS / 3).spread).toBeLessThan(0.75);
   });
 });
 

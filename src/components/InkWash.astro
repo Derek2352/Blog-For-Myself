@@ -16,11 +16,13 @@
 <script>
   import { motionReduced } from '@/lib/a11y-prefs';
   import {
+    ENTRANCE_STAGGER_MS,
     INK_PEAK_ALPHA,
     INK_SEED,
     TRAIL_MS,
     bloomLayout,
     bloomOutline,
+    entrance,
     trailAlpha,
     type Bloom,
   } from '@/lib/ink';
@@ -35,8 +37,12 @@
   const MAX_DABS = 20;
   /** Minimum travel between dabs, in buffer pixels. */
   const DAB_GAP = 6;
-  /** Breathing rate: noise units per millisecond. Deliberately barely-there. */
-  const BREATH = 0.00006;
+  /**
+   * Breathing rate, in noise units per millisecond. The lattice is unit-spaced,
+   * so this crosses one cell roughly every six seconds — slow enough to never
+   * catch the eye, fast enough that the edge is visibly not where it was.
+   */
+  const BREATH = 0.00016;
 
   interface Dab {
     x: number;
@@ -59,6 +65,8 @@
   let onScreen = false;
   let lastDabX = 0;
   let lastDabY = 0;
+  /** When the wash started arriving. 0 until the first painted frame. */
+  let arrivedAt = 0;
   let ink = '42, 36, 30';
   let io: IntersectionObserver | null = null;
 
@@ -123,10 +131,20 @@
   function draw(now: number): void {
     if (!bufCtx || !buf || !view || !canvas) return;
     const t = now * BREATH;
+    // Anchored to the first painted frame rather than to mount, so arriving with
+    // the hero already scrolled past does not spend the entrance unseen.
+    if (!arrivedAt) arrivedAt = now;
+    const age = now - arrivedAt;
 
     bufCtx.clearRect(0, 0, buf.width, buf.height);
-    for (const b of blooms) {
-      paint(bufCtx, b.x, b.y, bloomOutline(b, t + b.phase, SEGMENTS), b.r, b.weight);
+    for (let i = 0; i < blooms.length; i++) {
+      const b = blooms[i]!;
+      const { spread, soak } = entrance(age, i * ENTRANCE_STAGGER_MS);
+      if (soak <= 0) continue;
+      // The strike is small and concentrated; the paper opens it out.
+      const r = b.r * (0.12 + 0.88 * spread);
+      const shape: Bloom = { ...b, r };
+      paint(bufCtx, b.x, b.y, bloomOutline(shape, t + b.phase, SEGMENTS), r, b.weight * soak);
     }
 
     // Dabs are drawn after the wash and aged out here, so the list can never
@@ -278,6 +296,9 @@
     blooms = [];
     dabs = [];
     onScreen = false;
+    // Landing on the page again should look like landing on it, so the wash
+    // arrives from nothing rather than snapping back to wherever it left off.
+    arrivedAt = 0;
   }
 
   /* ---- wiring. Registered once at module scope: with the view transitions
