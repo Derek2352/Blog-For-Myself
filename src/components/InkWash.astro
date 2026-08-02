@@ -20,7 +20,8 @@
   import {
     INK_PEAK_ALPHA,
     INK_SEED,
-    STROKE_BAND,
+    STROKE_BOTTOM,
+    STROKE_TOP,
     TRAIL_MS,
     bristles,
     creep,
@@ -51,6 +52,14 @@
   const DAB_GAP = 26;
   /** How far the outer hairs trail the centre, as a fraction of the path. */
   const TIP_ROUND = 0.03;
+  /**
+   * What the brush paints, before the difference blend inverts it.
+   *
+   * Warm rather than pure white on purpose: inverting a warm palette with pure
+   * white leaves a cool cast, and #fffaf0 lands the cream ground almost exactly
+   * on neutral black instead of blue-black.
+   */
+  const INK_SOURCE = '#fffaf0';
 
   interface Dab {
     x: number;
@@ -73,7 +82,6 @@
   let onScreen = false;
   let lastDabX = 0;
   let lastDabY = 0;
-  let ink = '42, 36, 30';
   let io: IntersectionObserver | null = null;
   /** When the brush started travelling. 0 until the first painted frame. */
   let arrivedAt = 0;
@@ -82,22 +90,6 @@
   // cursor". A phone drag over the hero means "scroll", and painting with it
   // would draw on every swipe.
   const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
-
-  /** `#2a241e` → `42, 36, 30`, so it can be dropped into rgba(). */
-  function toRgb(hex: string): string | null {
-    const h = hex.trim().replace('#', '');
-    const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
-    if (full.length !== 6 || /[^0-9a-f]/i.test(full)) return null;
-    const n = parseInt(full, 16);
-    return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
-  }
-
-  /** Read the live ink colour, so dark mode inverts to light-on-dark. */
-  function readInk(): void {
-    const raw = getComputedStyle(document.documentElement).getPropertyValue('--color-ink');
-    const rgb = toRgb(raw);
-    if (rgb) ink = rgb;
-  }
 
   /**
    * Draw the brush.
@@ -133,13 +125,17 @@
           }
           continue;
         }
-        const off = (hair.offset + creep(p.t, now, INK_SEED)) * p.width;
+        const off =
+          (hair.offset + hair.wander[i]! + creep(p.t, now, INK_SEED)) * p.width;
         const x = p.x + p.nx * off;
         const y = p.y + p.ny * off;
         if (!open) {
           ctx.beginPath();
           ctx.moveTo(x, y);
-          ctx.lineWidth = Math.max(0.6, (p.width * 2) / hairs.length + 0.5);
+          ctx.lineWidth = Math.max(
+            0.5,
+            ((p.width * 2) / hairs.length + 0.5) * hair.press[i]! * 1.6,
+          );
           runAlpha = inkLeft;
           open = true;
         } else {
@@ -156,12 +152,23 @@
     ctx.globalAlpha = 1;
   }
 
-  /** Hard-edged droplet. No gradient — a soft dot beside a dry brush reads wrong. */
-  function drawSplat(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, a: number): void {
+  /**
+   * Hard-edged droplet. No gradient — a soft dot beside a dry brush reads wrong.
+   * Stretched along its flight, so a hard-thrown drop lands as a comma.
+   */
+  function drawSplat(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    r: number,
+    a: number,
+    aspect = 1,
+    angle = 0,
+  ): void {
     if (a <= 0 || r <= 0) return;
     ctx.globalAlpha = a;
     ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.ellipse(x, y, r * aspect, r, angle, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
   }
@@ -174,12 +181,17 @@
     const { spread, soak } = entrance(now - arrivedAt);
 
     bufCtx.clearRect(0, 0, buf.width, buf.height);
-    bufCtx.strokeStyle = `rgba(${ink}, 1)`;
-    bufCtx.fillStyle = `rgba(${ink}, 1)`;
+    // Always white, in both themes. The canvas composites with
+    // mix-blend-mode: difference, so white inverts whatever it lands on — paper
+    // goes dark and the text inside the stroke goes pale. That is the whole
+    // soak effect, and it means there is no light-mode/dark-mode ink colour to
+    // keep in sync: inversion is correct in both by construction.
+    bufCtx.strokeStyle = INK_SOURCE;
+    bufCtx.fillStyle = INK_SOURCE;
 
     drawBrush(bufCtx, spread, now);
     for (const s of splats) {
-      if (s.at <= spread) drawSplat(bufCtx, s.x, s.y, s.r, 1);
+      if (s.at <= spread) drawSplat(bufCtx, s.x, s.y, s.r, 1, s.aspect, s.angle);
     }
 
     // Cursor droplets are drawn after the stroke and aged out here, so the list
@@ -239,22 +251,33 @@
     canvas.height = h;
     buf.width = Math.max(1, Math.round(w * SCALE));
     buf.height = Math.max(1, Math.round(h * SCALE));
-    // Measure where the hero's content actually starts rather than assuming a
-    // fraction of its height. The two disagree badly between breakpoints: the
-    // stacked mobile hero is much taller, so a fixed fraction reached well past
-    // its kicker and laid the stroke over the headline.
-    const first = host?.querySelector<HTMLElement>(':scope > *:not(canvas)') ?? null;
-    const contentTop = first
-      ? first.getBoundingClientRect().top - rect.top
-      : buf.height * STROKE_BAND;
-    const band = Math.max(24, Math.min(buf.height * STROKE_BAND, contentTop - 8));
+    // Aim at the headline rather than at a fraction of the hero.
+    //
+    // The stroke wants to cross large display type, where an inverted word
+    // still reads instantly. Fractions cannot express that across breakpoints:
+    // the band that frames the tagline at 1280 lands squarely on the body
+    // paragraph at 390, because the stacked hero is far taller while its
+    // heading sits higher. So measure the h1 and straddle it; the fractions
+    // remain only as a fallback if the markup ever changes.
+    const heading = host?.querySelector<HTMLElement>('h1');
+    let bandTop = buf.height * STROKE_TOP;
+    let bandBottom = buf.height * STROKE_BOTTOM;
+    if (heading) {
+      const hr = heading.getBoundingClientRect();
+      // 0.68 down the heading is its second line — the italic tagline, which is
+      // the most striking thing on the page to soak.
+      const centre = hr.top - rect.top + hr.height * 0.68;
+      const half = Math.max(52, hr.height * 0.85);
+      bandTop = centre - half;
+      bandBottom = centre + half;
+    }
 
     // Computed once, never per frame. Re-deriving the hair pattern each frame
     // would make the striations crawl like static instead of holding still
     // while only the wet edge moves.
-    spine = strokeSpine(buf.width, buf.height, INK_SEED, SPINE_SAMPLES, band);
+    spine = strokeSpine(buf.width, buf.height, INK_SEED, SPINE_SAMPLES, bandTop, bandBottom);
     hairs = bristles(spine, BRISTLES, INK_SEED);
-    splats = splatter(spine, SPLATS, INK_SEED, band);
+    splats = splatter(spine, SPLATS, INK_SEED, bandBottom);
     if (raf) draw(performance.now());
   }
 
@@ -299,7 +322,6 @@
     host = el.parentElement;
     el.hidden = false;
 
-    readInk();
     resize();
 
     window.addEventListener('resize', resize, { passive: true });
@@ -375,9 +397,8 @@
   function syncMotion(): void {
     if (motionReduced()) unmount();
     else if (document.querySelector('canvas.ink-wash')) mount();
-    if (canvas) {
-      readInk();
-      if (!raf) draw(performance.now());
-    }
+    // No theme colour to resync: the difference blend inverts whatever is
+    // behind it, so dark mode is handled without this knowing about it.
+    if (canvas && !raf) draw(performance.now());
   }
 </script>

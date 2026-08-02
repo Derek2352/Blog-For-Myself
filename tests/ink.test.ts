@@ -4,7 +4,8 @@ import {
   ENTRANCE_MS,
   INK_PEAK_ALPHA,
   INK_SEED,
-  STROKE_BAND,
+  STROKE_BOTTOM,
+  STROKE_TOP,
   TRAIL_MS,
   bristles,
   creep,
@@ -86,22 +87,32 @@ describe('strokeSpine', () => {
     }
   });
 
-  it('enters and leaves the frame rather than starting inside it', () => {
-    // a stroke that begins and ends on screen reads as a shape, not a gesture
+  it('enters from off-frame and dries out before the photo column', () => {
+    // Entering off-frame is what makes it a gesture rather than a shape. It no
+    // longer *leaves* off-frame: the brush runs out of ink over the text and
+    // stops there, which keeps the whole head-to-tail story on the words and
+    // keeps ink off the photograph.
     expect(spine[0]!.x).toBeLessThan(0);
-    expect(spine[spine.length - 1]!.x).toBeGreaterThan(W);
+    expect(spine[spine.length - 1]!.x).toBeLessThan(W * 0.6);
   });
 
-  it('stays in the top band, clear of the headline', () => {
-    // Everything below STROKE_BAND is the kicker and the h1. The stroke plus its
-    // own half-width must clear that, and must also not run off the top — a
-    // stroke clipped by the canvas edge reads as a mistake rather than a mark.
+  it('sweeps the middle, where the writing is', () => {
+    // The stroke crosses the text on purpose and inverts it on the way past, so
+    // unlike the earlier top-band version it *should* be over the words.
     // `OrEqual` because the fit maps the extremes exactly onto the band — the
     // mark is sized to the space rather than fitting inside it by luck.
     for (const p of spine) {
-      expect(p.y - p.width).toBeGreaterThan(0);
-      expect(p.y + p.width).toBeLessThanOrEqual(H * STROKE_BAND);
+      expect(p.y - p.width).toBeGreaterThanOrEqual(H * STROKE_TOP - 0.001);
+      expect(p.y + p.width).toBeLessThanOrEqual(H * STROKE_BOTTOM + 0.001);
     }
+    // Overlapping the middle third, rather than crossing one exact midline:
+    // what matters is that the mark is interior and lands on the writing, not
+    // that it intersects a particular y. It used to hug the top edge.
+    const lo = Math.min(...spine.map((p) => p.y - p.width));
+    const hi = Math.max(...spine.map((p) => p.y + p.width));
+    expect(hi).toBeGreaterThan(H / 3);
+    expect(lo).toBeLessThan((H * 2) / 3);
+    expect(lo).toBeGreaterThan(H * 0.08);
   });
 
   it('fits the band for any seed and any box, not just the shipped one', () => {
@@ -111,30 +122,20 @@ describe('strokeSpine', () => {
     for (const seed of [1, 42, 20260802, 99991, 123456789]) {
       for (const [w, h] of [[1152, 520], [390, 700], [768, 460], [1600, 600]]) {
         for (const p of strokeSpine(w, h, seed)) {
-          expect(p.y - p.width).toBeGreaterThanOrEqual(0);
-          expect(p.y + p.width).toBeLessThanOrEqual(h * STROKE_BAND + 0.001);
+          expect(p.y - p.width).toBeGreaterThanOrEqual(h! * STROKE_TOP - 0.001);
+          expect(p.y + p.width).toBeLessThanOrEqual(h! * STROKE_BOTTOM + 0.001);
         }
       }
     }
   });
 
-  it('honours an explicit band, which is how the phone layout is kept clear', () => {
-    // The component measures where the hero's content starts and passes it in;
-    // the height fraction is only a fallback. A stacked mobile hero is taller
-    // than the desktop one while its kicker sits higher, so the fraction alone
-    // laid the stroke across the headline at 390px.
-    for (const band of [40, 64, 90]) {
-      for (const p of strokeSpine(390, 760, INK_SEED, 90, band)) {
-        expect(p.y - p.width).toBeGreaterThanOrEqual(0);
-        expect(p.y + p.width).toBeLessThanOrEqual(band + 0.001);
+  it('honours an explicit band', () => {
+    for (const [top, bottom] of [[40, 200], [120, 300], [10, 90]]) {
+      for (const p of strokeSpine(390, 760, INK_SEED, 90, top, bottom)) {
+        expect(p.y - p.width).toBeGreaterThanOrEqual(top! - 0.001);
+        expect(p.y + p.width).toBeLessThanOrEqual(bottom! + 0.001);
       }
     }
-  });
-
-  it('leaves headroom at the top so the head is not clipped', () => {
-    // bristle offset, creep and line width all reach past the spine half-width
-    const highest = Math.min(...spine.map((p) => p.y - p.width));
-    expect(highest).toBeGreaterThan(H * STROKE_BAND * 0.05);
   });
 
   it('runs t from 0 to 1 in order', () => {
@@ -210,6 +211,29 @@ describe('bristles — where the 飛白 comes from', () => {
     expect(inkOver(0, third)).toBeGreaterThan(inkOver(spine.length - third, spine.length) * 2);
   });
 
+  it('varies its own width along each hair', () => {
+    // a constant-width hair is a line; a brush is not made of lines
+    for (const h of hairs.slice(0, 8)) {
+      expect(h.press).toHaveLength(spine.length);
+      const lo = Math.min(...h.press);
+      const hi = Math.max(...h.press);
+      expect(lo).toBeGreaterThan(0);
+      expect(hi).toBeGreaterThan(lo * 1.4);
+    }
+  });
+
+  it('tears at the outer edge and holds its line at the core', () => {
+    // a perfectly parallel boundary is the giveaway that a stroke was drawn by
+    // arithmetic rather than dragged across paper
+    const spread = (h: (typeof hairs)[number]) =>
+      Math.max(...h.wander) - Math.min(...h.wander);
+    const core = hairs.filter((h) => Math.abs(h.offset) < 0.25);
+    const rim = hairs.filter((h) => Math.abs(h.offset) > 0.8);
+    const mean = (set: typeof hairs) =>
+      set.reduce((s, h) => s + spread(h), 0) / (set.length || 1);
+    expect(mean(rim)).toBeGreaterThan(mean(core) * 3);
+  });
+
   it('frays at the edges before the middle', () => {
     const mid = hairs.filter((h) => Math.abs(h.offset) < 0.3);
     const edge = hairs.filter((h) => Math.abs(h.offset) > 0.7);
@@ -221,16 +245,14 @@ describe('bristles — where the 飛白 comes from', () => {
 });
 
 describe('splatter', () => {
-  const ceiling = H * STROKE_BAND;
+  const ceiling = H * STROKE_BOTTOM;
   const splats = splatter(spine, 90, INK_SEED, ceiling);
 
   it('is deterministic', () => {
     expect(splats).toEqual(splatter(spine, 90, INK_SEED, ceiling));
   });
 
-  it('respects the ceiling — droplets were what landed on the headline', () => {
-    // splatter is thrown further than the stroke is wide by definition, so the
-    // band that constrains the spine cannot constrain this for free
+  it('respects the ceiling', () => {
     for (const s of splats) {
       expect(s.y + s.r).toBeLessThanOrEqual(ceiling);
     }
@@ -248,6 +270,15 @@ describe('splatter', () => {
     const largest = radii[radii.length - 1]!;
     expect(largest).toBeGreaterThan(median * 3);
     expect(radii.filter((r) => r < median * 1.5).length).toBeGreaterThan(splats.length * 0.5);
+  });
+
+  it('stretches the hard-thrown drops into commas', () => {
+    // round dots at every size read as printed rather than thrown
+    for (const s of splats) {
+      expect(s.aspect).toBeGreaterThanOrEqual(1);
+      expect(Number.isFinite(s.angle)).toBe(true);
+    }
+    expect(splats.some((s) => s.aspect > 1.6)).toBe(true);
   });
 
   it('gives every drop a positive radius and a moment it was flicked', () => {
@@ -349,10 +380,11 @@ describe('trailAlpha', () => {
 });
 
 describe('the alpha ceiling', () => {
-  it('stays a background, not a foreground', () => {
-    // "confident, a real graphic element" — clearly ink, still clearly behind
-    // the words. Raising this past a third is a design decision, not a tweak.
-    expect(INK_PEAK_ALPHA).toBeLessThanOrEqual(0.35);
-    expect(INK_PEAK_ALPHA).toBeGreaterThan(0.2);
+  it("sits well clear of the blend's dead middle", () => {
+    // With difference blending, 0.5 maps every backdrop onto the same grey and
+    // the text inside the stroke disappears entirely. The soak effect needs the
+    // far side of that hinge, not a value near it.
+    expect(INK_PEAK_ALPHA).toBeGreaterThan(0.7);
+    expect(INK_PEAK_ALPHA).toBeLessThanOrEqual(1);
   });
 });

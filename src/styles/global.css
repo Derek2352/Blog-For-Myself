@@ -247,17 +247,26 @@
        fix, and they are not redundant with inset. */
     width: 100%;
     height: 100%;
-    z-index: -1;
+    /* Above the words, not behind them. The stroke is meant to cross the text
+       and soak it: the canvas paints white and `difference` inverts whatever it
+       lands on, so paper turns dark and the glyphs inside the stroke turn pale
+       and stay readable. Behind the text this would do nothing at all.
+
+       There is deliberately no stacking context on the hero section. The blend
+       needs the page's own background in its backdrop — isolate it and the
+       stroke would find nothing to invert and paint flat white instead. */
+    z-index: 2;
+    mix-blend-mode: difference;
     pointer-events: none;
-    -webkit-mask-image: linear-gradient(to right, #000 0%, #000 45%, transparent 75%);
-    mask-image: linear-gradient(to right, #000 0%, #000 45%, transparent 75%);
+    -webkit-mask-image: linear-gradient(to right, #000 0%, #000 34%, transparent 48%);
+    mask-image: linear-gradient(to right, #000 0%, #000 34%, transparent 48%);
   }
   /* Stacked layout: the photo sits *below* the text rather than beside it, so
      the boundary to respect is horizontal. */
   @media (max-width: 1023px) {
     .ink-wash {
-      -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 50%, transparent 82%);
-      mask-image: linear-gradient(to bottom, #000 0%, #000 50%, transparent 82%);
+      -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 38%, transparent 54%);
+      mask-image: linear-gradient(to bottom, #000 0%, #000 38%, transparent 54%);
     }
   }
 

@@ -20,13 +20,19 @@
  */
 
 /**
- * Never paint the ink stronger than this.
+ * How completely the stroke inverts what it crosses.
  *
- * The bristles overlap heavily and resolve to full alpha inside the buffer;
- * this is applied once, at the blit, so it is the single place that decides how
- * present the stroke is on the page.
+ * The canvas paints white and composites with `mix-blend-mode: difference`, so
+ * this is not opacity in the usual sense — it is how far towards a full flip the
+ * ink drags its backdrop. Paper goes dark, and the text inside the stroke goes
+ * pale, as though the ink soaked through and knocked it out.
+ *
+ * The scale has a hinge in the middle. At 0.5 every backdrop lands on the same
+ * grey and the text inside the stroke vanishes; below that the text keeps its
+ * normal polarity at reduced contrast, above it the polarity flips. So this
+ * belongs near 1, and values around 0.5 are the one genuinely bad choice.
  */
-export const INK_PEAK_ALPHA = 0.32;
+export const INK_PEAK_ALPHA = 0.88;
 
 /** How long a cursor splat takes to dry, in milliseconds. */
 export const TRAIL_MS = 2000;
@@ -112,18 +118,16 @@ export interface SpinePoint {
 }
 
 /**
- * Fraction of the hero's height the stroke may occupy, measured from the top.
+ * The band the stroke sweeps through, as fractions of hero height.
  *
- * Measured, not chosen: at 1280 wide the hero is ~520px and the kicker's cap
- * height starts around y=78, so anything past ~0.15 is printing on words. The
- * first pass used 0.3 and put splatter across the headline.
- *
- * The stroke is therefore slimmer than the reference's, which is a thick mark
- * because it *is* the whole composition. Here it is an accent above one, and a
- * long thin flick reads more refined at this proportion than a fat swoosh
- * crammed into a narrow band.
+ * This used to hug the top so it would clear the headline. It no longer needs
+ * to: the stroke crosses the text on purpose and inverts it on the way past, so
+ * the words stay readable inside the ink rather than being obscured by it. That
+ * turns the constraint inside out — the mark now wants the middle, where the
+ * writing is, because crossing something is the whole point of the gesture.
  */
-export const STROKE_BAND = 0.15;
+export const STROKE_TOP = 0.14;
+export const STROKE_BOTTOM = 0.58;
 
 /**
  * A gentle S sweeping left to right across the top of the hero.
@@ -138,25 +142,29 @@ export function strokeSpine(
   h: number,
   seed = INK_SEED,
   samples = 90,
-  bandPx?: number,
+  bandTop = h * STROKE_TOP,
+  bandBottom = h * STROKE_BOTTOM,
 ): SpinePoint[] {
   const rnd = mulberry32(seed);
-  // A fraction of height is only ever a fallback. The hero is *taller* on a
-  // phone (the columns stack) while its kicker sits *higher*, so the fraction
-  // that clears the text at 1280 puts the stroke straight through it at 390.
-  // The component measures where content actually starts and passes it here.
-  const band = Math.max(8, bandPx ?? h * STROKE_BAND);
+  const band = Math.max(8, bandBottom - bandTop);
   // The centre line: a shallow sine, phase and depth jittered by the seed so
   // the curve is chosen rather than mechanical.
-  const midY = band * (0.46 + rnd() * 0.1);
-  const amp = band * (0.15 + rnd() * 0.07);
+  // Thickness and swing are sized from the hero, not from the band. Deriving
+  // them from the band meant widening the band scaled the whole mark up with
+  // it, and moving the stroke to the middle turned it into a 150px black slab.
+  // Sized from the smaller dimension, so a tall stacked hero on a phone does
+  // not get a proportionally enormous brush just because it is tall.
+  const scale = Math.min(w, h);
+  const midY = band * 0.5;
+  const amp = scale * (0.06 + rnd() * 0.04);
   const phase = rnd() * Math.PI * 2;
   const turns = 1.1 + rnd() * 0.4;
-  // Overshoot both edges so the stroke enters and leaves the frame rather than
-  // starting and stopping inside it.
-  const x0 = -w * 0.06;
-  const x1 = w * 1.04;
-  const headWidth = band * (0.23 + rnd() * 0.06);
+  // Enters from off the left edge and dries out before the photo column rather
+  // than running the full width. The whole head-to-tail story then happens
+  // across the text, which is the part the stroke is meant to cross.
+  const x0 = -w * 0.08;
+  const x1 = w * 0.54;
+  const headWidth = scale * (0.042 + rnd() * 0.014);
 
   const xs: number[] = [];
   const ys: number[] = [];
@@ -179,10 +187,14 @@ export function strokeSpine(
     top = Math.min(top, ys[i]! - widths[i]!);
     bottom = Math.max(bottom, ys[i]! + widths[i]!);
   }
-  const inset = band * 0.1;
-  const k = (band - inset) / Math.max(1e-6, bottom - top);
+  // Shrink to fit, never stretch to fill — and then centre what is left. The
+  // earlier version mapped the extent onto the band exactly, which is right for
+  // a narrow band and disastrous for a wide one: it inflated the mark to fill
+  // whatever room it was given.
+  const k = Math.min(1, band / Math.max(1e-6, bottom - top));
+  const slack = (band - (bottom - top) * k) / 2;
   for (let i = 0; i < samples; i++) {
-    ys[i] = inset + (ys[i]! - top) * k;
+    ys[i] = bandTop + slack + (ys[i]! - top) * k;
     widths[i] = widths[i]! * k;
   }
 
@@ -217,6 +229,10 @@ export interface Bristle {
   offset: number;
   /** Per-spine-sample ink, 0 where this hair ran dry. This is the 飛白. */
   breaks: number[];
+  /** Per-sample width multiplier — the hair thickening and thinning. */
+  press: number[];
+  /** Per-sample perpendicular wander, in fractions of stroke width. */
+  wander: number[];
 }
 
 /**
@@ -239,6 +255,8 @@ export function bristles(spine: SpinePoint[], count: number, seed = INK_SEED): B
     const offset = Math.sign(raw) * Math.pow(Math.abs(raw), 1.35);
     const lane = rnd() * 100;
     const breaks: number[] = [];
+    const press: number[] = [];
+    const wander: number[] = [];
     for (const p of spine) {
       // Ink remaining in the brush. The threshold a hair must clear is scaled by
       // how *dry* the brush is, so at the head it is zero and every hair holds
@@ -248,10 +266,23 @@ export function bristles(spine: SpinePoint[], count: number, seed = INK_SEED): B
       const wet = 1 - Math.pow(p.t, 0.85);
       const grain = fbm(p.t * 9, lane, seed + b * 37, 3);
       const edge = 1 - Math.abs(offset) * 0.35;
+      // Pooling: a broad, slow field so the body of the stroke has heavier and
+      // lighter passages instead of one flat tone.
+      const pool = 0.72 + fbm(p.t * 2.3, offset * 1.7, seed + 611, 2) * 0.5;
       const ink = wet * edge - grain * (1 - wet) * 1.6;
-      breaks.push(ink > 0 ? Math.min(1, ink * 2.2) : 0);
+      breaks.push(ink > 0 ? Math.min(1, ink * 2.2 * pool) : 0);
+
+      // A hair is not a constant-width line. This is most of what separates a
+      // brush from a set of parallel strokes.
+      press.push(0.55 + fbm(p.t * 5.5, lane + 40, seed + b * 53, 2) * 1.1);
+
+      // Torn edge: the outermost hairs wander, the core holds its line. A brush
+      // frays where it meets paper, and a perfectly parallel boundary is the
+      // giveaway that this was drawn by arithmetic.
+      const fray = Math.pow(Math.abs(offset), 2.2);
+      wander.push((fbm(p.t * 13, lane + 90, seed + b * 71, 3) * 2 - 1) * fray * 0.14);
     }
-    out.push({ offset, breaks });
+    out.push({ offset, breaks, press, wander });
   }
   return out;
 }
@@ -264,6 +295,10 @@ export interface Splat {
   x: number;
   y: number;
   r: number;
+  /** Elongation along the flick. 1 is round; a fast throw stretches the drop. */
+  aspect: number;
+  /** Direction the drop was travelling, radians. */
+  angle: number;
   /** Spine position at which the brush flicked this, so it lands in sequence. */
   at: number;
 }
@@ -289,17 +324,39 @@ export function splatter(
   for (let i = 0; i < count * 6 && out.length < count; i++) {
     const p = spine[Math.floor(rnd() * spine.length)]!;
     const throwOut = (rnd() - 0.5) * 2;
-    const dist = p.width * (0.9 + Math.abs(throwOut) * 2.2);
+    const speed = Math.abs(throwOut);
+    const dist = p.width * (0.9 + speed * 2.4);
     // power law: rnd³ keeps most of them fine mist
     const u = rnd();
     const r = scale * (0.014 + u * u * u * 0.1);
     const x = p.x + p.nx * dist * Math.sign(throwOut) + (rnd() - 0.5) * p.width;
     const y = p.y + p.ny * dist * Math.sign(throwOut) + (rnd() - 0.5) * p.width;
-    // Droplets obey the same band the stroke does. Without this they were the
-    // thing that actually landed on the headline — thrown further than the
-    // stroke is wide, by definition.
     if (y + r > ceiling) continue;
-    out.push({ x, y, r, at: p.t });
+    // A drop thrown hard is not a circle — it stretches along its flight and
+    // lands as a comma. Round dots at every size read as printed, not thrown.
+    const angle = Math.atan2(p.ny * Math.sign(throwOut), p.nx * Math.sign(throwOut));
+    out.push({ x, y, r, aspect: 1 + speed * 1.9, angle, at: p.t });
+
+    // Satellites: a big drop shatters on impact and throws a little ring of
+    // much smaller ones. This is most of what makes real splatter look busy.
+    if (u > 0.86 && out.length < count) {
+      const kids = 2 + Math.floor(rnd() * 3);
+      for (let s = 0; s < kids && out.length < count; s++) {
+        const a = rnd() * Math.PI * 2;
+        const d = r * (1.6 + rnd() * 3.4);
+        const sy = y + Math.sin(a) * d;
+        const sr = r * (0.16 + rnd() * 0.3);
+        if (sy + sr > ceiling) continue;
+        out.push({
+          x: x + Math.cos(a) * d,
+          y: sy,
+          r: sr,
+          aspect: 1 + rnd() * 0.6,
+          angle: a,
+          at: p.t,
+        });
+      }
+    }
   }
   return out;
 }
