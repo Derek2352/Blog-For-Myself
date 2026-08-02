@@ -232,6 +232,35 @@
     pointer-events: none;
   }
 
+  /* ---- 潑墨: the hero ink wash (see src/components/InkWash.astro) ----
+     The mask is what keeps the promise the composition makes. Rather than
+     working out where the photo column starts and sizing the canvas to stop
+     short, the ink is simply faded out before it gets there — so it cannot
+     reach the photograph however the grid reflows, and the cursor trail
+     inherits the same boundary for free because it shares this canvas. */
+  .ink-wash {
+    position: absolute;
+    inset: 0;
+    /* A canvas is a *replaced* element, so `inset: 0` alone does not stretch it
+       — with width:auto the used size is the intrinsic 300x150, which left the
+       ink painting into a patch in the top-left corner. These two are the whole
+       fix, and they are not redundant with inset. */
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    pointer-events: none;
+    -webkit-mask-image: linear-gradient(to right, #000 0%, #000 45%, transparent 75%);
+    mask-image: linear-gradient(to right, #000 0%, #000 45%, transparent 75%);
+  }
+  /* Stacked layout: the photo sits *below* the text rather than beside it, so
+     the boundary to respect is horizontal. */
+  @media (max-width: 1023px) {
+    .ink-wash {
+      -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 50%, transparent 82%);
+      mask-image: linear-gradient(to bottom, #000 0%, #000 50%, transparent 82%);
+    }
+  }
+
   /* category tab strip: two deliberate tiers on wide screens, one scrolling
      strip on narrow ones (see src/components/TabBar.astro for why). */
   .tabbar {
@@ -555,6 +584,7 @@
   #cat-score,
   .reading-progress,
   .to-top,
+  .ink-wash,
   [data-pagefind-ignore],
   [data-video-play] {
     display: none !important;

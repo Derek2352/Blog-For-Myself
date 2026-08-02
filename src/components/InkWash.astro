@@ -1,0 +1,322 @@
+---
+/**
+ * 潑墨 — the ink wash behind the hero text.
+ *
+ * A wash anchored off the left edge whose edges breathe, plus a bloom that
+ * follows the cursor and dries in about two seconds. All of the shape-making
+ * lives in src/lib/ink.ts; this file is plumbing.
+ *
+ * Starts `hidden`, and only the script reveals it. So a reader with reduced
+ * motion — or with JS off — gets no canvas at all rather than an empty one.
+ */
+---
+
+<canvas class="ink-wash" aria-hidden="true" hidden></canvas>
+
+<script>
+  import { motionReduced } from '@/lib/a11y-prefs';
+  import {
+    INK_PEAK_ALPHA,
+    INK_SEED,
+    TRAIL_MS,
+    bloomLayout,
+    bloomOutline,
+    trailAlpha,
+    type Bloom,
+  } from '@/lib/ink';
+
+  /** Internal render scale. Ink is soft, so the upscale on blit *is* the blur. */
+  const SCALE = 0.3;
+  /** Ink drift is slow; 60fps would buy nothing and cost battery. */
+  const FRAME_MS = 1000 / 15;
+  const SEGMENTS = 72;
+  const DAB_SEGMENTS = 28;
+  /** Hard cap, so a fast scribble cannot grow the per-frame cost without limit. */
+  const MAX_DABS = 20;
+  /** Minimum travel between dabs, in buffer pixels. */
+  const DAB_GAP = 6;
+  /** Breathing rate: noise units per millisecond. Deliberately barely-there. */
+  const BREATH = 0.00006;
+
+  interface Dab {
+    x: number;
+    y: number;
+    r: number;
+    born: number;
+    phase: number;
+    wobble: number;
+  }
+
+  let canvas: HTMLCanvasElement | null = null;
+  let view: CanvasRenderingContext2D | null = null;
+  let buf: HTMLCanvasElement | null = null;
+  let bufCtx: CanvasRenderingContext2D | null = null;
+  let host: HTMLElement | null = null;
+  let blooms: Bloom[] = [];
+  let dabs: Dab[] = [];
+  let raf = 0;
+  let last = 0;
+  let onScreen = false;
+  let lastDabX = 0;
+  let lastDabY = 0;
+  let ink = '42, 36, 30';
+  let io: IntersectionObserver | null = null;
+
+  // Capability, not width: this is the correct question for "is there a real
+  // cursor". A phone drag over the hero means "scroll", and painting with it
+  // would draw on every swipe.
+  const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
+
+  /** `#2a241e` → `42, 36, 30`, so it can be dropped into rgba(). */
+  function toRgb(hex: string): string | null {
+    const h = hex.trim().replace('#', '');
+    const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+    if (full.length !== 6 || /[^0-9a-f]/i.test(full)) return null;
+    const n = parseInt(full, 16);
+    return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+  }
+
+  /** Read the live ink colour, so dark mode inverts to light-on-dark. */
+  function readInk(): void {
+    const raw = getComputedStyle(document.documentElement).getPropertyValue('--color-ink');
+    const rgb = toRgb(raw);
+    if (rgb) ink = rgb;
+  }
+
+  /**
+   * Fill one bloom: a closed curve through the displaced outline, filled with a
+   * radial gradient. Midpoint quadratics rather than straight segments — at 0.3×
+   * a 72-gon still shows its facets once blown back up.
+   */
+  function paint(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    radii: number[],
+    base: number,
+    alpha: number,
+  ): void {
+    const n = radii.length;
+    if (n < 3 || alpha <= 0) return;
+    const px = new Array<number>(n);
+    const py = new Array<number>(n);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      px[i] = cx + Math.cos(a) * radii[i]!;
+      py[i] = cy + Math.sin(a) * radii[i]!;
+    }
+    ctx.beginPath();
+    ctx.moveTo((px[n - 1]! + px[0]!) / 2, (py[n - 1]! + py[0]!) / 2);
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      ctx.quadraticCurveTo(px[i]!, py[i]!, (px[i]! + px[j]!) / 2, (py[i]! + py[j]!) / 2);
+    }
+    ctx.closePath();
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(1, base));
+    g.addColorStop(0, `rgba(${ink}, ${alpha})`);
+    g.addColorStop(0.5, `rgba(${ink}, ${alpha * 0.42})`);
+    g.addColorStop(1, `rgba(${ink}, 0)`);
+    ctx.fillStyle = g;
+    ctx.fill();
+  }
+
+  function draw(now: number): void {
+    if (!bufCtx || !buf || !view || !canvas) return;
+    const t = now * BREATH;
+
+    bufCtx.clearRect(0, 0, buf.width, buf.height);
+    for (const b of blooms) {
+      paint(bufCtx, b.x, b.y, bloomOutline(b, t + b.phase, SEGMENTS), b.r, b.weight);
+    }
+
+    // Dabs are drawn after the wash and aged out here, so the list can never
+    // outlive the ink that justifies it.
+    if (dabs.length) {
+      dabs = dabs.filter((d) => now - d.born < TRAIL_MS);
+      for (const d of dabs) {
+        const a = trailAlpha(now - d.born);
+        const shape: Bloom = {
+          x: d.x,
+          y: d.y,
+          r: d.r,
+          weight: 1,
+          phase: d.phase,
+          wobble: d.wobble,
+        };
+        paint(bufCtx, d.x, d.y, bloomOutline(shape, t + d.phase, DAB_SEGMENTS), d.r, a * 0.85);
+      }
+    }
+
+    // One place, and only one, decides how dark this layer is ever allowed to be.
+    view.clearRect(0, 0, canvas.width, canvas.height);
+    view.globalAlpha = INK_PEAK_ALPHA;
+    view.drawImage(buf, 0, 0, canvas.width, canvas.height);
+    view.globalAlpha = 1;
+  }
+
+  function frame(now: number): void {
+    // The canvas is front-page-only, so it cannot use transition:persist and
+    // must genuinely stop. This check cannot leak even if a teardown event is
+    // ever missed.
+    if (!canvas || !canvas.isConnected) {
+      stop();
+      return;
+    }
+    raf = requestAnimationFrame(frame);
+    if (now - last < FRAME_MS) return;
+    last = now;
+    draw(now);
+  }
+
+  function start(): void {
+    if (raf || !canvas) return;
+    last = 0;
+    raf = requestAnimationFrame(frame);
+  }
+
+  function stop(): void {
+    if (!raf) return;
+    cancelAnimationFrame(raf);
+    raf = 0;
+  }
+
+  /** Paint only while the hero is actually on screen and the tab is in front. */
+  function sync(): void {
+    if (onScreen && !document.hidden) start();
+    else stop();
+  }
+
+  function resize(): void {
+    if (!canvas || !buf) return;
+    const rect = canvas.getBoundingClientRect();
+    const w = Math.max(1, Math.round(rect.width));
+    const h = Math.max(1, Math.round(rect.height));
+    // DPR is ignored on purpose: this layer is blurred by design, so paying for
+    // retina pixels would buy nothing visible.
+    canvas.width = w;
+    canvas.height = h;
+    buf.width = Math.max(1, Math.round(w * SCALE));
+    buf.height = Math.max(1, Math.round(h * SCALE));
+    blooms = bloomLayout(buf.width, buf.height, INK_SEED);
+    if (raf) draw(performance.now());
+  }
+
+  function onPointerMove(e: PointerEvent): void {
+    if (!canvas || !buf || dabs.length >= MAX_DABS) return;
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const x = ((e.clientX - rect.left) / rect.width) * buf.width;
+    const y = ((e.clientY - rect.top) / rect.height) * buf.height;
+    if (x < 0 || y < 0 || x > buf.width || y > buf.height) return;
+    if (Math.hypot(x - lastDabX, y - lastDabY) < DAB_GAP) return;
+    lastDabX = x;
+    lastDabY = y;
+    const span = Math.max(buf.width, buf.height);
+    dabs.push({
+      x,
+      y,
+      r: span * (0.035 + Math.random() * 0.025),
+      born: performance.now(),
+      phase: Math.random() * Math.PI * 2,
+      wobble: 0.38 + Math.random() * 0.16,
+    });
+    // A dab dropped while the loop is parked would otherwise sit unpainted.
+    sync();
+  }
+
+  function mount(): void {
+    if (canvas) return;
+    const el = document.querySelector<HTMLCanvasElement>('canvas.ink-wash');
+    if (!el) return;
+    // The decision was "nothing renders at all" — not a frozen frame.
+    if (motionReduced()) return;
+
+    const ctx = el.getContext('2d');
+    const b = document.createElement('canvas');
+    const bctx = b.getContext('2d');
+    if (!ctx || !bctx) return;
+
+    canvas = el;
+    view = ctx;
+    buf = b;
+    bufCtx = bctx;
+    host = el.parentElement;
+    el.hidden = false;
+
+    readInk();
+    resize();
+
+    window.addEventListener('resize', resize, { passive: true });
+    // The canvas is pointer-events:none, so the hero section carries the
+    // listener. Passive — painting must never interfere with scrolling.
+    if (finePointer.matches && host) {
+      host.addEventListener('pointermove', onPointerMove, { passive: true });
+    }
+
+    io = new IntersectionObserver(
+      (entries) => {
+        onScreen = entries.some((entry) => entry.isIntersecting);
+        sync();
+      },
+      { threshold: 0 },
+    );
+    io.observe(host ?? el);
+  }
+
+  function unmount(): void {
+    stop();
+    io?.disconnect();
+    io = null;
+    window.removeEventListener('resize', resize);
+    host?.removeEventListener('pointermove', onPointerMove);
+    if (canvas) canvas.hidden = true;
+    canvas = null;
+    view = null;
+    buf = null;
+    bufCtx = null;
+    host = null;
+    blooms = [];
+    dabs = [];
+    onScreen = false;
+  }
+
+  /* ---- wiring. Registered once at module scope: with the view transitions
+     router these listeners outlive every navigation, and re-registering them
+     per page-load is how this codebase has leaked handlers before. ---- */
+
+  document.addEventListener('astro:page-load', () => {
+    // Deferred start: the hero photograph is fetchpriority="high" and is the LCP
+    // element, so the ink waits until the page has finished loading rather than
+    // competing with it. On a client-side navigation this is already complete.
+    if (document.readyState === 'complete') mount();
+    else window.addEventListener('load', mount, { once: true });
+  });
+
+  document.addEventListener('astro:before-swap', unmount);
+
+  document.addEventListener('visibilitychange', sync);
+
+  // Both halves of motionReduced() can change while the page is open: the OS
+  // setting, and the site's own "Reduce motion" toggle (an <html> class). The
+  // same observer catches the theme class, which is when the ink colour flips.
+  finePointer.addEventListener('change', () => {
+    if (!host) return;
+    host.removeEventListener('pointermove', onPointerMove);
+    if (finePointer.matches) host.addEventListener('pointermove', onPointerMove, { passive: true });
+  });
+
+  matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', syncMotion);
+  new MutationObserver(syncMotion).observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['class'],
+  });
+
+  function syncMotion(): void {
+    if (motionReduced()) unmount();
+    else if (document.querySelector('canvas.ink-wash')) mount();
+    if (canvas) {
+      readInk();
+      if (!raf) draw(performance.now());
+    }
+  }
+</script>

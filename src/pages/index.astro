@@ -10,6 +10,7 @@ import { personSchema } from '@/lib/schema';
 import { lqipStyle } from '@/lib/lqip';
 import { monthKey } from '@/lib/format';
 import { balancedCols } from '@/lib/layout';
+import InkWash from '@/components/InkWash.astro';
 
 const entries = await getEntries();
 
@@ -39,8 +40,13 @@ const browseCols = BROWSE_COLS[balancedCols(browseCats.length)] ?? BROWSE_COLS[3
 ---
 
 <Base schema={personSchema(Astro.site)}>
-  <!-- Hero: photography leads; the rail annotates. -->
-  <section class="wrap grid items-center gap-10 py-12 sm:py-16 lg:grid-cols-[0.9fr_1.1fr] lg:gap-14">
+  <!-- Hero: photography leads; the rail annotates; the ink stays behind both.
+       `isolate` is load-bearing — `relative` alone does not open a stacking
+       context, and the wash's z-index:-1 would escape behind the page. -->
+  <section
+    class="wrap relative isolate grid items-center gap-10 py-12 sm:py-16 lg:grid-cols-[0.9fr_1.1fr] lg:gap-14"
+  >
+    <InkWash />
     <div class="reveal">
       <p class="kicker">portfolio &amp; reflections · hong kong</p>
       {/* Name and tagline are one typographic unit, so the display face carries
