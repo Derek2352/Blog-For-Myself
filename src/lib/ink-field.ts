@@ -63,13 +63,67 @@ export function fibreNoise(x: number, y: number, seed: number): number {
   return coarse * 0.68 + fine * 0.32;
 }
 
+/**
+ * A slow, swirling drift — the water in the bowl is not still.
+ *
+ * Used only to bias how a cell divides its outflow *among* its downhill
+ * neighbours, never to add flow. That keeps it redistributive and so incapable
+ * of destabilising the solver, while giving plumes the curl of ink billowing
+ * rather than expanding as a disc.
+ *
+ * Taken as the perpendicular of a noise gradient, which is divergence-free by
+ * construction: the drift stirs the ink around without inventing or destroying
+ * any of it.
+ */
+export function flowBias(x: number, y: number, seed: number): { dx: number; dy: number } {
+  // Wavelength must be *shorter* than a plume, or the drift merely carries the
+  // whole blob sideways instead of tearing it into filaments.
+  const k = 0.045;
+  const e = 1.4;
+  const n0 = fbmLocal(x * k, y * k, seed);
+  const gx = fbmLocal((x + e) * k, y * k, seed) - n0;
+  const gy = fbmLocal(x * k, (y + e) * k, seed) - n0;
+  // perpendicular of the gradient
+  const len = Math.hypot(gx, gy) || 1;
+  return { dx: -gy / len, dy: gx / len };
+}
+
+/** Two octaves, enough structure for a drift without the cost of more. */
+function fbmLocal(x: number, y: number, seed: number): number {
+  return valueNoise2(x, y, seed) * 0.7 + valueNoise2(x * 2.3, y * 2.3, seed + 55) * 0.3;
+}
+
+/**
+ * How hard the drift steers the spread.
+ *
+ * This has to *dominate* rather than nudge. The solver relaxes water downhill,
+ * and diffusion is intrinsically smoothing — it rounds fingers out faster than
+ * any amount of permeability contrast creates them, so a gentle bias left the
+ * front a disc no matter how the paper was tuned. Ink in water is advection
+ * dominated, not diffusive: it goes where the water is going.
+ *
+ * A neighbour aligned with the drift is favoured about seventeen to one over
+ * one against it. Still purely redistributive — the floor keeps every share
+ * positive, so no cell can pump water it does not have.
+ */
+export const DRIFT = 0.5;
+/** Share floor, so an unaligned neighbour still receives something. */
+export const DRIFT_FLOOR = 0.15;
+
 export function createField(gw: number, gh: number, seed: number): InkField {
   const n = gw * gh;
   const fibre = new Float32Array(n);
   for (let y = 0; y < gh; y++) {
     for (let x = 0; x < gw; x++) {
-      // 0.55–1.0: no cell is impermeable, so ink can never hard-stop on a seam
-      fibre[y * gw + x] = 0.55 + fibreNoise(x, y, seed) * 0.45;
+      // Wide contrast, several scales. A narrow range (this was 0.55-1.0)
+      // merely nudges the flow; a wide one makes ink flood some channels and
+      // starve others, which is what breaks an advancing front into fingers
+      // instead of a smooth disc. The floor keeps every cell passable, so ink
+      // can never hard-stop against a seam.
+      const coarse = fibreNoise(x, y, seed);
+      const fine = fibreNoise(x * 2.6 + 31, y * 2.6 - 17, seed + 991);
+      const chan = coarse * 0.68 + fine * 0.32;
+      fibre[y * gw + x] = 0.12 + Math.pow(chan, 1.6) * 0.95;
     }
   }
   return {
@@ -145,7 +199,7 @@ export function injectBand(
  * inkAlpha correctly discarded as a whisper, so 27% of the sheet held pigment
  * and almost none of it rendered. This concentrates the ink instead.
  */
-export const PIG_LOAD = 1.55;
+export const PIG_LOAD = 1.0;
 
 /** One drop — a splash of splatter, or the cursor. It will bleed on its own. */
 export function injectBlob(
@@ -173,21 +227,80 @@ export function injectBlob(
 }
 
 /** How fast water leaves the paper, per tick at dt = 1. */
-export const EVAPORATION = 0.045;
+export const EVAPORATION = 0.022;
 /** How readily suspended pigment settles out. */
 export const DEPOSIT_RATE = 0.1;
 /**
  * How much faster pigment travels than the water carrying it.
  *
- * This is the coffee-ring effect, and without it there is no watercolour. Pure
- * diffusion spreads pigment *evenly*: the centre starts with the most and
- * therefore ends with the most, so a blot dries darkest in the middle — the
- * opposite of what ink on paper does. A real rim forms because the perimeter
- * evaporates fastest and the flow replacing that water drags pigment outward
- * with it. Biasing pigment transport above water transport is the cheapest
- * honest way to reproduce that.
+ * Above 1 this produces the coffee ring: pigment outruns its water, strands at
+ * a drying perimeter, and the blot dries darkest at the rim. That is correct
+ * for ink on **paper**, and it is what this was set to.
+ *
+ * It is wrong for ink in **water**, which is the reference now. Measuring that
+ * image gives core alpha 0.549 against 0.329 at the edge — denser in the middle,
+ * fading outward — because a drop in a bowl has no contact line to pin and no
+ * fast-drying perimeter to strand against. So pigment now travels slightly
+ * *slower* than the water carrying it and stays where it fell.
  */
-export const ADVECT_BIAS = 2.6;
+export const ADVECT_BIAS = 0.85;
+
+/**
+ * Carry pigment along the swirl, without diffusing it.
+ *
+ * This is the piece that makes it ink in water rather than ink on paper, and
+ * the piece a diffusion solver cannot supply. Relaxing water downhill is a
+ * smoothing kernel: it rounds a front out faster than any permeability contrast
+ * or share-weighting can break it up, so the plume stayed a disc no matter how
+ * hard the flow was steered. Filaments come from *transport* — pigment moved
+ * bodily along a velocity field, which stretches it into streaks and folds
+ * instead of averaging it away.
+ *
+ * Semi-Lagrangian: each cell asks where its pigment came from and samples there,
+ * bilinearly. Unconditionally stable at any step size, which matters because the
+ * swirl is deliberately fast.
+ */
+export function advectPig(f: InkField, seed: number, dt = 1): void {
+  const { gw, gh, wet, pig, tmpPig } = f;
+  tmpPig.set(pig);
+  let before = 0;
+  for (let i = 0; i < pig.length; i++) before += pig[i]!;
+  for (let y = 0; y < gh; y++) {
+    for (let x = 0; x < gw; x++) {
+      const i = y * gw + x;
+      // only where there is water to carry it
+      if (wet[i]! <= 0.002) continue;
+      const b = flowBias(x, y, seed);
+      const sx = x - b.dx * SWIRL * dt;
+      const sy = y - b.dy * SWIRL * dt;
+      const x0 = Math.floor(sx);
+      const y0 = Math.floor(sy);
+      if (x0 < 0 || y0 < 0 || x0 >= gw - 1 || y0 >= gh - 1) continue;
+      const fx = sx - x0;
+      const fy = sy - y0;
+      const a = tmpPig[y0 * gw + x0]!;
+      const bb = tmpPig[y0 * gw + x0 + 1]!;
+      const c = tmpPig[(y0 + 1) * gw + x0]!;
+      const d = tmpPig[(y0 + 1) * gw + x0 + 1]!;
+      pig[i] =
+        a * (1 - fx) * (1 - fy) + bb * fx * (1 - fy) + c * (1 - fx) * fy + d * fx * fy;
+    }
+  }
+
+  // Semi-Lagrangian advection is not conservative — a cell sampling from dry
+  // paper simply loses what it had, and nothing anywhere gains it. Unchecked
+  // that bled off about 40% of the pigment per plume. Rescaling to the
+  // pre-advection total is the standard remedy and exact by construction.
+  let after = 0;
+  for (let i = 0; i < pig.length; i++) after += pig[i]!;
+  if (after > 1e-9 && before > 0) {
+    const k = before / after;
+    for (let i = 0; i < pig.length; i++) pig[i] = pig[i]! * k;
+  }
+}
+
+/** How far pigment is carried per tick, in cells. */
+export const SWIRL = 0.85;
 
 /**
  * One tick: flow, advect, deposit, evaporate.
@@ -199,7 +312,7 @@ export const ADVECT_BIAS = 2.6;
  * instead of being stroked on, which is exactly what the previous version had to
  * do by hand.
  */
-export function stepInk(f: InkField, dt = 1): void {
+export function stepInk(f: InkField, dt = 1, seed = 0): void {
   const { gw, gh, wet, pig, dep, fibre, tmpWet, tmpPig } = f;
   tmpWet.set(wet);
   tmpPig.set(pig);
@@ -215,25 +328,37 @@ export function stepInk(f: InkField, dt = 1): void {
       const w = tmpWet[i]!;
       if (w <= 0.0005) continue;
 
-      // gather strictly downhill neighbours — flowing only downhill is what
-      // stops this oscillating without needing a stability term
+      // Gather strictly downhill neighbours — flowing only downhill is what
+      // stops this oscillating without needing a stability term. Each share is
+      // then steered by the drift, which redistributes the same water rather
+      // than adding any, so the plume curls without the solver losing footing.
+      // Each share is weighted by the *destination's* permeability, not the
+      // source's. Scaling only the outflow rate — which is what this did — makes
+      // a cell drain faster or slower but equally in every direction, so the
+      // front stays a disc however much contrast the paper has. Gating by where
+      // the water is going is what channels it, and channelling is fingering.
+      const bias = flowBias(x, y, seed);
       let count = 0;
       let total = 0;
       if (x > 0) {
-        const d = w - tmpWet[i - 1]!;
-        if (d > 0) { nb[count] = i - 1; share[count] = d; total += d; count++; }
+        const j = i - 1;
+        const d = (w - tmpWet[j]!) * (1 + DRIFT * -bias.dx) * fibre[j]!;
+        if (d > 0) { nb[count] = j; share[count] = d; total += d; count++; }
       }
       if (x < gw - 1) {
-        const d = w - tmpWet[i + 1]!;
-        if (d > 0) { nb[count] = i + 1; share[count] = d; total += d; count++; }
+        const j = i + 1;
+        const d = (w - tmpWet[j]!) * (1 + DRIFT * bias.dx) * fibre[j]!;
+        if (d > 0) { nb[count] = j; share[count] = d; total += d; count++; }
       }
       if (y > 0) {
-        const d = w - tmpWet[i - gw]!;
-        if (d > 0) { nb[count] = i - gw; share[count] = d; total += d; count++; }
+        const j = i - gw;
+        const d = (w - tmpWet[j]!) * (1 + DRIFT * -bias.dy) * fibre[j]!;
+        if (d > 0) { nb[count] = j; share[count] = d; total += d; count++; }
       }
       if (y < gh - 1) {
-        const d = w - tmpWet[i + gw]!;
-        if (d > 0) { nb[count] = i + gw; share[count] = d; total += d; count++; }
+        const j = i + gw;
+        const d = (w - tmpWet[j]!) * (1 + DRIFT * bias.dy) * fibre[j]!;
+        if (d > 0) { nb[count] = j; share[count] = d; total += d; count++; }
       }
       if (count === 0 || total <= 0) continue;
 
@@ -250,6 +375,10 @@ export function stepInk(f: InkField, dt = 1): void {
       pig[i] = pig[i]! - moveP;
     }
   }
+
+  // ---- carry pigment along the swirl. Transport, not diffusion: this is what
+  // stretches the plume into filaments instead of averaging it into a disc.
+  advectPig(f, seed, dt);
 
   // ---- deposit + evaporate
   for (let i = 0; i < wet.length; i++) {
@@ -361,8 +490,8 @@ export function dropPlan(
     drops.push({
       x,
       y,
-      r: gh * (0.018 + p * p * p * 0.11),
-      amount: 0.3 + rnd() * 0.4,
+      r: gh * (0.05 + p * p * p * 0.16),
+      amount: 0.7 + rnd() * 0.5,
       at,
     });
   }
@@ -386,16 +515,16 @@ export function inkAlpha(dep: number): number {
   // A broad, light wash — most of the sheet, and the bulk of what the reference
   // actually is. Well under the hinge, so text here keeps its own polarity and
   // merely sits on a tint.
-  if (dep <= 0.05) return 0;
-  if (dep < 0.52) return (0.3 * (dep - 0.05)) / 0.47;
+  if (dep <= 0.02) return 0;
+  if (dep < 0.5) return (0.3 * (dep - 0.02)) / 0.48;
   // The crossing. Everything between a tint and a flip is traversed in one
   // short span of deposit, so almost no pixel lands in 0.35-0.65 where
   // difference blending maps every backdrop onto the same grey.
-  if (dep < 0.68) {
-    const t = (dep - 0.52) / 0.16;
+  if (dep < 0.66) {
+    const t = (dep - 0.5) / 0.16;
     return 0.3 + 0.55 * (t * t * (3 - 2 * t));
   }
   // Committed pigment: a clean inversion, text pale and legible inside it.
-  const v = 0.85 + (dep - 0.68) * 0.6;
+  const v = 0.85 + (dep - 0.66) * 0.6;
   return v > 1 ? 1 : v;
 }

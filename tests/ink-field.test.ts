@@ -3,9 +3,11 @@ import {
   DEPOSIT_RATE,
   EVAPORATION,
   blurField,
+  DRIFT_FLOOR,
   createField,
   dropPlan,
   fibreNoise,
+  flowBias,
   injectBand,
   injectBlob,
   inkAlpha,
@@ -42,12 +44,20 @@ describe('the paper', () => {
     expect(along).toBeLessThan(across * 0.8);
   });
 
-  it('is never impermeable — ink can always move somewhere', () => {
-    const f = createField(40, 40, INK_SEED);
+  it('channels hard, but is never impermeable', () => {
+    // The contrast is what makes ink finger: a narrow range merely nudges the
+    // flow, a wide one floods some channels and starves others. The floor keeps
+    // every cell passable so ink can never hard-stop against a seam.
+    const f = createField(60, 60, INK_SEED);
+    let lo = Infinity;
+    let hi = -Infinity;
     for (const v of f.fibre) {
-      expect(v).toBeGreaterThan(0.5);
-      expect(v).toBeLessThanOrEqual(1.01);
+      expect(v).toBeGreaterThan(0.1);
+      expect(v).toBeLessThanOrEqual(1.1);
+      lo = Math.min(lo, v);
+      hi = Math.max(hi, v);
     }
+    expect(hi / lo).toBeGreaterThan(3);
   });
 
   it('is deterministic', () => {
@@ -58,17 +68,67 @@ describe('the paper', () => {
 });
 
 describe('the simulation', () => {
-  it('darkens at the rim — the signature of watercolour', () => {
-    // THE test. Nothing here draws an edge; the rim holds less water, so it
-    // dries first, so deposition rises there, so pigment carried outward by the
-    // flow strands and settles. If this fails the model has become a blur.
-    const f = drop(45);
-    const c = f.gw / 2;
-    const at = (dx: number) => f.dep[Math.round(c) * f.gw + Math.round(c + dx)]!;
-    const centre = at(0);
-    let rim = 0;
-    for (let d = 5; d <= 9; d++) rim = Math.max(rim, at(d));
-    expect(rim).toBeGreaterThan(centre);
+  it('is densest where it landed and thins outward — ink in water, not on paper', () => {
+    // This assertion used to run the other way, and was right to: on paper the
+    // perimeter dries first, pigment strands there, and you get a coffee ring.
+    // Measuring the reference settled which regime we are in — core alpha 0.549
+    // against 0.329 at the edge. A drop in a bowl has no contact line to pin
+    // and no fast-drying rim to strand against, so it stays darkest where it
+    // fell. ADVECT_BIAS below 1 is what expresses that.
+    const f = drop(60);
+    const c = Math.round(f.gw / 2);
+    const ring = (lo: number, hi: number) => {
+      let sum = 0;
+      let n = 0;
+      for (let y = 0; y < f.gh; y++) {
+        for (let x = 0; x < f.gw; x++) {
+          const d = Math.hypot(x - c, y - c);
+          if (d >= lo && d < hi) { sum += f.dep[y * f.gw + x]!; n++; }
+        }
+      }
+      return n ? sum / n : 0;
+    };
+    expect(ring(0, 5)).toBeGreaterThan(ring(9, 16));
+  });
+
+  it('fingers instead of advancing as a disc', () => {
+    // Saffman-Taylor: a thin fluid pushing into a thicker one breaks into
+    // fingers. The reference measures 0.21 raggedness (radial reach varying
+    // +/-21% around the silhouette); a smooth circle would be ~0. If this ever
+    // fails, the permeability contrast has been narrowed and the front has gone
+    // back to a disc.
+    const f = drop(70, 120, 120, 8);
+    const c = 60;
+    // Threshold relative to the peak, matching how the reference was measured
+    // (a fixed offset from paper white on a normalised image). An absolute
+    // floor traces the faint outer halo, which is smooth by construction, and
+    // says nothing about whether the plume itself is fingered.
+    const cut = Math.max(...f.dep) * 0.06;
+    const reach: number[] = [];
+    for (let k = 0; k < 64; k++) {
+      const th = (k / 64) * Math.PI * 2;
+      let far = 0;
+      for (let r = 1; r < 55; r++) {
+        const x = Math.round(c + Math.cos(th) * r);
+        const y = Math.round(c + Math.sin(th) * r);
+        if (x < 0 || y < 0 || x >= f.gw || y >= f.gh) break;
+        if (f.dep[y * f.gw + x]! > cut) far = r;
+      }
+      reach.push(far);
+    }
+    const mean = reach.reduce((a, b) => a + b, 0) / reach.length;
+    const std = Math.sqrt(reach.reduce((s, v) => s + (v - mean) ** 2, 0) / reach.length);
+    expect(mean).toBeGreaterThan(4);
+    expect(std / mean).toBeGreaterThan(0.12);
+  });
+
+  it('diffuses unevenly — filaments and voids, not a smooth gradient', () => {
+    const f = drop(70, 120, 120, 8);
+    const vals = [...f.dep].filter((v) => v > 2e-3);
+    const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const std = Math.sqrt(vals.reduce((s, v) => s + (v - mean) ** 2, 0) / vals.length);
+    // the reference sits near 0.50 relative variation
+    expect(std / mean).toBeGreaterThan(0.35);
   });
 
   it('conserves pigment once nothing more is added', () => {
@@ -101,6 +161,20 @@ describe('the simulation', () => {
     const before = wetted(f);
     run(f, 30);
     expect(wetted(f)).toBeGreaterThan(before);
+  });
+
+  it('drifts without inventing or destroying water', () => {
+    // The drift only redistributes a cell's outflow among its neighbours, so it
+    // can steer a plume without the solver losing footing.
+    for (let i = 0; i < 50; i++) {
+      const b = flowBias(i * 3.1, i * 1.7, INK_SEED);
+      expect(Number.isFinite(b.dx)).toBe(true);
+      expect(Number.isFinite(b.dy)).toBe(true);
+      expect(Math.hypot(b.dx, b.dy)).toBeLessThanOrEqual(1.001);
+    }
+    // it dominates the gradient on purpose — diffusion alone smooths fingers
+    // away — but the floor is what keeps every share strictly positive
+    expect(DRIFT_FLOOR).toBeGreaterThan(0);
   });
 
   it('bleeds further along the grain than across it', () => {

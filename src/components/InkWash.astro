@@ -43,11 +43,11 @@
   /** How long the rain takes to fall across the sheet. */
   const INJECT_MS = 2200;
   /** Drops per pour. Many fine, a few fat — see dropPlan. */
-  const DROPS = 150;
+  const DROPS = 34;
   /** Render-time softening radius, in cells. */
-  const BLUR = 2;
+  const BLUR = 1;
   /** Simulation ticks per painted frame. More is faster ink, not smoother. */
-  const TICKS = 3;
+  const TICKS = 8;
   /** Vertical share of the hero the band wets. */
   const BAND_TOP = 0.12;
   const BAND_BOTTOM = 0.84;
@@ -137,7 +137,7 @@
     // cycle is a fresh pour rather than the same stain fading in and out.
     if (presence > 0) {
       if (step > 0) rainTo(Math.min(1, injectedTo + step / INJECT_MS));
-      for (let t = 0; t < TICKS; t++) stepInk(field, 1);
+      for (let t = 0; t < TICKS; t++) stepInk(field, 1, INK_SEED);
     } else if (injectedTo > 0) {
       resetField(field);
       injectedTo = 0;
