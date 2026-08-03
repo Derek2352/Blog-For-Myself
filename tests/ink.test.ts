@@ -1,7 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import {
+  CLEAR_MS,
   CREEP_MAX,
+  CYCLE_MS,
+  DRY_MS,
   ENTRANCE_MS,
+  HOLD_MS,
+  RETURN_MS,
+  inkAfterDrying,
+  strokePresence,
   INK_PEAK_ALPHA,
   INK_SEED,
   STROKE_BOTTOM,
@@ -356,6 +363,102 @@ describe('entrance', () => {
     for (let ms = 25; ms < ENTRANCE_MS; ms += 25) {
       const { spread, soak } = entrance(ms);
       expect(soak).toBeGreaterThan(spread);
+    }
+  });
+});
+
+describe('strokePresence — coming and going', () => {
+  it('is fully present through hold and fully gone through clear', () => {
+    expect(strokePresence(0)).toBe(1);
+    expect(strokePresence(HOLD_MS - 1)).toBe(1);
+    expect(strokePresence(HOLD_MS + DRY_MS)).toBe(0);
+    expect(strokePresence(HOLD_MS + DRY_MS + CLEAR_MS - 1)).toBe(0);
+  });
+
+  it('leaves the hero clean for longer than it covers it', () => {
+    // the whole point of the feature — a mark that is present most of the time
+    // has not solved anything
+    let clear = 0;
+    for (let t = 0; t < CYCLE_MS; t += 10) if (strokePresence(t) < 0.02) clear += 10;
+    expect(clear).toBeGreaterThan(CYCLE_MS / 2);
+  });
+
+  it('falls monotonically while drying and rises monotonically returning', () => {
+    let prev = 1;
+    for (let t = HOLD_MS; t <= HOLD_MS + DRY_MS; t += 20) {
+      const v = strokePresence(t);
+      expect(v).toBeLessThanOrEqual(prev + 1e-9);
+      prev = v;
+    }
+    const backFrom = HOLD_MS + DRY_MS + CLEAR_MS;
+    prev = 0;
+    for (let t = backFrom; t <= backFrom + RETURN_MS; t += 20) {
+      const v = strokePresence(t);
+      expect(v).toBeGreaterThanOrEqual(prev - 1e-9);
+      prev = v;
+    }
+  });
+
+  it('never jumps — a discontinuity would read as the flicker this replaces', () => {
+    let prev = strokePresence(0);
+    for (let t = 5; t <= CYCLE_MS * 2; t += 5) {
+      const v = strokePresence(t);
+      expect(Math.abs(v - prev)).toBeLessThan(0.02);
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThanOrEqual(1);
+      prev = v;
+    }
+  });
+
+  it('repeats, and handles a negative or huge clock', () => {
+    expect(strokePresence(CYCLE_MS + 250)).toBeCloseTo(strokePresence(250), 10);
+    expect(strokePresence(-CYCLE_MS + 250)).toBeCloseTo(strokePresence(250), 10);
+    expect(strokePresence(CYCLE_MS * 500 + 60)).toBeCloseTo(strokePresence(60), 10);
+  });
+});
+
+describe('inkAfterDrying', () => {
+  it('is the identity when present and empty when gone', () => {
+    for (const ink of [0, 0.3, 0.75, 1]) {
+      expect(inkAfterDrying(ink, 1)).toBe(ink);
+      expect(inkAfterDrying(ink, 0)).toBe(0);
+    }
+  });
+
+  it('thin ink dries before thick — the reason this is not a cross-fade', () => {
+    // A uniform fade would keep these in step. Drying must not: the faint 飛白
+    // tail has to let go while the loaded head is still on the page.
+    const thin = 0.2;
+    const thick = 0.9;
+    let thinGone = -1;
+    let thickGone = -1;
+    for (let p = 1; p >= 0; p -= 0.01) {
+      if (thinGone < 0 && inkAfterDrying(thin, p) === 0) thinGone = p;
+      if (thickGone < 0 && inkAfterDrying(thick, p) === 0) thickGone = p;
+    }
+    expect(thinGone).toBeGreaterThan(thickGone);
+    // and at any mid presence the thick ink is strictly ahead
+    expect(inkAfterDrying(thick, 0.5)).toBeGreaterThan(inkAfterDrying(thin, 0.5));
+  });
+
+  it('stays in [0,1] and rises with both arguments', () => {
+    for (let p = 0; p <= 1; p += 0.05) {
+      let prev = -1;
+      for (let ink = 0; ink <= 1; ink += 0.05) {
+        const v = inkAfterDrying(ink, p);
+        expect(v).toBeGreaterThanOrEqual(0);
+        expect(v).toBeLessThanOrEqual(1);
+        expect(v).toBeGreaterThanOrEqual(prev - 1e-9);
+        prev = v;
+      }
+    }
+    for (let ink = 0.1; ink <= 1; ink += 0.1) {
+      let prev = -1;
+      for (let p = 0; p <= 1; p += 0.05) {
+        const v = inkAfterDrying(ink, p);
+        expect(v).toBeGreaterThanOrEqual(prev - 1e-9);
+        prev = v;
+      }
     }
   });
 });

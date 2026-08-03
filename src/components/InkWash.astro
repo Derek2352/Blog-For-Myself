@@ -26,7 +26,9 @@
     bristles,
     creep,
     entrance,
+    inkAfterDrying,
     splatter,
+    strokePresence,
     strokeSpine,
     trailAlpha,
     type Bristle,
@@ -85,6 +87,27 @@
   let io: IntersectionObserver | null = null;
   /** When the brush started travelling. 0 until the first painted frame. */
   let arrivedAt = 0;
+  /**
+   * Position within the come-and-go cycle. Advanced by hand rather than derived
+   * from the clock, so it can be held still while someone is reading.
+   */
+  let cycleAt = 0;
+  let lastTick = 0;
+  /** Last time the page was scrolled, and whether the pointer is over the hero. */
+  let lastScrollAt = -Infinity;
+  let pointerOver = false;
+
+  /**
+   * True when someone is plainly engaged with the hero.
+   *
+   * Used only to withhold the stroke's *return* — the ink is free to keep
+   * drying, but it may not paint itself back over a line someone is reading.
+   * Fading out is polite; fading back in mid-sentence is worse than never
+   * having moved.
+   */
+  function engaged(): boolean {
+    return pointerOver || performance.now() - lastScrollAt < 1200;
+  }
 
   // Capability, not width: this is the correct question for "is there a real
   // cursor". A phone drag over the hero means "scroll", and painting with it
@@ -101,7 +124,12 @@
    * `reach` is how far along the path the brush has travelled, which is what
    * makes the entrance a stroke being made rather than a shape fading up.
    */
-  function drawBrush(ctx: CanvasRenderingContext2D, reach: number, now: number): void {
+  function drawBrush(
+    ctx: CanvasRenderingContext2D,
+    reach: number,
+    now: number,
+    presence: number,
+  ): void {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     for (const hair of hairs) {
@@ -115,7 +143,11 @@
       const tip = reach - Math.abs(hair.offset) * TIP_ROUND;
       for (let i = 0; i < spine.length; i++) {
         const p = spine[i]!;
-        const inkLeft = hair.breaks[i]!;
+        // Threshold rather than fade: as presence drops the faintest ink goes
+        // first, so the shredded tail evaporates while the loaded head is still
+        // wet. Dimming every hair together would look like a layer being turned
+        // down rather than like ink leaving paper.
+        const inkLeft = inkAfterDrying(hair.breaks[i]!, presence);
         // past this hair's tip, or it has no ink here
         if (p.t > tip || inkLeft <= 0) {
           if (open) {
@@ -180,6 +212,27 @@
     if (!arrivedAt) arrivedAt = now;
     const { spread, soak } = entrance(now - arrivedAt);
 
+    // Advance the cycle by real elapsed time, except that it may not step *into*
+    // a rising presence while someone is reading. Holding the clock rather than
+    // resetting it means the ink resumes where it left off instead of lurching.
+    const step = lastTick ? Math.min(250, now - lastTick) : 0;
+    lastTick = now;
+    if (step > 0) {
+      const next = cycleAt + step;
+      if (!(engaged() && strokePresence(next) > strokePresence(cycleAt))) {
+        cycleAt = next;
+      }
+    }
+    const presence = strokePresence(cycleAt);
+
+    // The clear phase is most of the cycle, so this is where the feature pays
+    // for itself: nothing to composite means no path work at all, and the loop
+    // costs less than the permanent stroke it replaced.
+    if (presence <= 0 && dabs.length === 0) {
+      view.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+
     bufCtx.clearRect(0, 0, buf.width, buf.height);
     // Always white, in both themes. The canvas composites with
     // mix-blend-mode: difference, so white inverts whatever it lands on — paper
@@ -189,9 +242,13 @@
     bufCtx.strokeStyle = INK_SOURCE;
     bufCtx.fillStyle = INK_SOURCE;
 
-    drawBrush(bufCtx, spread, now);
+    drawBrush(bufCtx, spread, now, presence);
+    // Droplets keep a floor rather than vanishing: they are small and sit mostly
+    // off the words, so a faint mist holds the composition together while the
+    // stroke itself is away and the text is clear.
+    const mist = 0.2 + presence * 0.8;
     for (const s of splats) {
-      if (s.at <= spread) drawSplat(bufCtx, s.x, s.y, s.r, 1, s.aspect, s.angle);
+      if (s.at <= spread) drawSplat(bufCtx, s.x, s.y, s.r, mist, s.aspect, s.angle);
     }
 
     // Cursor droplets are drawn after the stroke and aged out here, so the list
@@ -303,6 +360,14 @@
     sync();
   }
 
+  function onEnter(): void {
+    pointerOver = true;
+  }
+
+  function onLeave(): void {
+    pointerOver = false;
+  }
+
   function mount(): void {
     if (canvas) return;
     const el = document.querySelector<HTMLCanvasElement>('canvas.ink-wash');
@@ -325,6 +390,11 @@
     resize();
 
     window.addEventListener('resize', resize, { passive: true });
+    // Engagement is tracked on the hero itself. `pointerover` rather than the
+    // dab listener because that one is gated on a fine pointer, and the ink must
+    // stay out of a touch reader's way just as much.
+    host?.addEventListener('pointerenter', onEnter, { passive: true });
+    host?.addEventListener('pointerleave', onLeave, { passive: true });
     // The canvas is pointer-events:none, so the hero section carries the
     // listener. Passive — flicking ink must never interfere with scrolling.
     if (finePointer.matches && host) {
@@ -347,6 +417,8 @@
     io = null;
     window.removeEventListener('resize', resize);
     host?.removeEventListener('pointermove', onPointerMove);
+    host?.removeEventListener('pointerenter', onEnter);
+    host?.removeEventListener('pointerleave', onLeave);
     if (canvas) canvas.hidden = true;
     canvas = null;
     view = null;
@@ -361,6 +433,9 @@
     // Landing on the page again should look like landing on it, so the brush
     // travels again rather than snapping back to a finished stroke.
     arrivedAt = 0;
+    cycleAt = 0;
+    lastTick = 0;
+    pointerOver = false;
   }
 
   /* ---- wiring. Registered once at module scope: with the view transitions
@@ -378,6 +453,16 @@
   document.addEventListener('astro:before-swap', unmount);
 
   document.addEventListener('visibilitychange', sync);
+
+  // Scrolling counts as reading, and is the half of engagement that works on a
+  // phone, where there is no pointer to hover with.
+  document.addEventListener(
+    'scroll',
+    () => {
+      lastScrollAt = performance.now();
+    },
+    { passive: true },
+  );
 
   finePointer.addEventListener('change', () => {
     if (!host) return;

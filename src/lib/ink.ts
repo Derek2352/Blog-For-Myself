@@ -407,6 +407,69 @@ export function entrance(
   return { spread, soak };
 }
 
+/* ------------------------------------------------------------------ *
+ * Coming and going.
+ * ------------------------------------------------------------------ */
+
+/** Fully present, after the entrance and after each return. */
+export const HOLD_MS = 5000;
+/** Drying off the page. */
+export const DRY_MS = 1800;
+/** Gone — a clean hero. Deliberately the longest phase. */
+export const CLEAR_MS = 9000;
+/** Painting itself back. */
+export const RETURN_MS = 2000;
+export const CYCLE_MS = HOLD_MS + DRY_MS + CLEAR_MS + RETURN_MS;
+
+/**
+ * How much of the stroke is on the page, over one cycle.
+ *
+ * A mark sitting permanently across the tagline stays legible under the
+ * difference blend, but legible is not comfortable. So the ink lands, holds long
+ * enough to be seen, dries off, and leaves the words alone for longer than it
+ * covered them.
+ *
+ * Takes a position *within* the cycle rather than a clock, so the caller can
+ * hold time still while someone is reading without this needing to know that
+ * readers exist.
+ *
+ * Every phase boundary is continuous. A discontinuity here would read as a
+ * flicker, which is exactly the failure this feature is meant to remove.
+ */
+export function strokePresence(tMs: number): number {
+  const t = ((tMs % CYCLE_MS) + CYCLE_MS) % CYCLE_MS;
+  if (t < HOLD_MS) return 1;
+  const dry = t - HOLD_MS;
+  if (dry < DRY_MS) {
+    const p = dry / DRY_MS;
+    return 1 - p * p * (3 - 2 * p);
+  }
+  const clear = dry - DRY_MS;
+  if (clear < CLEAR_MS) return 0;
+  const back = clear - CLEAR_MS;
+  const p = back / RETURN_MS;
+  return p * p * (3 - 2 * p);
+}
+
+/**
+ * What is left of one hair's ink as the stroke dries.
+ *
+ * Not a fade. Turning the whole layer down uniformly looks like an image being
+ * dimmed; ink leaves paper thin-parts-first, the shredded 飛白 tail giving up
+ * while the loaded head is still wet.
+ *
+ * That needs no new data — each hair already records how much ink it holds at
+ * each sample, so raising a threshold against it takes the faintest ink first
+ * and the darkest last. The stroke therefore leaves in the reverse of the order
+ * it arrived.
+ */
+export function inkAfterDrying(inkLeft: number, presence: number): number {
+  if (presence >= 1) return inkLeft;
+  if (presence <= 0) return 0;
+  const v = (inkLeft - (1 - presence)) / presence;
+  return v <= 0 ? 0 : v >= 1 ? 1 : v;
+}
+
 /**
  * Alpha envelope for a cursor splat as it dries: 1 when fresh, 0 once TRAIL_MS
  * has passed. Squared so it holds briefly and then goes quickly, the way wet ink
