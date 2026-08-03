@@ -14,7 +14,7 @@ import {
   STROKE_BOTTOM,
   STROKE_TOP,
   TRAIL_MS,
-  bristles,
+  washLayers,
   creep,
   entrance,
   fbm,
@@ -173,81 +173,86 @@ describe('strokeSpine', () => {
   });
 });
 
-describe('bristles — where the 飛白 comes from', () => {
-  const hairs = bristles(spine, 42);
+describe('washLayers — soft masses, not strands', () => {
+  const layers = washLayers(spine, 46);
 
   it('is deterministic', () => {
-    expect(bristles(spine, 42)).toEqual(bristles(spine, 42, INK_SEED));
+    expect(washLayers(spine, 46)).toEqual(washLayers(spine, 46, INK_SEED));
   });
 
-  it('spans the brush without escaping it', () => {
-    for (const h of hairs) {
-      expect(h.offset).toBeGreaterThanOrEqual(-1);
-      expect(h.offset).toBeLessThanOrEqual(1);
+  it('carries less pigment the further out it blooms', () => {
+    // Load-bearing, not cosmetic: this ordering IS the drying behaviour. If it
+    // ever inverted, inkAfterDrying would empty the core first and the stain
+    // would cross-fade instead of drying edge-inward.
+    const wash = layers.filter((l) => l.kind === 'wash').sort((a, b) => a.spread - b.spread);
+    expect(wash.length).toBeGreaterThan(30);
+    for (let i = 1; i < wash.length; i++) {
+      expect(wash[i]!.density).toBeLessThan(wash[i - 1]!.density);
     }
-    // hairs on both sides of the spine
-    expect(hairs.some((h) => h.offset < -0.3)).toBe(true);
-    expect(hairs.some((h) => h.offset > 0.3)).toBe(true);
   });
 
-  it('gives one ink value per spine sample, all in [0,1]', () => {
-    for (const h of hairs) {
-      expect(h.breaks).toHaveLength(spine.length);
-      for (const v of h.breaks) {
-        expect(v).toBeGreaterThanOrEqual(0);
-        expect(v).toBeLessThanOrEqual(1);
+  it('keeps clumps dense and small — they are pools, not bloom', () => {
+    // A clump sits inside the mass, so it is mid-spread and near-opaque and
+    // dries last. It is exempt from the wash's ordering on purpose, which is
+    // why the two families are labelled rather than distinguished by position.
+    const clumps = layers.filter((l) => l.kind === 'clump');
+    expect(clumps.length).toBeGreaterThan(3);
+    const washAtSameDepth = layers.filter((l) => l.kind === 'wash' && l.spread > 0.15);
+    for (const c of clumps) {
+      expect(c.density).toBeGreaterThan(0.8);
+      for (const w of washAtSameDepth) expect(c.density).toBeGreaterThan(w.density);
+    }
+  });
+
+  it('dries from the edge inwards once composed with inkAfterDrying', () => {
+    const sorted = layers.filter((l) => l.kind === 'wash').sort((a, b) => a.spread - b.spread);
+    const core = sorted[0]!;
+    const rim = sorted[sorted.length - 1]!;
+    const emptyAt = (d: number) => {
+      for (let p = 1; p >= 0; p -= 0.01) if (inkAfterDrying(d, p) === 0) return p;
+      return 0;
+    };
+    expect(emptyAt(rim.density)).toBeGreaterThan(emptyAt(core.density));
+  });
+
+  it('gives every layer a closed polygon with organic detail', () => {
+    for (const l of layers) {
+      expect(l.pts.length % 2).toBe(0);
+      // three subdivision levels off a ~20-point ribbon
+      expect(l.pts.length / 2).toBeGreaterThan(40);
+      for (const v of l.pts) expect(Number.isFinite(v)).toBe(true);
+    }
+  });
+
+  it('actually blooms — the rim reaches well past the core', () => {
+    // Across the wash family only: a clump is deliberately tiny, so including
+    // one at either end of the sort measures nothing about blooming.
+    const extent = (l: (typeof layers)[number]) => {
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (let i = 1; i < l.pts.length; i += 2) {
+        lo = Math.min(lo, l.pts[i]!);
+        hi = Math.max(hi, l.pts[i]!);
       }
+      return hi - lo;
+    };
+    const wash = layers.filter((l) => l.kind === 'wash').sort((a, b) => a.spread - b.spread);
+    expect(extent(wash[wash.length - 1]!)).toBeGreaterThan(extent(wash[0]!) * 1.35);
+  });
+
+  it('keeps density in [0,1] so the alpha budget cannot be blown', () => {
+    for (const l of layers) {
+      expect(l.density).toBeGreaterThan(0);
+      expect(l.density).toBeLessThanOrEqual(1);
+      expect(l.spread).toBeGreaterThanOrEqual(0);
+      expect(l.spread).toBeLessThanOrEqual(1);
     }
   });
 
-  it('actually breaks — otherwise there is no white', () => {
-    // the entire effect is hairs declining to draw; a brush with no gaps is a
-    // ribbon
-    const total = hairs.length * spine.length;
-    const dry = hairs.reduce((n, h) => n + h.breaks.filter((v) => v === 0).length, 0);
-    expect(dry).toBeGreaterThan(total * 0.15);
-    expect(dry).toBeLessThan(total * 0.9);
-  });
-
-  it('dries out toward the tail', () => {
-    // the head should hold far more ink than the tail, which is what makes it
-    // read as one loaded stroke rather than as hatching
-    const third = Math.floor(spine.length / 3);
-    const inkOver = (from: number, to: number) =>
-      hairs.reduce((sum, h) => sum + h.breaks.slice(from, to).reduce((a, b) => a + b, 0), 0);
-    expect(inkOver(0, third)).toBeGreaterThan(inkOver(spine.length - third, spine.length) * 2);
-  });
-
-  it('varies its own width along each hair', () => {
-    // a constant-width hair is a line; a brush is not made of lines
-    for (const h of hairs.slice(0, 8)) {
-      expect(h.press).toHaveLength(spine.length);
-      const lo = Math.min(...h.press);
-      const hi = Math.max(...h.press);
-      expect(lo).toBeGreaterThan(0);
-      expect(hi).toBeGreaterThan(lo * 1.4);
-    }
-  });
-
-  it('tears at the outer edge and holds its line at the core', () => {
-    // a perfectly parallel boundary is the giveaway that a stroke was drawn by
-    // arithmetic rather than dragged across paper
-    const spread = (h: (typeof hairs)[number]) =>
-      Math.max(...h.wander) - Math.min(...h.wander);
-    const core = hairs.filter((h) => Math.abs(h.offset) < 0.25);
-    const rim = hairs.filter((h) => Math.abs(h.offset) > 0.8);
-    const mean = (set: typeof hairs) =>
-      set.reduce((s, h) => s + spread(h), 0) / (set.length || 1);
-    expect(mean(rim)).toBeGreaterThan(mean(core) * 3);
-  });
-
-  it('frays at the edges before the middle', () => {
-    const mid = hairs.filter((h) => Math.abs(h.offset) < 0.3);
-    const edge = hairs.filter((h) => Math.abs(h.offset) > 0.7);
-    const meanInk = (set: typeof hairs) =>
-      set.reduce((s, h) => s + h.breaks.reduce((a, b) => a + b, 0) / h.breaks.length, 0) /
-      (set.length || 1);
-    expect(meanInk(mid)).toBeGreaterThan(meanInk(edge));
+  it('includes dark clumps so the interior is mottled, not an airbrush', () => {
+    // a smooth core-to-edge gradient reads as a gradient; pigment settles in
+    // patches
+    expect(layers.filter((l) => l.kind === 'clump').length).toBeGreaterThan(5);
   });
 });
 

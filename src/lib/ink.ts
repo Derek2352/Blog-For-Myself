@@ -221,68 +221,140 @@ export function strokeSpine(
 }
 
 /* ------------------------------------------------------------------ *
- * The bristles — where the white comes from.
+ * The wash — where the softness comes from.
  * ------------------------------------------------------------------ */
 
-export interface Bristle {
-  /** Position across the brush, -1 at one edge, +1 at the other. */
-  offset: number;
-  /** Per-spine-sample ink, 0 where this hair ran dry. This is the 飛白. */
-  breaks: number[];
-  /** Per-sample width multiplier — the hair thickening and thinning. */
-  press: number[];
-  /** Per-sample perpendicular wander, in fractions of stroke width. */
-  wander: number[];
+export interface WashLayer {
+  /** Closed polygon, flat [x0,y0,x1,y1,…]. */
+  pts: Float64Array;
+  /** Pigment this layer carries. Feeds inkAfterDrying, so it drives drying. */
+  density: number;
+  /** 0 at the core, 1 at the furthest bloom. */
+  spread: number;
+  /**
+   * Which family this belongs to.
+   *
+   * The two are genuinely different and only the wash obeys "further out means
+   * fainter" — a clump is a dense pool sitting *inside* the mass, so it is both
+   * mid-spread and near-opaque, and it dries last. Nothing but array position
+   * used to tell them apart, which quietly broke the ordering that the whole
+   * drying behaviour rests on.
+   */
+  kind: 'wash' | 'clump';
 }
 
 /**
- * Lay out the brush head.
+ * Recursively displace every edge midpoint along its own normal.
  *
- * Two things make this read as a real brush rather than as hatching. Bristles
- * cluster toward the middle (`offset` cubed), because a brush carries most of
- * its ink in the body and frays at the edges. And the threshold a hair must
- * clear to hold ink *rises along the stroke*, so hairs drop out progressively
- * and the tail shreds into streaks while the head stays solid.
+ * Three levels turns a 20-point ribbon into ~160 points with detail at three
+ * scales, which is what stops the outline reading as a smooth blob.
  */
-export function bristles(spine: SpinePoint[], count: number, seed = INK_SEED): Bristle[] {
-  const rnd = mulberry32(seed + 7919);
-  const out: Bristle[] = [];
-  for (let b = 0; b < count; b++) {
-    // even spread, jittered, then biased toward the centre
-    const even = count === 1 ? 0 : (b / (count - 1)) * 2 - 1;
-    const jitter = (rnd() - 0.5) * (2 / count);
-    const raw = Math.max(-1, Math.min(1, even + jitter));
-    const offset = Math.sign(raw) * Math.pow(Math.abs(raw), 1.35);
-    const lane = rnd() * 100;
-    const breaks: number[] = [];
-    const press: number[] = [];
-    const wander: number[] = [];
-    for (const p of spine) {
-      // Ink remaining in the brush. The threshold a hair must clear is scaled by
-      // how *dry* the brush is, so at the head it is zero and every hair holds
-      // — the stroke starts as a solid mass and only shreds once the ink runs
-      // low. A first pass thresholded against the grain directly, which made
-      // every hair break everywhere and read as a bundle of wires.
-      const wet = 1 - Math.pow(p.t, 0.85);
-      const grain = fbm(p.t * 9, lane, seed + b * 37, 3);
-      const edge = 1 - Math.abs(offset) * 0.35;
-      // Pooling: a broad, slow field so the body of the stroke has heavier and
-      // lighter passages instead of one flat tone.
-      const pool = 0.72 + fbm(p.t * 2.3, offset * 1.7, seed + 611, 2) * 0.5;
-      const ink = wet * edge - grain * (1 - wet) * 1.6;
-      breaks.push(ink > 0 ? Math.min(1, ink * 2.2 * pool) : 0);
+function deform(
+  pts: number[],
+  depth: number,
+  variance: number,
+  rnd: () => number,
+): number[] {
+  if (depth <= 0) return pts;
+  const n = pts.length / 2;
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const ax = pts[i * 2]!;
+    const ay = pts[i * 2 + 1]!;
+    const j = (i + 1) % n;
+    const bx = pts[j * 2]!;
+    const by = pts[j * 2 + 1]!;
+    out.push(ax, ay);
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len = Math.hypot(dx, dy) || 1;
+    // sum of three uniforms ≈ normal: big excursions stay rare, so the edge
+    // wanders without spiking into thorns
+    const g = (rnd() + rnd() + rnd() - 1.5) * 0.95;
+    const off = g * variance * len;
+    out.push((ax + bx) / 2 - (dy / len) * off, (ay + by) / 2 + (dx / len) * off);
+  }
+  return deform(out, depth - 1, variance * 0.55, rnd);
+}
 
-      // A hair is not a constant-width line. This is most of what separates a
-      // brush from a set of parallel strokes.
-      press.push(0.55 + fbm(p.t * 5.5, lane + 40, seed + b * 53, 2) * 1.1);
+/** A closed ribbon around the spine at `swell` times its half-width. */
+function ribbon(spine: SpinePoint[], swell: number): number[] {
+  const back: number[] = [];
+  const out: number[] = [];
+  for (const p of spine) {
+    const w = p.width * swell;
+    out.push(p.x + p.nx * w, p.y + p.ny * w);
+    back.push(p.x - p.nx * w, p.y - p.ny * w);
+  }
+  for (let i = back.length - 2; i >= 0; i -= 2) out.push(back[i]!, back[i + 1]!);
+  return out;
+}
 
-      // Torn edge: the outermost hairs wander, the core holds its line. A brush
-      // frays where it meets paper, and a perfectly parallel boundary is the
-      // giveaway that this was drawn by arithmetic.
-      const fray = Math.pow(Math.abs(offset), 2.2);
-      wander.push((fbm(p.t * 13, lane + 90, seed + b * 71, 3) * 2 - 1) * fray * 0.14);
+/**
+ * The wash: one shape drawn many times, each copy deformed further than the
+ * last, every one of them faint.
+ *
+ * Density is never drawn — it accumulates where the copies coincide and falls
+ * away where only the wildest ones reach, which is what gives a dense core and
+ * an edge that blooms instead of ending.
+ *
+ * This replaced a brush modelled as individual hairs. That reads correctly only
+ * while the ink is dense enough for the strands to merge; across the dried-out
+ * tail, which is most of the mark, the strands stayed visible and the whole
+ * thing looked like noodles. 飛白 is *occasional* streaks through a solid
+ * stroke, not the body of one, and a layer sitting behind text is better served
+ * by soft masses than by lines that compete with the type.
+ *
+ * `density` falling as `spread` rises is load-bearing rather than decorative:
+ * it is the entire drying behaviour. Outer layers hold least pigment, so
+ * inkAfterDrying() empties them first and the stain dries edge-inward, which is
+ * what watercolour actually does.
+ */
+export function washLayers(
+  spine: SpinePoint[],
+  count = 46,
+  seed = INK_SEED,
+): WashLayer[] {
+  const rnd = mulberry32(seed + 31337);
+  // Coarse base: deforming all 90 spine samples three levels deep would be
+  // ~2,900 points per layer for detail nobody can see.
+  const coarse: SpinePoint[] = [];
+  const step = Math.max(1, Math.floor(spine.length / 9));
+  for (let i = 0; i < spine.length; i += step) coarse.push(spine[i]!);
+  if (coarse[coarse.length - 1] !== spine[spine.length - 1]) {
+    coarse.push(spine[spine.length - 1]!);
+  }
+
+  const out: WashLayer[] = [];
+  for (let i = 0; i < count; i++) {
+    const t = count === 1 ? 0 : i / (count - 1);
+    const base = ribbon(coarse, 0.4 + t * 1.3);
+    out.push({
+      pts: Float64Array.from(deform(base, 3, 0.055 + t * 0.16, rnd)),
+      density: 1 - t * 0.74,
+      spread: t,
+      kind: 'wash',
+    });
+  }
+
+  // Clumps: small dark pools inside the mass. Without them the interior grades
+  // evenly from core to edge and reads as an airbrush rather than as pigment
+  // settling into paper.
+  const clumps = 7;
+  for (let c = 0; c < clumps; c++) {
+    const p = spine[Math.floor(rnd() * spine.length * 0.8)]!;
+    const r = p.width * (0.3 + rnd() * 0.5);
+    const ring: number[] = [];
+    for (let k = 0; k < 9; k++) {
+      const a = (k / 9) * Math.PI * 2;
+      ring.push(p.x + Math.cos(a) * r * 1.7, p.y + Math.sin(a) * r);
     }
-    out.push({ offset, breaks, press, wander });
+    out.push({
+      pts: Float64Array.from(deform(ring, 3, 0.12, rnd)),
+      density: 0.82 + rnd() * 0.18,
+      spread: 0.12 + rnd() * 0.2,
+      kind: 'clump',
+    });
   }
   return out;
 }
