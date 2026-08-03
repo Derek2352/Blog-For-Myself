@@ -46,15 +46,20 @@ export const FIBRE_ANGLE = 0.28;
  * travels along it further than across it. Sampling ordinary value noise on a
  * squashed, rotated coordinate frame gives the same anisotropy for a fraction of
  * the cost — the lobes come out stretched along the grain.
+ *
+ * Deliberately low frequency. Sampled per grid cell, paper that varied cell to
+ * cell modulated the flow at exactly the scale the upscale later reveals, and
+ * the wash came out granular instead of silky. Real fibre is finer than a
+ * millimetre; what belongs at this scale is the *lay* of it, not the threads.
  */
 export function fibreNoise(x: number, y: number, seed: number): number {
   const c = Math.cos(FIBRE_ANGLE);
   const s = Math.sin(FIBRE_ANGLE);
   // rotate into fibre space, then squash along it so features elongate
-  const u = (x * c + y * s) * 0.16;
-  const v = (-x * s + y * c) * 0.85;
+  const u = (x * c + y * s) * 0.055;
+  const v = (-x * s + y * c) * 0.30;
   const coarse = valueNoise2(u, v, seed);
-  const fine = valueNoise2(u * 3.1, v * 2.7, seed + 17);
+  const fine = valueNoise2(u * 2.3, v * 2.0, seed + 17);
   return coarse * 0.68 + fine * 0.32;
 }
 
@@ -140,7 +145,7 @@ export function injectBand(
  * inkAlpha correctly discarded as a whisper, so 27% of the sheet held pigment
  * and almost none of it rendered. This concentrates the ink instead.
  */
-export const PIG_LOAD = 1.8;
+export const PIG_LOAD = 1.55;
 
 /** One drop — a splash of splatter, or the cursor. It will bleed on its own. */
 export function injectBlob(
@@ -268,6 +273,100 @@ export function stepInk(f: InkField, dt = 1): void {
       pig[i] = 0;
     }
   }
+}
+
+/**
+ * Separable box blur over a grid, into `out`.
+ *
+ * Render-time only, and deliberately not part of the physics: deposited pigment
+ * does not crawl around after it has dried. This exists because the alpha curve
+ * below is steep by necessity, and a steep transfer turns any cell-to-cell
+ * variation into visible speckle. Softening the field first is what makes the
+ * wash read as silky rather than granular.
+ */
+export function blurField(
+  src: Float32Array,
+  out: Float32Array,
+  scratch: Float32Array,
+  gw: number,
+  gh: number,
+  radius = 2,
+): void {
+  const n = radius * 2 + 1;
+  for (let y = 0; y < gh; y++) {
+    const row = y * gw;
+    for (let x = 0; x < gw; x++) {
+      let sum = 0;
+      for (let k = -radius; k <= radius; k++) {
+        const xx = x + k < 0 ? 0 : x + k >= gw ? gw - 1 : x + k;
+        sum += src[row + xx]!;
+      }
+      scratch[row + x] = sum / n;
+    }
+  }
+  for (let x = 0; x < gw; x++) {
+    for (let y = 0; y < gh; y++) {
+      let sum = 0;
+      for (let k = -radius; k <= radius; k++) {
+        const yy = y + k < 0 ? 0 : y + k >= gh ? gh - 1 : y + k;
+        sum += scratch[yy * gw + x]!;
+      }
+      out[y * gw + x] = sum / n;
+    }
+  }
+}
+
+export interface Drop {
+  x: number;
+  y: number;
+  r: number;
+  amount: number;
+  /** 0-1 through the pour when this one lands. */
+  at: number;
+}
+
+/**
+ * Where the rain falls.
+ *
+ * Ink arrives as discrete drops that land and then spread into one another,
+ * rather than as a band poured across the sheet. That is both what actually
+ * happens to ink on paper and what the model wants: a poured band had to be
+ * laid down in vertical slices, and every slice boundary was a wetness step
+ * that drove a flow and printed a stripe.
+ *
+ * Sizes follow a power law — many fine drops, a few fat ones that become the
+ * dark pools. Deterministic, so the composition is chosen rather than rolled.
+ */
+export function dropPlan(
+  gw: number,
+  gh: number,
+  bandTop: number,
+  bandBottom: number,
+  count: number,
+  seed: number,
+): Drop[] {
+  const rnd = mulberry32(seed + 8191);
+  const drops: Drop[] = [];
+  const yc = (bandTop + bandBottom) / 2;
+  const half = (bandBottom - bandTop) / 2;
+  for (let i = 0; i < count; i++) {
+    const at = i / count;
+    // land a little ahead of the front rather than anywhere, so the sheet still
+    // fills roughly left to right instead of flickering into existence
+    const x = (at * 0.82 + rnd() * 0.3 - 0.06) * gw;
+    // biased toward the middle of the band, so its edges stay ragged
+    const u = rnd() * 2 - 1;
+    const y = yc + Math.sign(u) * Math.pow(Math.abs(u), 1.5) * half;
+    const p = rnd();
+    drops.push({
+      x,
+      y,
+      r: gh * (0.018 + p * p * p * 0.11),
+      amount: 0.3 + rnd() * 0.4,
+      at,
+    });
+  }
+  return drops;
 }
 
 /**

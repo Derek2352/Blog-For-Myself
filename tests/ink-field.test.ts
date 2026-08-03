@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   DEPOSIT_RATE,
   EVAPORATION,
+  blurField,
   createField,
+  dropPlan,
   fibreNoise,
   injectBand,
   injectBlob,
@@ -237,5 +239,76 @@ describe('inkAlpha — keeping text out of the blend’s dead middle', () => {
     let tint = 0;
     for (let i = 0; i <= 100; i++) if (inkAlpha(i / 100) < 0.35) tint++;
     expect(tint).toBeGreaterThan(50);
+  });
+});
+
+describe('blurField — why the wash is silky rather than granular', () => {
+  it('smooths cell-to-cell speckle', () => {
+    // The alpha curve must stay steep to clear the blend's dead middle, and a
+    // steep transfer amplifies any per-cell variation into visible grain. This
+    // is what removes the grain before the curve can magnify it.
+    const gw = 40;
+    const gh = 40;
+    const src = new Float32Array(gw * gh);
+    for (let i = 0; i < src.length; i++) src[i] = i % 2 === 0 ? 1 : 0;
+    const out = new Float32Array(gw * gh);
+    const scratch = new Float32Array(gw * gh);
+    blurField(src, out, scratch, gw, gh, 2);
+    const variation = (a: Float32Array) => {
+      let v = 0;
+      for (let i = 1; i < a.length; i++) v += Math.abs(a[i]! - a[i - 1]!);
+      return v;
+    };
+    expect(variation(out)).toBeLessThan(variation(src) * 0.2);
+  });
+
+  it('conserves the total and never invents ink', () => {
+    const gw = 30;
+    const gh = 30;
+    const src = new Float32Array(gw * gh);
+    for (let i = 0; i < src.length; i++) src[i] = Math.random();
+    const out = new Float32Array(gw * gh);
+    const scratch = new Float32Array(gw * gh);
+    blurField(src, out, scratch, gw, gh, 2);
+    const total = (a: Float32Array) => a.reduce((s, v) => s + v, 0);
+    expect(total(out)).toBeGreaterThan(total(src) * 0.9);
+    expect(total(out)).toBeLessThan(total(src) * 1.1);
+    for (const v of out) {
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThanOrEqual(1);
+    }
+  });
+});
+
+describe('dropPlan — rain, not a poured band', () => {
+  const drops = dropPlan(288, 130, 130 * 0.12, 130 * 0.84, 130, INK_SEED);
+
+  it('is deterministic', () => {
+    expect(dropPlan(288, 130, 15.6, 109.2, 130, INK_SEED)).toEqual(drops);
+  });
+
+  it('is mostly fine drops with a few fat ones', () => {
+    // an even size distribution reads as polka dots; the fat ones are what
+    // become the dark pools once they spread and merge
+    const radii = drops.map((d) => d.r).sort((a, b) => a - b);
+    const median = radii[Math.floor(radii.length / 2)]!;
+    expect(radii[radii.length - 1]!).toBeGreaterThan(median * 2.5);
+  });
+
+  it('falls across the whole sheet, and lands in order', () => {
+    expect(Math.min(...drops.map((d) => d.x))).toBeLessThan(288 * 0.15);
+    expect(Math.max(...drops.map((d) => d.x))).toBeGreaterThan(288 * 0.8);
+    for (let i = 1; i < drops.length; i++) {
+      expect(drops[i]!.at).toBeGreaterThanOrEqual(drops[i - 1]!.at);
+    }
+  });
+
+  it('stays within the band it was given', () => {
+    for (const d of drops) {
+      expect(d.y).toBeGreaterThanOrEqual(130 * 0.12 - 0.001);
+      expect(d.y).toBeLessThanOrEqual(130 * 0.84 + 0.001);
+      expect(d.amount).toBeGreaterThan(0);
+      expect(d.r).toBeGreaterThan(0);
+    }
   });
 });

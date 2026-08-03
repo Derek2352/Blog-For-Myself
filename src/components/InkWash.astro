@@ -25,12 +25,14 @@
     strokePresence,
   } from '@/lib/ink';
   import {
+    blurField,
     createField,
-    injectBand,
+    dropPlan,
     injectBlob,
     inkAlpha,
     resetField,
     stepInk,
+    type Drop,
     type InkField,
   } from '@/lib/ink-field';
 
@@ -38,8 +40,12 @@
   const CELL = 4;
   /** Ink moves slowly; 60fps would buy nothing and cost battery. */
   const FRAME_MS = 1000 / 15;
-  /** How long the wash takes to flood across the band. */
-  const INJECT_MS = 1700;
+  /** How long the rain takes to fall across the sheet. */
+  const INJECT_MS = 2200;
+  /** Drops per pour. Many fine, a few fat — see dropPlan. */
+  const DROPS = 150;
+  /** Render-time softening radius, in cells. */
+  const BLUR = 2;
   /** Simulation ticks per painted frame. More is faster ink, not smoother. */
   const TICKS = 3;
   /** Vertical share of the hero the band wets. */
@@ -75,8 +81,11 @@
   let lastTick = 0;
   let lastScrollAt = -Infinity;
   let pointerOver = false;
-  /** How far across the band the wash has been laid down, 0–1. */
+  /** How far through the rain we are, 0–1. */
   let injectedTo = 0;
+  let drops: Drop[] = [];
+  let smooth: Float32Array | null = null;
+  let scratch: Float32Array | null = null;
   let dripCount = 0;
   let lastDripX = 0;
   let lastDripY = 0;
@@ -94,25 +103,13 @@
     return pointerOver || performance.now() - lastScrollAt < 1200;
   }
 
-  /** Wet the next slice of the band, so the wash floods in left to right. */
-  function pourTo(front: number): void {
+  /** Let the drops that are due since the last frame land on the paper. */
+  function rainTo(front: number): void {
     if (!field || front <= injectedTo) return;
-    // Overlap each pour with the last by half a slice and feather both ends, so
-    // consecutive triangular weights sum flat instead of leaving a seam.
-    const slice = (front - injectedTo) * field.gw;
-    const x0 = injectedTo * field.gw - slice;
-    const x1 = front * field.gw + slice * 0.35;
-    const yc = field.gh * (BAND_TOP + BAND_BOTTOM) * 0.5;
-    const half = field.gh * (BAND_BOTTOM - BAND_TOP) * 0.5;
-    injectBand(field, x0, x1, yc, half, INK_SEED, 1, slice * 1.1);
-    // Splatter is an injection too, so a droplet bleeds on its own instead of
-    // being a hard ellipse that only fades.
-    const n = Math.max(1, Math.round((front - injectedTo) * 26));
-    for (let i = 0; i < n; i++) {
-      const t = injectedTo + Math.random() * (front - injectedTo);
-      const above = Math.random() < 0.5;
-      const y = yc + (above ? -1 : 1) * half * (0.85 + Math.random() * 0.5);
-      injectBlob(field, t * field.gw, y, 0.6 + Math.random() * 2.2, 0.9);
+    for (const d of drops) {
+      if (d.at > injectedTo && d.at <= front) {
+        injectBlob(field, d.x, d.y, d.r, d.amount);
+      }
     }
     injectedTo = front;
   }
@@ -139,7 +136,7 @@
     // holds, and the sheet is wiped once the hero is properly clear — so each
     // cycle is a fresh pour rather than the same stain fading in and out.
     if (presence > 0) {
-      if (step > 0) pourTo(Math.min(1, injectedTo + step / INJECT_MS));
+      if (step > 0) rainTo(Math.min(1, injectedTo + step / INJECT_MS));
       for (let t = 0; t < TICKS; t++) stepInk(field, 1);
     } else if (injectedTo > 0) {
       resetField(field);
@@ -156,8 +153,12 @@
     }
 
     // ---- deposited pigment → pixels
+    // Soften first. The alpha curve has to be steep to clear the blend's dead
+    // middle, and a steep transfer turns any cell-to-cell variation into
+    // speckle — which is what made the wash granular rather than silky.
+    if (smooth && scratch) blurField(field.dep, smooth, scratch, field.gw, field.gh, BLUR);
     const data = pixels.data;
-    const dep = field.dep;
+    const dep = smooth ?? field.dep;
     const [r, g, b] = INK_RGB as [number, number, number];
     for (let i = 0, p = 0; i < dep.length; i++, p += 4) {
       const d = dep[i]!;
@@ -225,6 +226,9 @@
     grid.height = gh;
     pixels = gridCtx.createImageData(gw, gh);
     field = createField(gw, gh, INK_SEED);
+    smooth = new Float32Array(gw * gh);
+    scratch = new Float32Array(gw * gh);
+    drops = dropPlan(gw, gh, gh * BAND_TOP, gh * BAND_BOTTOM, DROPS, INK_SEED);
     injectedTo = 0;
     dripCount = 0;
   }
@@ -309,6 +313,9 @@
     gridCtx = null;
     pixels = null;
     field = null;
+    smooth = null;
+    scratch = null;
+    drops = [];
     host = null;
     onScreen = false;
     // Landing on the page again should look like landing on it, so the ink is
