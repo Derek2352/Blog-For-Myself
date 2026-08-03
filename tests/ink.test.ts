@@ -207,11 +207,13 @@ describe('inkAfterDrying', () => {
 });
 
 describe('the alpha ceiling', () => {
-  it("sits well clear of the blend's dead middle", () => {
-    // With difference blending, 0.5 maps every backdrop onto the same grey and
-    // the text inside the stroke disappears entirely. The soak effect needs the
-    // far side of that hinge, not a value near it.
-    expect(INK_PEAK_ALPHA).toBeGreaterThan(0.7);
-    expect(INK_PEAK_ALPHA).toBeLessThanOrEqual(1);
+  it('stays a background', () => {
+    // This once had to exceed 0.7: under `difference` the middle of the scale
+    // was a dead zone where text turned to grey mush, so the soak needed the far
+    // side of it. Composited normally the number is plain opacity again, the
+    // wash sits behind the words, and it belongs low — a hero background must
+    // not compete with the text lying on top of it.
+    expect(INK_PEAK_ALPHA).toBeGreaterThan(0.05);
+    expect(INK_PEAK_ALPHA).toBeLessThan(0.3);
   });
 });

@@ -219,7 +219,7 @@ export function injectBand(
  * inkAlpha correctly discarded as a whisper, so 27% of the sheet held pigment
  * and almost none of it rendered. This concentrates the ink instead.
  */
-export const PIG_LOAD = 1.05;
+export const PIG_LOAD = 3.2;
 
 /** One drop — a splash of splatter, or the cursor. It will bleed on its own. */
 export function injectBlob(
@@ -525,30 +525,21 @@ export function dropPlan(
 /**
  * Deposited pigment → the alpha the difference blend receives.
  *
- * The measured reference is soft and light — peak density only ~30% — yet under
- * 10% of it sits between 0.35 and 0.65 alpha. Both facts matter, and a first
- * pass honoured only the second: a curve that zeroed everything faint was
- * dutifully bimodal and erased the broad light wash the reference is mostly
- * made of, leaving a single dark blot.
- *
- * The fix is that *low* alpha was never the problem. Only 0.35-0.65 is — the
- * dead middle where difference blending maps every backdrop onto the same grey.
- * So this keeps the light wash and crosses the middle quickly instead.
+ * A plain, gentle ramp — which is only possible now the layer composites
+ * normally. Under `difference` the band around 0.5 had to be actively vacated,
+ * and since a broad light wash is by definition a large area of low alpha, the
+ * two demands were irreconcilable; every attempt at breadth came out as dark
+ * blots on empty paper. With the soak gone there is no forbidden range, so the
+ * curve simply lifts the thin parts and lets the whole plume read.
  */
 export function inkAlpha(dep: number): number {
-  // A broad, light wash — most of the sheet, and the bulk of what the reference
-  // actually is. Well under the hinge, so text here keeps its own polarity and
-  // merely sits on a tint.
-  if (dep <= 0.02) return 0;
-  if (dep < 0.5) return (0.3 * (dep - 0.02)) / 0.48;
-  // The crossing. Everything between a tint and a flip is traversed in one
-  // short span of deposit, so almost no pixel lands in 0.35-0.65 where
-  // difference blending maps every backdrop onto the same grey.
-  if (dep < 0.66) {
-    const t = (dep - 0.5) / 0.16;
-    return 0.3 + 0.55 * (t * t * (3 - 2 * t));
-  }
-  // Committed pigment: a clean inversion, text pale and legible inside it.
-  const v = 0.85 + (dep - 0.66) * 0.6;
-  return v > 1 ? 1 : v;
+  if (dep <= 0.012) return 0;
+  const t = dep >= 0.8 ? 1 : (dep - 0.012) / 0.788;
+  // Gamma below 1 lifts the faint majority of a diffused plume into visibility.
+  // That was impossible while this composited with `difference`, where the band
+  // either side of 0.5 alpha had to be vacated and a broad light wash therefore
+  // could not exist. Composited normally there is no forbidden range, so the
+  // curve can finally be what a wash needs: gentle, and generous to the thin
+  // parts.
+  return Math.pow(t, 0.62);
 }

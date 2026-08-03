@@ -46,7 +46,7 @@
   /** Drops per pour. Many fine, a few fat — see dropPlan. */
   const DROPS = 3;
   /** Render-time softening radius, in cells. */
-  const BLUR = 3;
+  const BLUR = 2;
   /** Simulation ticks per painted frame. More is faster ink, not smoother. */
   const TICKS = 8;
   /** Vertical share of the hero the band wets. */
@@ -57,13 +57,13 @@
   /** Minimum travel between drips, in CSS pixels. */
   const DRIP_GAP = 22;
   /**
-   * What the ink paints, before the difference blend inverts it.
+   * The ink's colour, read live from `--color-ink`.
    *
-   * Warm rather than pure white on purpose: inverting a warm palette with pure
-   * white leaves a cool cast, and this lands the cream ground almost exactly on
-   * neutral black instead of blue-black.
+   * This was a fixed near-white while the layer composited with `difference`,
+   * where inversion made theme handling automatic. Composited normally it has to
+   * follow the theme again: espresso on cream, and pale on dark ground.
    */
-  const INK_RGB = [255, 250, 240];
+  let inkRgb = '42, 36, 30';
 
   let canvas: HTMLCanvasElement | null = null;
   let view: CanvasRenderingContext2D | null = null;
@@ -92,6 +92,21 @@
   let lastDripY = 0;
 
   const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
+
+  /** `#2a241e` → `42, 36, 30`. */
+  function toRgb(hex: string): string | null {
+    const h = hex.trim().replace('#', '');
+    const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+    if (full.length !== 6 || /[^0-9a-f]/i.test(full)) return null;
+    const n = parseInt(full, 16);
+    return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+  }
+
+  function readInk(): void {
+    const raw = getComputedStyle(document.documentElement).getPropertyValue('--color-ink');
+    const rgb = toRgb(raw);
+    if (rgb) inkRgb = rgb;
+  }
 
   /**
    * True when someone is plainly engaged with the hero.
@@ -167,7 +182,10 @@
     if (smooth && scratch) blurField(vis, smooth, scratch, field.gw, field.gh, BLUR);
     const data = pixels.data;
     const dep = smooth ?? vis;
-    const [r, g, b] = INK_RGB as [number, number, number];
+    const parts = inkRgb.split(',');
+    const r = Number(parts[0]);
+    const g = Number(parts[1]);
+    const b = Number(parts[2]);
     for (let i = 0, p = 0; i < dep.length; i++, p += 4) {
       const d = dep[i]!;
       // inkAfterDrying lifts the thinnest pigment first, so the wash dries from
@@ -289,6 +307,7 @@
     host = el.parentElement;
     el.hidden = false;
 
+    readInk();
     resize();
 
     window.addEventListener('resize', resize, { passive: true });
@@ -381,8 +400,10 @@
   function syncMotion(): void {
     if (motionReduced()) unmount();
     else if (document.querySelector('canvas.ink-wash')) mount();
-    // No theme colour to resync: the difference blend inverts whatever is
-    // behind it, so dark mode is handled without this knowing about it.
-    if (canvas && !raf) draw(performance.now());
+    // Composited normally now, so the ink colour does have to follow the theme.
+    if (canvas) {
+      readInk();
+      if (!raf) draw(performance.now());
+    }
   }
 </script>

@@ -267,19 +267,16 @@ describe('injectBand', () => {
   });
 });
 
-describe('inkAlpha — keeping text out of the blend’s dead middle', () => {
-  it('vacates the mid-tones', () => {
-    // The measured reference puts only 9.6% of its pixels between 0.35 and 0.65
-    // alpha. That band is exactly where difference blending maps every backdrop
-    // onto the same grey and the text disappears, so the curve has to actively
-    // empty it. Check this first if the hero ever goes muddy.
-    let mid = 0;
-    const n = 1000;
-    for (let i = 0; i < n; i++) {
-      const a = inkAlpha(i / (n - 1));
-      if (a > 0.35 && a < 0.65) mid++;
-    }
-    expect(mid / n).toBeLessThan(0.15);
+describe('inkAlpha — a wash needs a gentle ramp', () => {
+  it('lifts the faint majority of a plume into visibility', () => {
+    // The gamma is the whole point. A diffused plume is mostly thin, so a
+    // linear ramp renders it as a dense core on empty paper. Under `difference`
+    // this could not be fixed — lifting the thin parts pushed them into the
+    // 0.35-0.65 dead zone where text turns to mush — which is what kept every
+    // attempt at a broad wash looking like dark blots. Composited normally there
+    // is no forbidden range.
+    expect(inkAlpha(0.1)).toBeGreaterThan(0.25);
+    expect(inkAlpha(0.3)).toBeGreaterThan(0.5);
   });
 
   it('is monotonic and spans the full range', () => {
@@ -295,26 +292,8 @@ describe('inkAlpha — keeping text out of the blend’s dead middle', () => {
     expect(inkAlpha(1)).toBe(1);
   });
 
-  it('keeps faint pigment as a safe tint rather than erasing it', () => {
-    // An earlier version zeroed everything faint. That was dutifully bimodal
-    // and wrong: it deleted the broad light wash the reference is mostly made
-    // of, leaving one dark blot on an empty hero. Low alpha was never the
-    // hazard — only 0.35-0.65 is — so faint deposits survive, well under the
-    // hinge, where text keeps its own polarity on a tint.
-    expect(inkAlpha(0.02)).toBe(0);
-    for (const d of [0.1, 0.2, 0.3]) {
-      expect(inkAlpha(d)).toBeGreaterThan(0);
-      expect(inkAlpha(d)).toBeLessThan(0.35);
-    }
-    // and committed pigment still flips cleanly. Sampled well past the
-    // crossing rather than just after it, so moving the threshold retunes the
-    // look without falsifying the test.
-    expect(inkAlpha(0.85)).toBeGreaterThan(0.8);
-    // most of the useful deposit range is tint, not flip — that ratio is what
-    // keeps the hero light like the reference instead of a field of black pools
-    let tint = 0;
-    for (let i = 0; i <= 100; i++) if (inkAlpha(i / 100) < 0.35) tint++;
-    expect(tint).toBeGreaterThan(50);
+  it('still discards a whisper, so clean paper stays clean', () => {
+    expect(inkAlpha(0.005)).toBe(0);
   });
 });
 

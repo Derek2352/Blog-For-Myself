@@ -17,19 +17,19 @@
  */
 
 /**
- * How completely the stroke inverts what it crosses.
+ * How strong the wash is at its densest, as plain opacity.
  *
- * The canvas paints white and composites with `mix-blend-mode: difference`, so
- * this is not opacity in the usual sense — it is how far towards a full flip the
- * ink drags its backdrop. Paper goes dark, and the text inside the stroke goes
- * pale, as though the ink soaked through and knocked it out.
+ * This used to mean something else: the layer composited with
+ * `mix-blend-mode: difference`, so the number described how far towards a full
+ * inversion the ink dragged its backdrop, and it had to sit near 1 because the
+ * middle of that scale is a dead zone where text turns to grey mush.
  *
- * The scale has a hinge in the middle. At 0.5 every backdrop lands on the same
- * grey and the text inside the stroke vanishes; below that the text keeps its
- * normal polarity at reduced contrast, above it the polarity flips. So this
- * belongs near 1, and values around 0.5 are the one genuinely bad choice.
+ * The soak is gone and the wash sits behind the text, so this is opacity again
+ * and belongs low. It is a background: the text on top must stay comfortable,
+ * and the whole point of dropping the blend was to allow a broad, light field
+ * rather than a few dark blots.
  */
-export const INK_PEAK_ALPHA = 0.88;
+export const INK_PEAK_ALPHA = 0.2;
 
 /** How long the brush takes to travel its path when you arrive on the page. */
 export const ENTRANCE_MS = 2200;

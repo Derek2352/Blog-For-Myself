@@ -40,12 +40,12 @@ const browseCols = BROWSE_COLS[balancedCols(browseCats.length)] ?? BROWSE_COLS[3
 ---
 
 <Base schema={personSchema(Astro.site)}>
-  <!-- Hero: photography leads; the rail annotates; the ink crosses the words.
-       `relative` anchors the canvas. Deliberately NOT `isolate`: the stroke
-       blends with difference, and an isolated group would exclude the page's
-       own background from its backdrop, leaving it nothing to invert. -->
+  <!-- Hero: photography leads; the rail annotates; the ink washes behind both.
+       `isolate` is load-bearing again now the canvas sits at z-index -1 —
+       `relative` alone opens no stacking context, so the wash would escape
+       behind the page itself. -->
   <section
-    class="wrap relative grid items-center gap-10 py-12 sm:py-16 lg:grid-cols-[0.9fr_1.1fr] lg:gap-14"
+    class="wrap relative isolate grid items-center gap-10 py-12 sm:py-16 lg:grid-cols-[0.9fr_1.1fr] lg:gap-14"
   >
     <InkWash />
     <div class="reveal">
