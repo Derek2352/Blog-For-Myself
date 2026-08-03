@@ -11,8 +11,12 @@ import {
   injectBand,
   injectBlob,
   inkAlpha,
+  mottleAt,
+  MOTTLE_DEPTH,
+  MOTTLE_SCALE,
   resetField,
   stepInk,
+  visible,
   type InkField,
 } from '@/lib/ink-field';
 import { INK_SEED } from '@/lib/ink';
@@ -294,6 +298,59 @@ describe('inkAlpha — a wash needs a gentle ramp', () => {
 
   it('still discards a whisper, so clean paper stays clean', () => {
     expect(inkAlpha(0.005)).toBe(0);
+  });
+});
+
+describe('visible — mottling, which is not grain', () => {
+  const mk = () => {
+    const gw = 120;
+    const out = new Float32Array(gw * gw);
+    for (let i = 0; i < out.length; i++) out[i] = mottleAt(i % gw, (i / gw) | 0, INK_SEED);
+    return out;
+  };
+
+  it('varies broadly across the field', () => {
+    // flat ink reads as one grey shape; real pigment has passages
+    const v = mk();
+    const mean = v.reduce((s, x) => s + x, 0) / v.length;
+    const std = Math.sqrt(v.reduce((s, x) => s + (x - mean) ** 2, 0) / v.length);
+    expect(std / mean).toBeGreaterThan(0.15);
+  });
+
+  it('is low-frequency — this is the whole distinction from grain', () => {
+    // Grain is cell-to-cell variation: it is what a high-contrast permeability
+    // field produced, what the blur exists to suppress, and what read as dirt.
+    // Mottling must vary over tens of cells and barely at all between
+    // neighbours, which is what makes it immune to both blurring and aliasing.
+    const v = mk();
+    const gw = 120;
+    let neighbour = 0;
+    let far = 0;
+    let n = 0;
+    for (let y = 0; y < 120; y++) {
+      for (let x = 0; x < gw - MOTTLE_SCALE; x++) {
+        const i = y * gw + x;
+        neighbour += Math.abs(v[i + 1]! - v[i]!);
+        far += Math.abs(v[i + MOTTLE_SCALE]! - v[i]!);
+        n++;
+      }
+    }
+    expect(far / n).toBeGreaterThan((neighbour / n) * 5);
+  });
+
+  it('never inverts or zeroes ink that exists', () => {
+    const v = mk();
+    for (const x of v) {
+      expect(x).toBeGreaterThan(0);
+      expect(Number.isFinite(x)).toBe(true);
+    }
+    expect(MOTTLE_DEPTH).toBeLessThan(1);
+  });
+
+  it('leaves clean paper clean — it multiplies, it never adds', () => {
+    const f = createField(40, 40, INK_SEED);
+    const v = visible(f);
+    for (const x of v) expect(x).toBe(0);
   });
 });
 

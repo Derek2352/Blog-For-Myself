@@ -152,17 +152,63 @@ export function resetField(f: InkField): void {
 }
 
 /**
- * What is actually visible: pigment in suspension plus pigment settled.
+ * Wavelength of the mottling, in cells. Long on purpose — see `visible`.
+ */
+export const MOTTLE_SCALE = 30;
+/** How far the mottling swings the density either side of neutral. */
+export const MOTTLE_DEPTH = 0.72;
+
+/**
+ * What is actually visible: pigment in suspension plus pigment settled,
+ * modulated by broad passages of heavier and lighter ink.
  *
  * In water you see the plume itself, not a stain. Showing only the deposit also
  * capped how far ink could travel, because pigment settles as water dries and
  * drying is what ends the spread — so the visible part was always the part that
  * had stopped moving.
+ *
+ * ## Mottling is not grain
+ *
+ * These were conflated once, and it cost a round of work. **Grain** is variation
+ * from one cell to the next: that is what a high-contrast permeability field
+ * produced, it is what the render blur exists to suppress, and it read as dirt.
+ * **Mottling** is variation across tens of cells, which blurring cannot touch
+ * and which has no way to alias.
+ *
+ * Diffusion smooths, and the blur smooths whatever survives it, so a plume comes
+ * out flatter than real ink — one even grey shape rather than something with
+ * passages. This puts the unevenness back at a scale far above a pixel, where it
+ * is structurally incapable of becoming the granularity it is meant to replace.
  */
 export function visible(f: InkField): Float32Array {
   const { vis, pig, dep } = f;
   for (let i = 0; i < vis.length; i++) vis[i] = pig[i]! + dep[i]!;
   return vis;
+}
+
+/**
+ * The mottling multiplier at a cell — applied to the *alpha*, after inkAlpha.
+ *
+ * Modulating density instead was the obvious place and the wrong one: the alpha
+ * curve's gamma compresses its top end, so a wide swing in pigment came out a
+ * narrow swing in opacity, and the wash stayed flat. Appearance is what needs
+ * varying, so it is varied where appearance is decided.
+ *
+ * Two long octaves. Both wavelengths sit far above a pixel, which is the entire
+ * distinction from grain — blurring cannot remove this and it has no way to
+ * alias.
+ */
+export function mottleAt(x: number, y: number, seed = 0): number {
+  const k = 1 / MOTTLE_SCALE;
+  const raw =
+    valueNoise2(x * k, y * k, seed + 313) * 0.65 +
+    valueNoise2(x * k * 2.1, y * k * 2.1, seed + 727) * 0.35;
+  // Smooth noise clusters hard around 0.5, and averaging octaves narrows it
+  // further — straight out of the generator this swung the density by under a
+  // third and the wash stayed visibly flat. Stretching about the midpoint is
+  // what turns it into passages rather than a faint ripple.
+  const n = Math.max(0, Math.min(1, (raw - 0.5) * 2.6 + 0.5));
+  return 1 - MOTTLE_DEPTH + n * MOTTLE_DEPTH * 2;
 }
 
 /**

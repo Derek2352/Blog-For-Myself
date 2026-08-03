@@ -30,6 +30,7 @@
     dropPlan,
     injectBlob,
     inkAlpha,
+    mottleAt,
     resetField,
     stepInk,
     visible,
@@ -186,11 +187,18 @@
     const r = Number(parts[0]);
     const g = Number(parts[1]);
     const b = Number(parts[2]);
+    const gwid = field.gw;
     for (let i = 0, p = 0; i < dep.length; i++, p += 4) {
       const d = dep[i]!;
       // inkAfterDrying lifts the thinnest pigment first, so the wash dries from
       // its faint edges inward rather than dimming as a whole.
-      const a = d > 0 ? inkAlpha(inkAfterDrying(d > 1 ? 1 : d, presence)) : 0;
+      // Mottled after the curve, not before: the curve's gamma would otherwise
+      // compress a wide swing in pigment into a narrow one in opacity.
+      const a =
+        d > 0
+          ? inkAlpha(inkAfterDrying(d > 1 ? 1 : d, presence)) *
+            mottleAt(i % gwid, (i / gwid) | 0, INK_SEED)
+          : 0;
       data[p] = r;
       data[p + 1] = g;
       data[p + 2] = b;
