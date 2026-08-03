@@ -1,12 +1,11 @@
 ---
 /**
- * 飛白 — the brush stroke across the top of the hero.
+ * The hero ink — a wet-paper simulation, not a drawing of one.
  *
- * One calligraphic sweep that paints itself on when you arrive, leaves splatter
- * as the brush passes, and then keeps bleeding very slowly at the edges. The
- * cursor flicks its own droplets, which dry in about two seconds.
- *
- * All of the shape-making lives in src/lib/ink.ts; this file is plumbing.
+ * Ink is injected across a band, then water carries pigment through paper and
+ * evaporates. Bleeding, soft edges, granulation and the darkened rims are
+ * consequences of the model rather than things this file draws. The physics
+ * lives in src/lib/ink-field.ts; this file owns the pixels and the clock.
  *
  * Starts `hidden`, and only the script reveals it. So a reader with reduced
  * motion — or with JS off — gets no canvas at all rather than an empty one.
@@ -18,173 +17,110 @@
 <script>
   import { motionReduced } from '@/lib/a11y-prefs';
   import {
+    CYCLE_MS,
     INK_PEAK_ALPHA,
     INK_SEED,
-    STROKE_BOTTOM,
-    STROKE_TOP,
-    TRAIL_MS,
-    creep,
     entrance,
     inkAfterDrying,
-    splatter,
     strokePresence,
-    strokeSpine,
-    trailAlpha,
-    washLayers,
-    type WashLayer,
-    type Splat,
-    type SpinePoint,
   } from '@/lib/ink';
+  import {
+    createField,
+    injectBand,
+    injectBlob,
+    inkAlpha,
+    resetField,
+    stepInk,
+    type InkField,
+  } from '@/lib/ink-field';
 
-  /**
-   * Render at full size. The blooms this replaced rendered at 0.3× because the
-   * upscale doubled as their blur; a brush stroke is defined by crisp torn edges
-   * and hair-fine striations, so the same trick would erase the whole point.
-   * Canvas antialiases strokes natively, so nothing reads as harsh.
-   */
-  const SCALE = 1;
-  /** Ink creeps slowly; 60fps would buy nothing and cost battery. */
+  /** Paper cell size in CSS pixels. ~4px keeps a 1280 hero near 38k cells. */
+  const CELL = 4;
+  /** Ink moves slowly; 60fps would buy nothing and cost battery. */
   const FRAME_MS = 1000 / 15;
-  const SPINE_SAMPLES = 90;
-  const WASH_LAYERS = 46;
-  /** Per-layer fill. Low on purpose — density comes from overlap, not from this. */
-  const LAYER_ALPHA = 0.05;
-  const SPLATS = 90;
-  /** Hard cap, so a fast scribble cannot grow the per-frame cost without limit. */
-  const MAX_DABS = 22;
-  /** Minimum travel between cursor splats, in pixels. */
-  const DAB_GAP = 26;
+  /** How long the wash takes to flood across the band. */
+  const INJECT_MS = 1700;
+  /** Simulation ticks per painted frame. More is faster ink, not smoother. */
+  const TICKS = 3;
+  /** Vertical share of the hero the band wets. */
+  const BAND_TOP = 0.12;
+  const BAND_BOTTOM = 0.84;
+  /** Hard cap on live cursor drips, so a fast scribble stays bounded. */
+  const MAX_DRIPS = 26;
+  /** Minimum travel between drips, in CSS pixels. */
+  const DRIP_GAP = 22;
   /**
-   * What the brush paints, before the difference blend inverts it.
+   * What the ink paints, before the difference blend inverts it.
    *
    * Warm rather than pure white on purpose: inverting a warm palette with pure
-   * white leaves a cool cast, and #fffaf0 lands the cream ground almost exactly
-   * on neutral black instead of blue-black.
+   * white leaves a cool cast, and this lands the cream ground almost exactly on
+   * neutral black instead of blue-black.
    */
-  const INK_SOURCE = '#fffaf0';
-
-  interface Dab {
-    x: number;
-    y: number;
-    r: number;
-    born: number;
-  }
+  const INK_RGB = [255, 250, 240];
 
   let canvas: HTMLCanvasElement | null = null;
   let view: CanvasRenderingContext2D | null = null;
-  let buf: HTMLCanvasElement | null = null;
-  let bufCtx: CanvasRenderingContext2D | null = null;
+  /** Small canvas at grid resolution. Upscaling it is what softens the ink. */
+  let grid: HTMLCanvasElement | null = null;
+  let gridCtx: CanvasRenderingContext2D | null = null;
+  let pixels: ImageData | null = null;
+  let field: InkField | null = null;
   let host: HTMLElement | null = null;
-  let spine: SpinePoint[] = [];
-  let layers: WashLayer[] = [];
-  let splats: Splat[] = [];
-  let dabs: Dab[] = [];
   let raf = 0;
   let last = 0;
   let onScreen = false;
-  let lastDabX = 0;
-  let lastDabY = 0;
   let io: IntersectionObserver | null = null;
-  /** When the brush started travelling. 0 until the first painted frame. */
   let arrivedAt = 0;
-  /**
-   * Position within the come-and-go cycle. Advanced by hand rather than derived
-   * from the clock, so it can be held still while someone is reading.
-   */
   let cycleAt = 0;
   let lastTick = 0;
-  /** Last time the page was scrolled, and whether the pointer is over the hero. */
   let lastScrollAt = -Infinity;
   let pointerOver = false;
+  /** How far across the band the wash has been laid down, 0–1. */
+  let injectedTo = 0;
+  let dripCount = 0;
+  let lastDripX = 0;
+  let lastDripY = 0;
+
+  const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
 
   /**
    * True when someone is plainly engaged with the hero.
    *
-   * Used only to withhold the stroke's *return* — the ink is free to keep
-   * drying, but it may not paint itself back over a line someone is reading.
-   * Fading out is polite; fading back in mid-sentence is worse than never
-   * having moved.
+   * Used only to withhold the ink's *return* — it is free to keep drying, but it
+   * may not flood back over a line someone is reading. Fading out is polite;
+   * fading back in mid-sentence is worse than never having moved.
    */
   function engaged(): boolean {
     return pointerOver || performance.now() - lastScrollAt < 1200;
   }
 
-  // Capability, not width: this is the correct question for "is there a real
-  // cursor". A phone drag over the hero means "scroll", and painting with it
-  // would draw on every swipe.
-  const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
-
-  /**
-   * Draw the wash.
-   *
-   * Every layer is the same base shape deformed further than the last, and each
-   * is filled faintly. Nothing here draws density — it accumulates where the
-   * layers coincide and falls away where only the wildest ones reach, which is
-   * what gives a dense core and an edge that blooms rather than ends.
-   *
-   * `reach` is how far the wet edge has spread; it is applied afterwards, in
-   * draw(), as a feathered erase rather than a clip.
-   */
-  function drawWash(ctx: CanvasRenderingContext2D, now: number, presence: number): void {
-    ctx.lineJoin = 'round';
-    for (let n = 0; n < layers.length; n++) {
-      const layer = layers[n]!;
-      const ink = inkAfterDrying(layer.density, presence);
-      if (ink <= 0) continue;
-      // A clump is one fill against a core built from forty-odd overlapping
-      // ones, so at the shared alpha it was mathematically invisible. It has to
-      // carry its own weight to read as a pool rather than as nothing.
-      const a = LAYER_ALPHA * ink * (layer.kind === 'clump' ? 5.5 : 1);
-      // The wet edge still moves. Indexed by how far out the layer sits, so the
-      // bloom breathes at its rim while the core stays put.
-      const drift = creep(layer.spread, now, INK_SEED) * 6;
-      const pts = layer.pts;
-      ctx.beginPath();
-      ctx.moveTo(pts[0]!, pts[1]! + drift);
-      for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i]!, pts[i + 1]! + drift);
-      ctx.closePath();
-      ctx.globalAlpha = a;
-      ctx.fill();
-      // Pooled rims. Pigment migrates to a drying boundary and leaves a darker
-      // line there — the single most recognisable thing watercolour does, and
-      // its absence was why the fills alone read as airbrush. Only every
-      // seventh layer, so a few edges show rather than all forty-six ringing.
-      if (layer.kind === 'wash' && n % 7 === 3) {
-        ctx.globalAlpha = Math.min(1, a * 3.2);
-        ctx.lineWidth = 1.1;
-        ctx.stroke();
-      }
+  /** Wet the next slice of the band, so the wash floods in left to right. */
+  function pourTo(front: number): void {
+    if (!field || front <= injectedTo) return;
+    // Overlap each pour with the last by half a slice and feather both ends, so
+    // consecutive triangular weights sum flat instead of leaving a seam.
+    const slice = (front - injectedTo) * field.gw;
+    const x0 = injectedTo * field.gw - slice;
+    const x1 = front * field.gw + slice * 0.35;
+    const yc = field.gh * (BAND_TOP + BAND_BOTTOM) * 0.5;
+    const half = field.gh * (BAND_BOTTOM - BAND_TOP) * 0.5;
+    injectBand(field, x0, x1, yc, half, INK_SEED, 1, slice * 1.1);
+    // Splatter is an injection too, so a droplet bleeds on its own instead of
+    // being a hard ellipse that only fades.
+    const n = Math.max(1, Math.round((front - injectedTo) * 26));
+    for (let i = 0; i < n; i++) {
+      const t = injectedTo + Math.random() * (front - injectedTo);
+      const above = Math.random() < 0.5;
+      const y = yc + (above ? -1 : 1) * half * (0.85 + Math.random() * 0.5);
+      injectBlob(field, t * field.gw, y, 0.6 + Math.random() * 2.2, 0.9);
     }
-    ctx.globalAlpha = 1;
-  }
-
-  /**
-   * Hard-edged droplet. No gradient — a soft dot beside a dry brush reads wrong.
-   * Stretched along its flight, so a hard-thrown drop lands as a comma.
-   */
-  function drawSplat(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    r: number,
-    a: number,
-    aspect = 1,
-    angle = 0,
-  ): void {
-    if (a <= 0 || r <= 0) return;
-    ctx.globalAlpha = a;
-    ctx.beginPath();
-    ctx.ellipse(x, y, r * aspect, r, angle, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
+    injectedTo = front;
   }
 
   function draw(now: number): void {
-    if (!bufCtx || !buf || !view || !canvas) return;
-    // Anchored to the first painted frame rather than to mount, so arriving with
-    // the hero already scrolled past does not spend the entrance unseen.
+    if (!field || !view || !canvas || !grid || !gridCtx || !pixels) return;
     if (!arrivedAt) arrivedAt = now;
-    const { spread, soak } = entrance(now - arrivedAt);
+    const { soak } = entrance(now - arrivedAt);
 
     // Advance the cycle by real elapsed time, except that it may not step *into*
     // a rising presence while someone is reading. Holding the clock rather than
@@ -194,73 +130,60 @@
     if (step > 0) {
       const next = cycleAt + step;
       if (!(engaged() && strokePresence(next) > strokePresence(cycleAt))) {
-        cycleAt = next;
+        cycleAt = next % (CYCLE_MS * 1024);
       }
     }
     const presence = strokePresence(cycleAt);
 
-    // The clear phase is most of the cycle, so this is where the feature pays
-    // for itself: nothing to composite means no path work at all, and the loop
-    // costs less than the permanent stroke it replaced.
-    if (presence <= 0 && dabs.length === 0) {
+    // The cycle drives *injection*, not opacity. Ink is poured while presence
+    // holds, and the sheet is wiped once the hero is properly clear — so each
+    // cycle is a fresh pour rather than the same stain fading in and out.
+    if (presence > 0) {
+      if (step > 0) pourTo(Math.min(1, injectedTo + step / INJECT_MS));
+      for (let t = 0; t < TICKS; t++) stepInk(field, 1);
+    } else if (injectedTo > 0) {
+      resetField(field);
+      injectedTo = 0;
+      dripCount = 0;
+    }
+
+    // Nothing on the paper and nothing to simulate: clear once and stop doing
+    // per-frame work. The clear phase is the majority of the cycle, so this is
+    // where the simulation pays for itself.
+    if (presence <= 0) {
       view.clearRect(0, 0, canvas.width, canvas.height);
       return;
     }
 
-    bufCtx.clearRect(0, 0, buf.width, buf.height);
-    // Always white, in both themes. The canvas composites with
-    // mix-blend-mode: difference, so white inverts whatever it lands on — paper
-    // goes dark and the text inside the stroke goes pale. That is the whole
-    // soak effect, and it means there is no light-mode/dark-mode ink colour to
-    // keep in sync: inversion is correct in both by construction.
-    bufCtx.strokeStyle = INK_SOURCE;
-    bufCtx.fillStyle = INK_SOURCE;
-
-    drawWash(bufCtx, now, presence);
-    // Droplets keep a floor rather than vanishing: they are small and sit mostly
-    // off the words, so a faint mist holds the composition together while the
-    // stroke itself is away and the text is clear.
-    const mist = 0.2 + presence * 0.8;
-    for (const s of splats) {
-      if (s.at <= spread) drawSplat(bufCtx, s.x, s.y, s.r, mist, s.aspect, s.angle);
+    // ---- deposited pigment → pixels
+    const data = pixels.data;
+    const dep = field.dep;
+    const [r, g, b] = INK_RGB as [number, number, number];
+    for (let i = 0, p = 0; i < dep.length; i++, p += 4) {
+      const d = dep[i]!;
+      // inkAfterDrying lifts the thinnest pigment first, so the wash dries from
+      // its faint edges inward rather than dimming as a whole.
+      const a = d > 0 ? inkAlpha(inkAfterDrying(d > 1 ? 1 : d, presence)) : 0;
+      data[p] = r;
+      data[p + 1] = g;
+      data[p + 2] = b;
+      data[p + 3] = a * 255;
     }
+    gridCtx.putImageData(pixels, 0, 0);
 
-    // The wet edge, applied as a feathered erase rather than a clip. A clip
-    // rect would put a hard vertical cut back on the advancing front — the same
-    // fault the round brush tip existed to fix — whereas erasing through a
-    // gradient is what a stain spreading into paper actually looks like.
-    if (spread < 1) {
-      const front = buf.width * (spread * 1.12);
-      const feather = Math.max(24, buf.width * 0.09);
-      const g = bufCtx.createLinearGradient(front - feather, 0, front, 0);
-      g.addColorStop(0, 'rgba(0,0,0,0)');
-      g.addColorStop(1, 'rgba(0,0,0,1)');
-      bufCtx.globalCompositeOperation = 'destination-out';
-      bufCtx.fillStyle = g;
-      bufCtx.fillRect(front - feather, 0, buf.width - front + feather, buf.height);
-      bufCtx.globalCompositeOperation = 'source-over';
-      bufCtx.fillStyle = INK_SOURCE;
-    }
-
-    // Cursor droplets are drawn after the wash — and after the wet edge, so a
-    // flick always lands wherever the cursor is rather than being erased by a
-    // front that has not reached it yet.
-    if (dabs.length) {
-      dabs = dabs.filter((d) => now - d.born < TRAIL_MS);
-      for (const d of dabs) drawSplat(bufCtx, d.x, d.y, d.r, trailAlpha(now - d.born));
-    }
-
-    // One place, and only one, decides how present this layer is on the page.
+    // The upscale is the softening. That trick was wrong for a crisp brush but
+    // is right here: diffusion output genuinely is smooth.
     view.clearRect(0, 0, canvas.width, canvas.height);
     view.globalAlpha = INK_PEAK_ALPHA * soak;
-    view.drawImage(buf, 0, 0, canvas.width, canvas.height);
+    view.imageSmoothingEnabled = true;
+    view.imageSmoothingQuality = 'high';
+    view.drawImage(grid, 0, 0, canvas.width, canvas.height);
     view.globalAlpha = 1;
   }
 
   function frame(now: number): void {
-    // The canvas is front-page-only, so it cannot use transition:persist and
-    // must genuinely stop. This check cannot leak even if a teardown event is
-    // ever missed.
+    // Front-page-only, so it cannot use transition:persist and must genuinely
+    // stop. This check cannot leak even if a teardown event is ever missed.
     if (!canvas || !canvas.isConnected) {
       stop();
       return;
@@ -283,72 +206,43 @@
     raf = 0;
   }
 
-  /** Paint only while the hero is actually on screen and the tab is in front. */
+  /** Run only while the hero is actually on screen and the tab is in front. */
   function sync(): void {
     if (onScreen && !document.hidden) start();
     else stop();
   }
 
   function resize(): void {
-    if (!canvas || !buf) return;
+    if (!canvas || !grid || !gridCtx) return;
     const rect = canvas.getBoundingClientRect();
     const w = Math.max(1, Math.round(rect.width));
     const h = Math.max(1, Math.round(rect.height));
-    // DPR is ignored on purpose: this sits behind text at a third opacity, so
-    // retina pixels would cost real memory for nothing anyone can see.
     canvas.width = w;
     canvas.height = h;
-    buf.width = Math.max(1, Math.round(w * SCALE));
-    buf.height = Math.max(1, Math.round(h * SCALE));
-    // Aim at the headline rather than at a fraction of the hero.
-    //
-    // The stroke wants to cross large display type, where an inverted word
-    // still reads instantly. Fractions cannot express that across breakpoints:
-    // the band that frames the tagline at 1280 lands squarely on the body
-    // paragraph at 390, because the stacked hero is far taller while its
-    // heading sits higher. So measure the h1 and straddle it; the fractions
-    // remain only as a fallback if the markup ever changes.
-    const heading = host?.querySelector<HTMLElement>('h1');
-    let bandTop = buf.height * STROKE_TOP;
-    let bandBottom = buf.height * STROKE_BOTTOM;
-    if (heading) {
-      const hr = heading.getBoundingClientRect();
-      // 0.68 down the heading is its second line — the italic tagline, which is
-      // the most striking thing on the page to soak.
-      const centre = hr.top - rect.top + hr.height * 0.68;
-      const half = Math.max(52, hr.height * 0.85);
-      bandTop = centre - half;
-      bandBottom = centre + half;
-    }
-
-    // Computed once, never per frame. Re-deriving the hair pattern each frame
-    // would make the striations crawl like static instead of holding still
-    // while only the wet edge moves.
-    spine = strokeSpine(buf.width, buf.height, INK_SEED, SPINE_SAMPLES, bandTop, bandBottom);
-    layers = washLayers(spine, WASH_LAYERS, INK_SEED);
-    splats = splatter(spine, SPLATS, INK_SEED, bandBottom);
-    if (raf) draw(performance.now());
+    const gw = Math.max(8, Math.round(w / CELL));
+    const gh = Math.max(8, Math.round(h / CELL));
+    grid.width = gw;
+    grid.height = gh;
+    pixels = gridCtx.createImageData(gw, gh);
+    field = createField(gw, gh, INK_SEED);
+    injectedTo = 0;
+    dripCount = 0;
   }
 
   function onPointerMove(e: PointerEvent): void {
-    if (!canvas || dabs.length >= MAX_DABS) return;
+    if (!canvas || !field || dripCount >= MAX_DRIPS) return;
     const rect = canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
-    const x = ((e.clientX - rect.left) / rect.width) * canvas.width * SCALE;
-    const y = ((e.clientY - rect.top) / rect.height) * canvas.height * SCALE;
-    if (x < 0 || y < 0 || x > canvas.width * SCALE || y > canvas.height * SCALE) return;
-    if (Math.hypot(x - lastDabX, y - lastDabY) < DAB_GAP) return;
-    lastDabX = x;
-    lastDabY = y;
-    // Scaled from the brush's own head, not from the viewport. Sizing these off
-    // the canvas made them roughly five times the brush's splatter — blobs
-    // beside fine mist, which read as two different media on one surface.
-    // Deliberately a little larger than that mist, since a flick you cannot see
-    // is not worth the listener.
-    const scale = spine[0]?.width ?? 12;
-    const u = Math.random();
-    dabs.push({ x, y, r: scale * (0.08 + u * u * u * 0.5), born: performance.now() });
-    // A droplet flicked while the loop is parked would otherwise sit unpainted.
+    if (Math.hypot(e.clientX - lastDripX, e.clientY - lastDripY) < DRIP_GAP) return;
+    lastDripX = e.clientX;
+    lastDripY = e.clientY;
+    const x = ((e.clientX - rect.left) / rect.width) * field.gw;
+    const y = ((e.clientY - rect.top) / rect.height) * field.gh;
+    if (x < 0 || y < 0 || x > field.gw || y > field.gh) return;
+    // A drip is real ink now: it wets the paper and then bleeds outward on its
+    // own, rather than being a shape that fades on a timer.
+    injectBlob(field, x, y, 1.4 + Math.random() * 1.8, 0.85);
+    dripCount++;
     sync();
   }
 
@@ -368,27 +262,24 @@
     if (motionReduced()) return;
 
     const ctx = el.getContext('2d');
-    const b = document.createElement('canvas');
-    const bctx = b.getContext('2d');
-    if (!ctx || !bctx) return;
+    const g = document.createElement('canvas');
+    const gctx = g.getContext('2d', { willReadFrequently: true });
+    if (!ctx || !gctx) return;
 
     canvas = el;
     view = ctx;
-    buf = b;
-    bufCtx = bctx;
+    grid = g;
+    gridCtx = gctx;
     host = el.parentElement;
     el.hidden = false;
 
     resize();
 
     window.addEventListener('resize', resize, { passive: true });
-    // Engagement is tracked on the hero itself. `pointerover` rather than the
-    // dab listener because that one is gated on a fine pointer, and the ink must
-    // stay out of a touch reader's way just as much.
     host?.addEventListener('pointerenter', onEnter, { passive: true });
     host?.addEventListener('pointerleave', onLeave, { passive: true });
-    // The canvas is pointer-events:none, so the hero section carries the
-    // listener. Passive — flicking ink must never interfere with scrolling.
+    // Capability, not width: a phone drag over the hero means "scroll", and
+    // dripping ink on every swipe would fight it.
     if (finePointer.matches && host) {
       host.addEventListener('pointermove', onPointerMove, { passive: true });
     }
@@ -414,19 +305,19 @@
     if (canvas) canvas.hidden = true;
     canvas = null;
     view = null;
-    buf = null;
-    bufCtx = null;
+    grid = null;
+    gridCtx = null;
+    pixels = null;
+    field = null;
     host = null;
-    spine = [];
-    layers = [];
-    splats = [];
-    dabs = [];
     onScreen = false;
-    // Landing on the page again should look like landing on it, so the brush
-    // travels again rather than snapping back to a finished stroke.
+    // Landing on the page again should look like landing on it, so the ink is
+    // poured afresh rather than resuming a finished stain.
     arrivedAt = 0;
     cycleAt = 0;
     lastTick = 0;
+    injectedTo = 0;
+    dripCount = 0;
     pointerOver = false;
   }
 
@@ -435,15 +326,13 @@
      per page-load is how this codebase has leaked handlers before. ---- */
 
   document.addEventListener('astro:page-load', () => {
-    // Deferred start: the hero photograph is fetchpriority="high" and is the LCP
-    // element, so the ink waits until the page has finished loading rather than
-    // competing with it. On a client-side navigation this is already complete.
+    // Deferred: the hero photograph is fetchpriority="high" and is the LCP
+    // element, so the ink waits rather than competing with it.
     if (document.readyState === 'complete') mount();
     else window.addEventListener('load', mount, { once: true });
   });
 
   document.addEventListener('astro:before-swap', unmount);
-
   document.addEventListener('visibilitychange', sync);
 
   // Scrolling counts as reading, and is the half of engagement that works on a
@@ -463,8 +352,7 @@
   });
 
   // Both halves of motionReduced() can change while the page is open: the OS
-  // setting, and the site's own "Reduce motion" toggle (an <html> class). The
-  // same observer catches the theme class, which is when the ink colour flips.
+  // setting, and the site's own "Reduce motion" toggle (an <html> class).
   matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', syncMotion);
   new MutationObserver(syncMotion).observe(document.documentElement, {
     attributes: true,

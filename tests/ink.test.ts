@@ -1,33 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import {
   CLEAR_MS,
-  CREEP_MAX,
   CYCLE_MS,
   DRY_MS,
   ENTRANCE_MS,
   HOLD_MS,
-  RETURN_MS,
-  inkAfterDrying,
-  strokePresence,
   INK_PEAK_ALPHA,
   INK_SEED,
-  STROKE_BOTTOM,
-  STROKE_TOP,
-  TRAIL_MS,
-  washLayers,
-  creep,
+  RETURN_MS,
   entrance,
   fbm,
+  inkAfterDrying,
   mulberry32,
-  splatter,
-  strokeSpine,
-  trailAlpha,
+  strokePresence,
   valueNoise2,
 } from '@/lib/ink';
 
-const W = 1152;
-const H = 520;
-const spine = strokeSpine(W, H);
 
 describe('mulberry32', () => {
   it('is deterministic for a given seed', () => {
@@ -80,256 +68,6 @@ describe('noise', () => {
       expect(v).toBeLessThanOrEqual(1);
       expect(fbm(i * 0.13, i * 0.29, INK_SEED)).toBe(v);
     }
-  });
-});
-
-describe('strokeSpine', () => {
-  it('is deterministic for the shipped seed', () => {
-    expect(strokeSpine(W, H)).toEqual(strokeSpine(W, H, INK_SEED));
-  });
-
-  it('travels left to right without doubling back', () => {
-    for (let i = 1; i < spine.length; i++) {
-      expect(spine[i]!.x).toBeGreaterThan(spine[i - 1]!.x);
-    }
-  });
-
-  it('enters from off-frame and dries out before the photo column', () => {
-    // Entering off-frame is what makes it a gesture rather than a shape. It no
-    // longer *leaves* off-frame: the brush runs out of ink over the text and
-    // stops there, which keeps the whole head-to-tail story on the words and
-    // keeps ink off the photograph.
-    expect(spine[0]!.x).toBeLessThan(0);
-    expect(spine[spine.length - 1]!.x).toBeLessThan(W * 0.6);
-  });
-
-  it('sweeps the middle, where the writing is', () => {
-    // The stroke crosses the text on purpose and inverts it on the way past, so
-    // unlike the earlier top-band version it *should* be over the words.
-    // `OrEqual` because the fit maps the extremes exactly onto the band — the
-    // mark is sized to the space rather than fitting inside it by luck.
-    for (const p of spine) {
-      expect(p.y - p.width).toBeGreaterThanOrEqual(H * STROKE_TOP - 0.001);
-      expect(p.y + p.width).toBeLessThanOrEqual(H * STROKE_BOTTOM + 0.001);
-    }
-    // Overlapping the middle third, rather than crossing one exact midline:
-    // what matters is that the mark is interior and lands on the writing, not
-    // that it intersects a particular y. It used to hug the top edge.
-    const lo = Math.min(...spine.map((p) => p.y - p.width));
-    const hi = Math.max(...spine.map((p) => p.y + p.width));
-    expect(hi).toBeGreaterThan(H / 3);
-    expect(lo).toBeLessThan((H * 2) / 3);
-    expect(lo).toBeGreaterThan(H * 0.08);
-  });
-
-  it('fits the band for any seed and any box, not just the shipped one', () => {
-    // The fit is done by rescaling to measured extent rather than by picking
-    // constants that happen to land inside. If that ever regresses to tuned
-    // numbers, some seed will clip and nobody will notice until it ships.
-    for (const seed of [1, 42, 20260802, 99991, 123456789]) {
-      for (const [w, h] of [[1152, 520], [390, 700], [768, 460], [1600, 600]]) {
-        for (const p of strokeSpine(w, h, seed)) {
-          expect(p.y - p.width).toBeGreaterThanOrEqual(h! * STROKE_TOP - 0.001);
-          expect(p.y + p.width).toBeLessThanOrEqual(h! * STROKE_BOTTOM + 0.001);
-        }
-      }
-    }
-  });
-
-  it('honours an explicit band', () => {
-    for (const [top, bottom] of [[40, 200], [120, 300], [10, 90]]) {
-      for (const p of strokeSpine(390, 760, INK_SEED, 90, top, bottom)) {
-        expect(p.y - p.width).toBeGreaterThanOrEqual(top! - 0.001);
-        expect(p.y + p.width).toBeLessThanOrEqual(bottom! + 0.001);
-      }
-    }
-  });
-
-  it('runs t from 0 to 1 in order', () => {
-    expect(spine[0]!.t).toBe(0);
-    expect(spine[spine.length - 1]!.t).toBe(1);
-    for (let i = 1; i < spine.length; i++) {
-      expect(spine[i]!.t).toBeGreaterThan(spine[i - 1]!.t);
-    }
-  });
-
-  it('tapers from a loaded head to a dry tail', () => {
-    const head = spine[0]!.width;
-    const tail = spine[spine.length - 1]!.width;
-    expect(head).toBeGreaterThan(0);
-    expect(tail).toBeGreaterThan(0);
-    expect(tail).toBeLessThan(head * 0.4);
-  });
-
-  it('carries a unit normal at every sample', () => {
-    for (const p of spine) {
-      expect(Math.hypot(p.nx, p.ny)).toBeCloseTo(1, 6);
-    }
-  });
-
-  it('scales with the box it is given', () => {
-    const small = strokeSpine(600, 260);
-    expect(small[0]!.width).toBeLessThan(spine[0]!.width);
-  });
-});
-
-describe('washLayers — soft masses, not strands', () => {
-  const layers = washLayers(spine, 46);
-
-  it('is deterministic', () => {
-    expect(washLayers(spine, 46)).toEqual(washLayers(spine, 46, INK_SEED));
-  });
-
-  it('carries less pigment the further out it blooms', () => {
-    // Load-bearing, not cosmetic: this ordering IS the drying behaviour. If it
-    // ever inverted, inkAfterDrying would empty the core first and the stain
-    // would cross-fade instead of drying edge-inward.
-    const wash = layers.filter((l) => l.kind === 'wash').sort((a, b) => a.spread - b.spread);
-    expect(wash.length).toBeGreaterThan(30);
-    for (let i = 1; i < wash.length; i++) {
-      expect(wash[i]!.density).toBeLessThan(wash[i - 1]!.density);
-    }
-  });
-
-  it('keeps clumps dense and small — they are pools, not bloom', () => {
-    // A clump sits inside the mass, so it is mid-spread and near-opaque and
-    // dries last. It is exempt from the wash's ordering on purpose, which is
-    // why the two families are labelled rather than distinguished by position.
-    const clumps = layers.filter((l) => l.kind === 'clump');
-    expect(clumps.length).toBeGreaterThan(3);
-    const washAtSameDepth = layers.filter((l) => l.kind === 'wash' && l.spread > 0.15);
-    for (const c of clumps) {
-      expect(c.density).toBeGreaterThan(0.8);
-      for (const w of washAtSameDepth) expect(c.density).toBeGreaterThan(w.density);
-    }
-  });
-
-  it('dries from the edge inwards once composed with inkAfterDrying', () => {
-    const sorted = layers.filter((l) => l.kind === 'wash').sort((a, b) => a.spread - b.spread);
-    const core = sorted[0]!;
-    const rim = sorted[sorted.length - 1]!;
-    const emptyAt = (d: number) => {
-      for (let p = 1; p >= 0; p -= 0.01) if (inkAfterDrying(d, p) === 0) return p;
-      return 0;
-    };
-    expect(emptyAt(rim.density)).toBeGreaterThan(emptyAt(core.density));
-  });
-
-  it('gives every layer a closed polygon with organic detail', () => {
-    for (const l of layers) {
-      expect(l.pts.length % 2).toBe(0);
-      // three subdivision levels off a ~20-point ribbon
-      expect(l.pts.length / 2).toBeGreaterThan(40);
-      for (const v of l.pts) expect(Number.isFinite(v)).toBe(true);
-    }
-  });
-
-  it('actually blooms — the rim reaches well past the core', () => {
-    // Across the wash family only: a clump is deliberately tiny, so including
-    // one at either end of the sort measures nothing about blooming.
-    const extent = (l: (typeof layers)[number]) => {
-      let lo = Infinity;
-      let hi = -Infinity;
-      for (let i = 1; i < l.pts.length; i += 2) {
-        lo = Math.min(lo, l.pts[i]!);
-        hi = Math.max(hi, l.pts[i]!);
-      }
-      return hi - lo;
-    };
-    const wash = layers.filter((l) => l.kind === 'wash').sort((a, b) => a.spread - b.spread);
-    expect(extent(wash[wash.length - 1]!)).toBeGreaterThan(extent(wash[0]!) * 1.35);
-  });
-
-  it('keeps density in [0,1] so the alpha budget cannot be blown', () => {
-    for (const l of layers) {
-      expect(l.density).toBeGreaterThan(0);
-      expect(l.density).toBeLessThanOrEqual(1);
-      expect(l.spread).toBeGreaterThanOrEqual(0);
-      expect(l.spread).toBeLessThanOrEqual(1);
-    }
-  });
-
-  it('includes dark clumps so the interior is mottled, not an airbrush', () => {
-    // a smooth core-to-edge gradient reads as a gradient; pigment settles in
-    // patches
-    expect(layers.filter((l) => l.kind === 'clump').length).toBeGreaterThan(5);
-  });
-});
-
-describe('splatter', () => {
-  const ceiling = H * STROKE_BOTTOM;
-  const splats = splatter(spine, 90, INK_SEED, ceiling);
-
-  it('is deterministic', () => {
-    expect(splats).toEqual(splatter(spine, 90, INK_SEED, ceiling));
-  });
-
-  it('respects the ceiling', () => {
-    for (const s of splats) {
-      expect(s.y + s.r).toBeLessThanOrEqual(ceiling);
-    }
-  });
-
-  it('still produces a full set under the ceiling', () => {
-    // the bounded retry must not quietly return half a scatter
-    expect(splats.length).toBe(90);
-  });
-
-  it('is mostly fine mist with a few fat drops', () => {
-    // an even distribution reads as polka dots
-    const radii = splats.map((s) => s.r).sort((a, b) => a - b);
-    const median = radii[Math.floor(radii.length / 2)]!;
-    const largest = radii[radii.length - 1]!;
-    expect(largest).toBeGreaterThan(median * 3);
-    expect(radii.filter((r) => r < median * 1.5).length).toBeGreaterThan(splats.length * 0.5);
-  });
-
-  it('stretches the hard-thrown drops into commas', () => {
-    // round dots at every size read as printed rather than thrown
-    for (const s of splats) {
-      expect(s.aspect).toBeGreaterThanOrEqual(1);
-      expect(Number.isFinite(s.angle)).toBe(true);
-    }
-    expect(splats.some((s) => s.aspect > 1.6)).toBe(true);
-  });
-
-  it('gives every drop a positive radius and a moment it was flicked', () => {
-    for (const s of splats) {
-      expect(s.r).toBeGreaterThan(0);
-      expect(s.at).toBeGreaterThanOrEqual(0);
-      expect(s.at).toBeLessThanOrEqual(1);
-    }
-  });
-
-  it('scatters near the stroke rather than across the whole box', () => {
-    const head = spine[0]!.width;
-    for (const s of splats) {
-      const nearest = Math.min(...spine.map((p) => Math.hypot(p.x - s.x, p.y - s.y)));
-      expect(nearest).toBeLessThan(head * 8);
-    }
-  });
-});
-
-describe('creep — the wet edge', () => {
-  it('stays inside its bound, so it can never restructure the gesture', () => {
-    for (let t = 0; t <= 1; t += 0.02) {
-      for (const ms of [0, 1200, 45_000, 600_000]) {
-        const c = creep(t, ms);
-        expect(Math.abs(c)).toBeLessThanOrEqual(CREEP_MAX);
-      }
-    }
-  });
-
-  it('varies along the stroke, not just over time', () => {
-    // a uniform value would inflate and deflate the whole shape, which reads as
-    // breathing rather than as ink soaking outward
-    const sampled = new Set<number>();
-    for (let t = 0; t <= 1; t += 0.05) sampled.add(Number(creep(t, 5000).toFixed(6)));
-    expect(sampled.size).toBeGreaterThan(10);
-  });
-
-  it('is deterministic', () => {
-    expect(creep(0.4, 9000)).toBe(creep(0.4, 9000, INK_SEED));
   });
 });
 
@@ -464,25 +202,6 @@ describe('inkAfterDrying', () => {
         expect(v).toBeGreaterThanOrEqual(prev - 1e-9);
         prev = v;
       }
-    }
-  });
-});
-
-describe('trailAlpha', () => {
-  it('is full when fresh and gone once dry', () => {
-    expect(trailAlpha(0)).toBe(1);
-    expect(trailAlpha(-50)).toBe(1);
-    expect(trailAlpha(TRAIL_MS)).toBe(0);
-    expect(trailAlpha(TRAIL_MS * 3)).toBe(0);
-  });
-
-  it('decreases monotonically over its life', () => {
-    let prev = trailAlpha(0);
-    for (let age = 25; age <= TRAIL_MS; age += 25) {
-      const v = trailAlpha(age);
-      expect(v).toBeLessThanOrEqual(prev);
-      expect(v).toBeGreaterThanOrEqual(0);
-      prev = v;
     }
   });
 });
