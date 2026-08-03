@@ -32,6 +32,7 @@
     inkAlpha,
     resetField,
     stepInk,
+    visible,
     type Drop,
     type InkField,
   } from '@/lib/ink-field';
@@ -43,9 +44,9 @@
   /** How long the rain takes to fall across the sheet. */
   const INJECT_MS = 2200;
   /** Drops per pour. Many fine, a few fat — see dropPlan. */
-  const DROPS = 34;
+  const DROPS = 3;
   /** Render-time softening radius, in cells. */
-  const BLUR = 1;
+  const BLUR = 3;
   /** Simulation ticks per painted frame. More is faster ink, not smoother. */
   const TICKS = 8;
   /** Vertical share of the hero the band wets. */
@@ -156,9 +157,16 @@
     // Soften first. The alpha curve has to be steep to clear the blend's dead
     // middle, and a steep transfer turns any cell-to-cell variation into
     // speckle — which is what made the wash granular rather than silky.
-    if (smooth && scratch) blurField(field.dep, smooth, scratch, field.gw, field.gh, BLUR);
+    // What you see in water is the pigment *in suspension*, not what has
+    // settled. Rendering deposit alone was also why the plume could not spread:
+    // pigment only deposits as water dries, and drying is exactly what stops it
+    // travelling — so the visible ink was always the part that had stopped
+    // moving. Suspended plus settled is both more honest and what lets a drop
+    // stay visible for the whole time it is spreading.
+    const vis = visible(field);
+    if (smooth && scratch) blurField(vis, smooth, scratch, field.gw, field.gh, BLUR);
     const data = pixels.data;
-    const dep = smooth ?? field.dep;
+    const dep = smooth ?? vis;
     const [r, g, b] = INK_RGB as [number, number, number];
     for (let i = 0, p = 0; i < dep.length; i++, p += 4) {
       const d = dep[i]!;
@@ -228,7 +236,11 @@
     field = createField(gw, gh, INK_SEED);
     smooth = new Float32Array(gw * gh);
     scratch = new Float32Array(gw * gh);
-    drops = dropPlan(gw, gh, gh * BAND_TOP, gh * BAND_BOTTOM, DROPS, INK_SEED);
+    // Rain only where it can be seen. The mask fades the canvas out by ~48% of
+    // its width to keep ink off the photograph, so drops scattered across the
+    // full width put a third of them somewhere invisible — which at three drops
+    // is most of the composition.
+    drops = dropPlan(Math.round(gw * 0.46), gh, gh * BAND_TOP, gh * BAND_BOTTOM, DROPS, INK_SEED);
     injectedTo = 0;
     dripCount = 0;
   }

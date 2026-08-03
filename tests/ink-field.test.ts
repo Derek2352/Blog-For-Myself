@@ -44,20 +44,22 @@ describe('the paper', () => {
     expect(along).toBeLessThan(across * 0.8);
   });
 
-  it('channels hard, but is never impermeable', () => {
-    // The contrast is what makes ink finger: a narrow range merely nudges the
-    // flow, a wide one floods some channels and starves others. The floor keeps
-    // every cell passable so ink can never hard-stop against a seam.
+  it('is nearly uniform — there is no paper in a bowl of water', () => {
+    // This once asserted the opposite. The field was widened to a 9:1 ratio to
+    // channel flow into fingers; it worked, and it was the wrong mechanism.
+    // Substrate channels vary at cell scale, the steep alpha curve magnifies
+    // cell-scale variation, and the plume came out granular and dirty.
+    // Fingering is the flow's job (advectPig); the medium should be almost
+    // featureless, with only enough inhomogeneity not to be perfectly flat.
     const f = createField(60, 60, INK_SEED);
     let lo = Infinity;
     let hi = -Infinity;
     for (const v of f.fibre) {
-      expect(v).toBeGreaterThan(0.1);
-      expect(v).toBeLessThanOrEqual(1.1);
       lo = Math.min(lo, v);
       hi = Math.max(hi, v);
     }
-    expect(hi / lo).toBeGreaterThan(3);
+    expect(lo).toBeGreaterThan(0.8);
+    expect(hi / lo).toBeLessThan(1.3);
   });
 
   it('is deterministic', () => {
@@ -361,12 +363,15 @@ describe('dropPlan — rain, not a poured band', () => {
     expect(dropPlan(288, 130, 15.6, 109.2, 130, INK_SEED)).toEqual(drops);
   });
 
-  it('is mostly fine drops with a few fat ones', () => {
-    // an even size distribution reads as polka dots; the fat ones are what
-    // become the dark pools once they spread and merge
+  it('drops broad, and varies', () => {
+    // This once required many fine drops and a few fat ones, which suited rain
+    // landing on paper. Ink in water wants one or two broad drops instead:
+    // diffusion from a point always leaves a dense core and a halo too faint to
+    // see, so a drop has to *begin* broad rather than spread into breadth.
     const radii = drops.map((d) => d.r).sort((a, b) => a - b);
     const median = radii[Math.floor(radii.length / 2)]!;
-    expect(radii[radii.length - 1]!).toBeGreaterThan(median * 2.5);
+    expect(radii[0]!).toBeGreaterThan(20);
+    expect(radii[radii.length - 1]!).toBeGreaterThan(median * 1.1);
   });
 
   it('falls across the whole sheet, and lands in order', () => {

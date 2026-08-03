@@ -30,6 +30,8 @@ export interface InkField {
   dep: Float32Array;
   /** Paper absorbency. Oriented fibre, seeded once and never touched again. */
   fibre: Float32Array;
+  /** What the renderer shows: suspended plus settled. */
+  vis: Float32Array;
   /** Scratch buffers, so a step allocates nothing. */
   tmpWet: Float32Array;
   tmpPig: Float32Array;
@@ -78,7 +80,10 @@ export function fibreNoise(x: number, y: number, seed: number): number {
 export function flowBias(x: number, y: number, seed: number): { dx: number; dy: number } {
   // Wavelength must be *shorter* than a plume, or the drift merely carries the
   // whole blob sideways instead of tearing it into filaments.
-  const k = 0.045;
+  // Long wavelength. A short one tore the plume apart at cell scale, which
+  // reads as dirt; a long one folds it, which reads as ink turning over in
+  // water.
+  const k = 0.016;
   const e = 1.4;
   const n0 = fbmLocal(x * k, y * k, seed);
   const gx = fbmLocal((x + e) * k, y * k, seed) - n0;
@@ -115,15 +120,14 @@ export function createField(gw: number, gh: number, seed: number): InkField {
   const fibre = new Float32Array(n);
   for (let y = 0; y < gh; y++) {
     for (let x = 0; x < gw; x++) {
-      // Wide contrast, several scales. A narrow range (this was 0.55-1.0)
-      // merely nudges the flow; a wide one makes ink flood some channels and
-      // starve others, which is what breaks an advancing front into fingers
-      // instead of a smooth disc. The floor keeps every cell passable, so ink
-      // can never hard-stop against a seam.
-      const coarse = fibreNoise(x, y, seed);
-      const fine = fibreNoise(x * 2.6 + 31, y * 2.6 - 17, seed + 991);
-      const chan = coarse * 0.68 + fine * 0.32;
-      fibre[y * gw + x] = 0.12 + Math.pow(chan, 1.6) * 0.95;
+      // Nearly uniform, and deliberately so. This was widened to a 9:1 ratio to
+      // channel the flow into fingers, which worked and was the wrong idea:
+      // there is no paper in a bowl of water. Those channels are what made the
+      // plume look granular and dirty, because they vary at cell scale and the
+      // steep alpha curve magnifies exactly that. Fingering belongs to the
+      // flow — see advectPig — not to a substrate. What is left here is a
+      // whisper of inhomogeneity so the medium is not perfectly flat.
+      fibre[y * gw + x] = 0.86 + fibreNoise(x, y, seed) * 0.14;
     }
   }
   return {
@@ -133,16 +137,32 @@ export function createField(gw: number, gh: number, seed: number): InkField {
     pig: new Float32Array(n),
     dep: new Float32Array(n),
     fibre,
+    vis: new Float32Array(n),
     tmpWet: new Float32Array(n),
     tmpPig: new Float32Array(n),
   };
 }
 
-/** Clear everything except the paper, which never changes. */
+/** Clear everything except the medium, which never changes. */
 export function resetField(f: InkField): void {
   f.wet.fill(0);
   f.pig.fill(0);
   f.dep.fill(0);
+  f.vis.fill(0);
+}
+
+/**
+ * What is actually visible: pigment in suspension plus pigment settled.
+ *
+ * In water you see the plume itself, not a stain. Showing only the deposit also
+ * capped how far ink could travel, because pigment settles as water dries and
+ * drying is what ends the spread — so the visible part was always the part that
+ * had stopped moving.
+ */
+export function visible(f: InkField): Float32Array {
+  const { vis, pig, dep } = f;
+  for (let i = 0; i < vis.length; i++) vis[i] = pig[i]! + dep[i]!;
+  return vis;
 }
 
 /**
@@ -199,7 +219,7 @@ export function injectBand(
  * inkAlpha correctly discarded as a whisper, so 27% of the sheet held pigment
  * and almost none of it rendered. This concentrates the ink instead.
  */
-export const PIG_LOAD = 1.0;
+export const PIG_LOAD = 1.05;
 
 /** One drop — a splash of splatter, or the cursor. It will bleed on its own. */
 export function injectBlob(
@@ -227,7 +247,7 @@ export function injectBlob(
 }
 
 /** How fast water leaves the paper, per tick at dt = 1. */
-export const EVAPORATION = 0.022;
+export const EVAPORATION = 0.0004;
 /** How readily suspended pigment settles out. */
 export const DEPOSIT_RATE = 0.1;
 /**
@@ -300,7 +320,7 @@ export function advectPig(f: InkField, seed: number, dt = 1): void {
 }
 
 /** How far pigment is carried per tick, in cells. */
-export const SWIRL = 0.85;
+export const SWIRL = 0.4;
 
 /**
  * One tick: flow, advect, deposit, evaporate.
@@ -363,7 +383,7 @@ export function stepInk(f: InkField, dt = 1, seed = 0): void {
       if (count === 0 || total <= 0) continue;
 
       // capped so a cell can never drain more than it holds
-      const moveW = Math.min(w * 0.5, total * 0.06 * dt * fibre[i]!);
+      const moveW = Math.min(w * 0.5, total * 1.6 * dt * fibre[i]!);
       const p = tmpPig[i]!;
       const moveP = Math.min(p * 0.6, moveW * (p / (w + 1e-6)) * ADVECT_BIAS);
       for (let k = 0; k < count; k++) {
@@ -490,8 +510,12 @@ export function dropPlan(
     drops.push({
       x,
       y,
-      r: gh * (0.05 + p * p * p * 0.16),
-      amount: 0.7 + rnd() * 0.5,
+      // Big from the start. Diffusion from a point always yields a peaked
+      // profile — a dense core with a halo too faint to render — which is why
+      // small drops read as dark blobs on empty paper however far they spread.
+      // A broad drop begins flat, and diffusion only has to soften its edge.
+      r: gh * (0.42 + p * p * p * 0.5),
+      amount: 0.55 + rnd() * 0.45,
       at,
     });
   }
