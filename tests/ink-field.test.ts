@@ -44,7 +44,7 @@ import {
   type Drop,
   type InkField,
 } from '@/lib/ink-field';
-import { INK_SEED } from '@/lib/ink';
+import { INK_SEED, mulberry32 } from '@/lib/ink';
 
 const sum = (a: Float32Array) => a.reduce((s, v) => s + v, 0);
 const run = (f: InkField, n: number) => {
@@ -1270,5 +1270,108 @@ describe('irregularity — no straight edges, no smooth cones', () => {
     const maxReach = Math.max(...r);
     expect(maxReach).toBeLessThan(30 * (1 + POUR_ROUGH) + 2);
     expect(r.filter((v) => v === maxReach).length).toBeLessThan(r.length / 3);
+  });
+});
+
+describe('any roll is a composition that works', () => {
+  // The hero used to be one fixed seed, on the reasoning that a portfolio
+  // should not hand one reader a good stroke and the next an ugly one. Rolling
+  // per visit is only defensible if the space being rolled in has no bad
+  // outcomes — so these are properties over many seeds rather than assertions
+  // about one. Spread across the full uint32 range the component can produce.
+  const SEEDS = Array.from({ length: 16 }, (_, i) =>
+    Math.floor((i / 16) * 0xffffffff + i * 7919) >>> 0,
+  );
+  const COUNTS = [2, 3, 4];
+
+  /** The component's arrangement, shrunk enough to simulate 48 times. */
+  const WIN_W = 120;
+  const WIN_H = 66;
+  const OFF_X = Math.round(WIN_W * 0.22);
+  const OFF_Y = Math.round(WIN_H * 0.14);
+  const FW = WIN_W + OFF_X + Math.round(WIN_W * 0.1);
+  const FH = WIN_H + OFF_Y + Math.round(WIN_H * 0.26);
+
+  it('every drop is well formed, whatever the seed', () => {
+    for (const seed of SEEDS) {
+      for (const count of COUNTS) {
+        for (const d of dropPlan(FW, FH, 0, FH, count, seed, WIN_H)) {
+          expect(Number.isFinite(d.x) && Number.isFinite(d.y)).toBe(true);
+          expect(d.r).toBeGreaterThan(0);
+          expect(d.amount).toBeGreaterThan(0);
+          expect(TONES).toContain(d.conc);
+          expect(d.y).toBeGreaterThanOrEqual(-0.001);
+          expect(d.y).toBeLessThanOrEqual(FH + 0.001);
+        }
+      }
+    }
+  });
+
+  it('the head stays off-frame on every roll', () => {
+    // Framing is not something a dice roll gets to undo: the source has to sit
+    // outside the window or the mark stops being a fragment of something larger.
+    for (const seed of SEEDS) {
+      for (const count of COUNTS) {
+        const head = dropPlan(FW, FH, 0, FH, count, seed, WIN_H)[0]!;
+        expect(head.x < OFF_X || head.y > OFF_Y + WIN_H).toBe(true);
+      }
+    }
+  });
+
+  it('no roll leaves the hero empty or paints it solid', () => {
+    // The two ways a random composition can be bad. Both are checked on the
+    // window only, because ink outside it is deliberately out of shot.
+    const cover: number[] = [];
+    for (const seed of SEEDS) {
+      const f = createField(FW, FH, seed);
+      const drops = dropPlan(FW, FH, 0, FH, 3, seed, WIN_H);
+      for (const d of drops) {
+        injectStreak(f, d.x, d.y, d.r, throwAngle(FW, FH), 2.3, d.amount, d.conc, seed);
+      }
+      for (let i = 0; i < 150; i++) stepInk(f, 1, seed);
+      const vis = visible(f);
+      let inked = 0;
+      for (let y = OFF_Y; y < OFF_Y + WIN_H; y++) {
+        for (let x = OFF_X; x < OFF_X + WIN_W; x++) {
+          if (vis[y * FW + x]! > 0.05) inked++;
+        }
+      }
+      cover.push(inked / (WIN_W * WIN_H));
+    }
+    for (const c of cover) {
+      expect(c).toBeGreaterThan(0.1);
+      expect(c).toBeLessThan(0.85);
+    }
+  });
+
+  it('rolls actually differ — a randomiser that repeats itself is not one', () => {
+    const shape = (seed: number) =>
+      dropPlan(FW, FH, 0, FH, 3, seed, WIN_H)
+        .map((d) => `${d.x.toFixed(1)},${d.y.toFixed(1)},${d.r.toFixed(1)}`)
+        .join('|');
+    expect(new Set(SEEDS.map(shape)).size).toBe(SEEDS.length);
+  });
+
+  it('is still reproducible for a given seed', () => {
+    // The whole basis of every measurement in this file and every harness.
+    for (const seed of [SEEDS[0]!, SEEDS[9]!, INK_SEED]) {
+      expect(dropPlan(FW, FH, 0, FH, 3, seed, WIN_H)).toEqual(
+        dropPlan(FW, FH, 0, FH, 3, seed, WIN_H),
+      );
+      expect(Array.from(createField(40, 40, seed).fibre)).toEqual(
+        Array.from(createField(40, 40, seed).fibre),
+      );
+    }
+  });
+
+  it('the tone ceiling protects text regardless of the roll', () => {
+    // ceilConc takes no seed, so this holds by construction — asserted anyway,
+    // because it is the one invariant a bad roll must never be able to break.
+    for (const seed of SEEDS) {
+      const rnd = mulberry32(seed);
+      for (let i = 0; i < 40; i++) {
+        expect(ceilConc(rnd(), 1)).toBeLessThanOrEqual(TONE_CEILING + 1e-9);
+      }
+    }
   });
 });

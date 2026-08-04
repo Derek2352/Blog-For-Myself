@@ -22,6 +22,7 @@
     INK_SEED,
     entrance,
     inkAfterDrying,
+    mulberry32,
     strokePresence,
     valueNoise2,
   } from '@/lib/ink';
@@ -66,8 +67,15 @@
   const FRAME_MS = 1000 / 15;
   /** How long the rain takes to fall across the sheet. */
   const INJECT_MS = 2200;
-  /** Drops per pour. Many fine, a few fat — see dropPlan. */
-  const DROPS = 3;
+  /**
+   * Drops per pour, as a range — the count is rolled with the seed.
+   *
+   * Kept small at both ends. "Fewer drops, broader spread" was a deliberate
+   * decision and a range is not licence to abandon it; this varies the
+   * composition without ever crowding the sheet.
+   */
+  const DROPS_MIN = 2;
+  const DROPS_MAX = 4;
   /**
    * Render-time softening radius, in cells.
    *
@@ -132,6 +140,47 @@
    */
   let inkRgb = '42, 36, 30';
 
+  /**
+   * This visit's composition.
+   *
+   * Every pure function downstream already took a seed argument, so varying the
+   * mark is entirely a matter of which number gets handed in — the paper's
+   * fibre and drift, the drop plan, the tone assignment, the mottling, the
+   * voids and the reservation's wobble all follow from it.
+   */
+  let seed = INK_SEED;
+  /** How many pours this visit gets. Rolled with the seed. */
+  let dropCount = 3;
+
+  /**
+   * Choose the composition for this arrival.
+   *
+   * Session-scoped rather than per page load: navigating away from the homepage
+   * and back should return to the *same* mark, or the hero would feel unstable
+   * rather than composed. A visit gets one gesture.
+   *
+   * `?ink=<n>` pins it, which is not a debug leftover — the measurement
+   * harnesses need a fixed composition or every run reports different numbers,
+   * and there would be no way to tell a regression from a different roll.
+   *
+   * sessionStorage throws when storage is blocked, so a failure just means an
+   * unremembered roll rather than no ink.
+   */
+  function pickSeed(): number {
+    const pinned = new URLSearchParams(location.search).get('ink');
+    if (pinned && /^\d{1,10}$/.test(pinned)) return Number(pinned);
+    const roll = () => (Math.random() * 0xffffffff) >>> 0;
+    try {
+      const held = sessionStorage.getItem('ink-seed');
+      if (held && /^\d{1,10}$/.test(held)) return Number(held);
+      const fresh = roll();
+      sessionStorage.setItem('ink-seed', String(fresh));
+      return fresh;
+    } catch {
+      return roll();
+    }
+  }
+
   let canvas: HTMLCanvasElement | null = null;
   let view: CanvasRenderingContext2D | null = null;
   /** Small canvas at grid resolution. Upscaling it is what softens the ink. */
@@ -149,8 +198,17 @@
   let lastTick = 0;
   let lastScrollAt = -Infinity;
   let pointerOver = false;
-  /** How far through the rain we are, 0–1. */
-  let injectedTo = 0;
+  /**
+   * How far through the pour we are, 0–1 — or -1 for "not started".
+   *
+   * The sentinel is load-bearing. `rainTo` lands a drop when `d.at > injectedTo`,
+   * and `dropPlan` gives the first drop `at = 0`, so starting this at 0 made
+   * `0 > 0` false and **the head pour never landed at all**. That is the
+   * biggest, most heavily charged drop, the one placed off-frame that the whole
+   * framing rests on; every composition was quietly missing it. With two drops
+   * rolled it meant a single drop landed.
+   */
+  let injectedTo = -1;
   let drops: Drop[] = [];
   /** Per-cell weight for the text tone ceiling — see buildReserve. */
   let reserve: Float32Array | null = null;
@@ -205,9 +263,9 @@
         // A droplet that has left the brush is travelling as a bead, so it lands
         // round — it is the arm's sweep that elongates a mark, not the flight.
         if (d.r > winH * 0.1) {
-          injectStreak(field, d.x, d.y, d.r, axis, ELONGATION, d.amount, d.conc, INK_SEED);
+          injectStreak(field, d.x, d.y, d.r, axis, ELONGATION, d.amount, d.conc, seed);
         } else {
-          injectBlob(field, d.x, d.y, d.r, d.amount, d.conc, INK_SEED);
+          injectBlob(field, d.x, d.y, d.r, d.amount, d.conc, seed);
         }
       }
     }
@@ -236,11 +294,11 @@
     // holds, and the sheet is wiped once the hero is properly clear — so each
     // cycle is a fresh pour rather than the same stain fading in and out.
     if (presence > 0) {
-      if (step > 0) rainTo(Math.min(1, injectedTo + step / INJECT_MS));
-      for (let t = 0; t < TICKS; t++) stepInk(field, 1, INK_SEED);
-    } else if (injectedTo > 0) {
+      if (step > 0) rainTo(Math.min(1, Math.max(0, injectedTo) + step / INJECT_MS));
+      for (let t = 0; t < TICKS; t++) stepInk(field, 1, seed);
+    } else if (injectedTo >= 0) {
       resetField(field);
-      injectedTo = 0;
+      injectedTo = -1;
       dripCount = 0;
     }
 
@@ -321,8 +379,8 @@
             coverage(inkAfterDrying(load, presence)) *
             // Sampled in field space, so the paper's texture stays fixed to the
             // ink rather than sliding when the window's origin changes.
-            mottleAt(fx, fy, INK_SEED) *
-            voidAt(fx, fy, INK_SEED);
+            mottleAt(fx, fy, seed) *
+            voidAt(fx, fy, seed);
         }
         // 滲透: the watermark the water left, where it ran on past the ink.
         //
@@ -333,7 +391,7 @@
         // Needs no blur of its own: water diffuses, so `soak` is smooth
         // already. It is also unaffected by the tone ceiling, which is correct
         // — a watermark over text is a watermark, and it is far below 清.
-        const halo = haloAlpha(soakField[i]!) * voidAt(fx, fy, INK_SEED);
+        const halo = haloAlpha(soakField[i]!) * voidAt(fx, fy, seed);
         if (halo > a) a = halo;
         data[p] = r;
         data[p + 1] = g;
@@ -401,7 +459,7 @@
     grid.width = winW;
     grid.height = winH;
     pixels = gridCtx.createImageData(winW, winH);
-    field = createField(gw, gh, INK_SEED);
+    field = createField(gw, gh, seed);
     smooth = new Float32Array(gw * gh);
     scratch = new Float32Array(gw * gh);
     buildReserve(gw, rect);
@@ -412,10 +470,18 @@
     // longer the world, so the axis alone decides where the throw runs: in from
     // outside the bottom-left corner, climbing to the right.
     // Placed across the padded field, but *sized* to the window — see sizeRef.
-    drops = dropPlan(gw, gh, 0, gh, DROPS, INK_SEED, winH);
-    drops = drops.concat(spatterPlan(gw, gh, 0, gh, SPATTER, INK_SEED, winH));
+    //
+    // Scaled by 1/sqrt(count) so a four-drop roll uses four smaller drops
+    // rather than a third more ink than a three-drop one. Without it the roll
+    // varied the *amount* as well as the arrangement, and measured coverage
+    // swung from 18% of the hero to 58% — the heavy end being a far more
+    // oppressive page than anything the composition was judged against. Total
+    // area is what should stay put; where it lands is what should vary.
+    const spread = winH * Math.sqrt(3 / dropCount);
+    drops = dropPlan(gw, gh, 0, gh, dropCount, seed, spread);
+    drops = drops.concat(spatterPlan(gw, gh, 0, gh, SPATTER, seed, spread));
     axis = throwAngle(gw, gh);
-    injectedTo = 0;
+    injectedTo = -1;
     dripCount = 0;
   }
 
@@ -485,7 +551,7 @@
           // it is not here.
           const reach =
             feather *
-            (1 + (valueNoise2(x * 0.055, y * 0.055, INK_SEED + 5507) - 0.5) * 2 * RESERVE_WANDER);
+            (1 + (valueNoise2(x * 0.055, y * 0.055, seed + 5507) - 0.5) * 2 * RESERVE_WANDER);
           if (d >= reach) continue;
           const t = 1 - d / reach;
           const w = t * t * (3 - 2 * t);
@@ -509,7 +575,7 @@
     // A drip is real ink now: it wets the paper and then bleeds outward on its
     // own, rather than being a shape that fades on a timer.
     // A fresh drip is undiluted 焦墨 — it has not met anything to weaken it.
-    injectBlob(field, x, y, 1.4 + Math.random() * 1.8, 0.85, 1, INK_SEED);
+    injectBlob(field, x, y, 1.4 + Math.random() * 1.8, 0.85, 1, seed);
     dripCount++;
     sync();
   }
@@ -542,6 +608,10 @@
     el.hidden = false;
 
     readInk();
+    // Rolled before resize(), because resize() is what builds the paper and
+    // plans the drops — everything downstream reads `seed`.
+    seed = pickSeed();
+    dropCount = DROPS_MIN + Math.floor(mulberry32(seed + 6421)() * (DROPS_MAX - DROPS_MIN + 1));
     resize();
 
     window.addEventListener('resize', resize, { passive: true });
@@ -588,7 +658,7 @@
     arrivedAt = 0;
     cycleAt = 0;
     lastTick = 0;
-    injectedTo = 0;
+    injectedTo = -1;
     dripCount = 0;
     pointerOver = false;
   }

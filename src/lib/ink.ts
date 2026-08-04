@@ -5,9 +5,9 @@
  * (src/components/InkWash.astro) owns the pixels; this file owns the shapes, so
  * the interesting decisions stay reachable from tests/ink.test.ts.
  *
- * The composition is deliberately seeded from a constant rather than from the
- * visitor. A portfolio hero should be a gesture someone chose, not a dice roll
- * that hands one reader a good stroke and the next an ugly one.
+ * Nothing here reads a clock or a random number. Every function takes its seed
+ * as an argument, which is what lets the composition vary per visitor while
+ * staying exactly reproducible for tests and measurement — see INK_SEED.
  *
  * The shapes used to live here too — a spine, bristles, deformed wash layers.
  * All of it was a picture *of* ink, which is why every new reference needed a
@@ -45,7 +45,21 @@ export const INK_PEAK_ALPHA = 0.8;
 /** How long the brush takes to travel its path when you arrive on the page. */
 export const ENTRANCE_MS = 2200;
 
-/** The one composition every visitor sees. */
+/**
+ * The default composition — and the one every test and harness pins to.
+ *
+ * This used to be the *only* composition, on the reasoning that a portfolio
+ * hero should be a gesture someone chose rather than a dice roll that hands one
+ * reader a good stroke and the next an ugly one. That concern was right and the
+ * conclusion was too strong: the answer is to roll inside a space where every
+ * outcome works, not to refuse to roll.
+ *
+ * So the component now picks a seed per visit (see `pickSeed` in
+ * src/components/InkWash.astro) and everything downstream takes the seed as an
+ * argument, which is why this stays exported: measurement needs a fixed
+ * composition to compare against, and every property in tests/ink-field.test.ts
+ * is checked across many seeds rather than assumed from this one.
+ */
 export const INK_SEED = 20260802;
 
 /** Seeded PRNG (mulberry32). Same seed ⇒ same sequence, on every platform. */
