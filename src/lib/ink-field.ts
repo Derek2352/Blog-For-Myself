@@ -607,58 +607,6 @@ export function injectStreak(
   }
 }
 
-/**
- * Satellite droplets — the specks flung past the mass.
- *
- * The most recognisable signature of a splash, and the model had none: every
- * pour merged into one silhouette, which is what a stain looks like. Real thrown
- * ink sheds droplets that land *detached*, ahead of and beside the main mark,
- * getting smaller and sparser with distance.
- *
- * Placed along the same axis as the throw and beyond its end, with lateral
- * scatter that widens as they travel — a cone, which is what a flung arc
- * actually produces. Deliberately tiny: a satellite that merges into the mass
- * has stopped being a satellite.
- */
-export function spatterPlan(
-  gw: number,
-  gh: number,
-  bandTop: number,
-  bandBottom: number,
-  count: number,
-  seed: number,
-  sizeRef = gh,
-): Drop[] {
-  const rnd = mulberry32(seed + 40503);
-  const band = bandBottom - bandTop;
-  const out: Drop[] = [];
-  for (let i = 0; i < count; i++) {
-    // travel along the throw, past its end — 0 is the tail of the main mark
-    const t = Math.pow(rnd(), 0.65);
-    const s = AXIS_X0 + (AXIS_X1 - AXIS_X0) * (0.55 + t * 0.85);
-    // The cone, and it has to be wide. A narrow one dropped every satellite
-    // along the axis the main mark already occupies, so all of them bled into
-    // it — measured, not one detached component survived. Landing *beside* the
-    // throw is what makes a droplet read as thrown clear of it.
-    const spread = (0.18 + t * 0.55) * (rnd() * 2 - 1);
-    out.push({
-      x: (s + rnd() * 0.05 - 0.025) * gw,
-      y: bandTop + (AXIS_Y0 + (AXIS_Y1 - AXIS_Y0) * (0.5 + t * 0.8) + spread) * band,
-      // Small, but not so small that diffusion erases them. These sit on the
-      // paper for the whole hold; at a couple of cells across they had spread
-      // to nothing long before anyone saw them.
-      r: sizeRef * (0.03 + Math.pow(rnd(), 2) * 0.055) * (1 - t * 0.35),
-      // Heavily charged for their size — a droplet is a bead of undiluted ink,
-      // and it needs the mass to still be there after it has bled a little.
-      amount: 0.85 + rnd() * 0.4,
-      // Undiluted — a droplet that left the brush met nothing on the way.
-      conc: 1,
-      at: 0.55 + t * 0.4,
-    });
-  }
-  return out;
-}
-
 /** How fast water leaves the paper, per tick at dt = 1. */
 export const EVAPORATION = 0.0004;
 /** How readily suspended pigment settles out. */
@@ -950,20 +898,29 @@ export interface Drop {
 }
 
 /**
- * Which register each successive pour is charged at, as indices into `TONES`.
+ * Which register the i-th of `count` pours is charged at.
  *
- * Ascending, and this is 破墨法 rather than an arbitrary choice: lay the 淡墨
- * wash first, then break 濃墨 into it while it is still wet. The dark strike
- * goes in last precisely so that nothing lands on top of it afterwards.
+ * Ascending, ending at 焦, and that is 破墨法 rather than an arbitrary choice:
+ * lay the 淡墨 wash first, then break 濃墨 into it while it is still wet. The
+ * dark strike goes in last precisely so nothing lands on top of it afterwards.
  *
- * Starting dark was the first attempt and it measured badly. The head pour is
- * the one that spreads longest and takes every later pour on top of it, so
- * mass-weighted mixing pulled its 焦墨 down toward the average and the rendered
- * histogram lost its top two registers entirely — five peaks collapsed to two,
- * all of them pale. Pouring light-to-dark leaves the strongest ink undiluted
- * because it arrives last.
+ * Starting dark was the first attempt and it measured badly — the head pour
+ * spreads longest and takes every later pour on top of it, so mass-weighted
+ * mixing pulled its 焦墨 toward the average and the rendered histogram lost its
+ * top two registers entirely.
+ *
+ * This was a fixed cycle `[0, 2, 4, 1, 3]` indexed by pour number, which was
+ * fine at three pours and wrong at two: it gave 清 and 重 and no 焦 anywhere, so
+ * with the satellites gone — they carried conc 1 and were quietly supplying all
+ * the near-black — the darkest ink in the composition fell to 0.54 alpha and
+ * only 1% of the hero stayed above half. Spreading the registers across however
+ * many pours there are means the last one is 焦 at any count.
  */
-export const TONE_ORDER = [0, 2, 4, 1, 3];
+export function toneFor(i: number, count: number): number {
+  if (count <= 1) return TONES[TONES.length - 1]!;
+  const idx = Math.round((i * (TONES.length - 1)) / (count - 1));
+  return TONES[idx]!;
+}
 
 /**
  * Where the throw begins and ends, as fractions of the box it is given.
@@ -1048,7 +1005,7 @@ export function dropPlan(
     // anyone saw either. The gradient has to outrun that.
     const fall = 1 - s * 0.72;
     const p = rnd();
-    const conc = TONES[TONE_ORDER[i % TONE_ORDER.length]!]!;
+    const conc = toneFor(i, count);
     drops.push({
       x,
       y,

@@ -39,7 +39,6 @@
     injectStreak,
     mottleAt,
     resetField,
-    spatterPlan,
     stepInk,
     throwAngle,
     TONES,
@@ -117,8 +116,6 @@
   const MARGIN_B = 0.26;
   const MARGIN_T = 0.14;
   const MARGIN_R = 0.1;
-  /** Satellite droplets flung past the mark. */
-  const SPATTER = 22;
   /** How wide, in CSS pixels, the tone ceiling fades in around a text block. */
   const RESERVE_FEATHER = 44;
   /** How far that fade's reach wanders, so its edge is not the box's edge. */
@@ -258,15 +255,11 @@
   function rainTo(front: number): void {
     if (!field || front <= injectedTo) return;
     for (const d of drops) {
+      // Every pour is a streak now. This used to branch on size, sending small
+      // drops to injectBlob because satellite droplets land round rather than
+      // stretched — the satellites are gone, so the branch went with them.
       if (d.at > injectedTo && d.at <= front) {
-        // The main pours are stretched along the throw; the satellites are not.
-        // A droplet that has left the brush is travelling as a bead, so it lands
-        // round — it is the arm's sweep that elongates a mark, not the flight.
-        if (d.r > winH * 0.1) {
-          injectStreak(field, d.x, d.y, d.r, axis, ELONGATION, d.amount, d.conc, seed);
-        } else {
-          injectBlob(field, d.x, d.y, d.r, d.amount, d.conc, seed);
-        }
+        injectStreak(field, d.x, d.y, d.r, axis, ELONGATION, d.amount, d.conc, seed);
       }
     }
     injectedTo = front;
@@ -479,7 +472,6 @@
     // area is what should stay put; where it lands is what should vary.
     const spread = winH * Math.sqrt(3 / dropCount);
     drops = dropPlan(gw, gh, 0, gh, dropCount, seed, spread);
-    drops = drops.concat(spatterPlan(gw, gh, 0, gh, SPATTER, seed, spread));
     axis = throwAngle(gw, gh);
     injectedTo = -1;
     dripCount = 0;

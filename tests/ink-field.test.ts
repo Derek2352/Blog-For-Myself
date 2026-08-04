@@ -22,8 +22,8 @@ import {
   SOAK_FULL,
   CONC_SPREAD,
   injectStreak,
-  spatterPlan,
   throwAngle,
+  toneFor,
   TONE_CEILING,
   fiveTones,
   mixConc,
@@ -849,48 +849,6 @@ describe('氣派 — a thrown mark, not a stain', () => {
     expect(reach(0, 1)).toBeGreaterThan(reach(1, 0) * 1.8);
   });
 
-  it('spatter stays small — a satellite that merges is not a satellite', () => {
-    const spatter = spatterPlan(288, 130, 130 * 0.12, 130 * 0.84, 14, INK_SEED);
-    const main = dropPlan(288, 130, 130 * 0.12, 130 * 0.84, 3, INK_SEED);
-    const smallestMain = Math.min(...main.map((d) => d.r));
-    expect(spatter.length).toBe(14);
-    for (const d of spatter) {
-      expect(d.r).toBeGreaterThan(0);
-      expect(d.r).toBeLessThan(smallestMain * 0.25);
-    }
-  });
-
-  it('spatter is flung past the mark, and scatters wider as it goes', () => {
-    const s = spatterPlan(288, 130, 130 * 0.12, 130 * 0.84, 60, INK_SEED);
-    const band = 130 * (0.84 - 0.12);
-    const axisYAt = (x: number) => {
-      const u = (x / 288 - AXIS_X0) / (AXIS_X1 - AXIS_X0);
-      return 130 * 0.12 + (AXIS_Y0 + u * (AXIS_Y1 - AXIS_Y0)) * band;
-    };
-    // Split at the median rather than a fixed x: the satellites all start past
-    // the end of the main mark, so the interesting comparison is near half of
-    // the spray against the far half, not the sheet's coordinates.
-    const off = s
-      .map((d) => ({ t: d.x, e: Math.abs(d.y - axisYAt(d.x)) }))
-      .sort((a, b) => a.t - b.t);
-    const near = off.slice(0, Math.floor(off.length / 3));
-    const far = off.slice(-Math.floor(off.length / 3));
-    const mean = (xs: { e: number }[]) => xs.reduce((a, b) => a + b.e, 0) / xs.length;
-    expect(near.length).toBeGreaterThan(3);
-    expect(far.length).toBeGreaterThan(3);
-    // the cone: a flung arc sheds droplets that spread out with distance
-    expect(mean(far)).toBeGreaterThan(mean(near) * 1.3);
-  });
-
-  it('spatter is undiluted — it met nothing on the way', () => {
-    for (const d of spatterPlan(288, 130, 16, 109, 14, INK_SEED)) expect(d.conc).toBe(1);
-  });
-
-  it('is deterministic', () => {
-    expect(spatterPlan(288, 130, 16, 109, 14, INK_SEED)).toEqual(
-      spatterPlan(288, 130, 16, 109, 14, INK_SEED),
-    );
-  });
 });
 
 describe('ceilConc — words first', () => {
@@ -974,7 +932,7 @@ describe('framing — the source is outside the picture', () => {
     // The direct statement of "you are seeing part of something larger".
     //
     // This first asserted that the *densest cell* was off-frame, which was the
-    // wrong proxy and failed honestly: pours run light-to-dark (see TONE_ORDER,
+    // wrong proxy and failed honestly: pours run light-to-dark (see toneFor,
     // which is 破墨法 and also what keeps the top registers from being diluted
     // away), and charge follows strength — so the heaviest ink is the last
     // pour, which lands in frame by design. What framing actually needs is that
@@ -1372,6 +1330,32 @@ describe('any roll is a composition that works', () => {
       for (let i = 0; i < 40; i++) {
         expect(ceilConc(rnd(), 1)).toBeLessThanOrEqual(TONE_CEILING + 1e-9);
       }
+    }
+  });
+});
+
+describe('toneFor — the darkest register at any drop count', () => {
+  it('always ends at 焦', () => {
+    // This is what the fixed cycle got wrong. It was tuned at three pours and
+    // gave 清 and 重 at two — no 焦 anywhere — which only stayed invisible while
+    // the satellites were quietly supplying undiluted ink of their own.
+    for (const count of [1, 2, 3, 4, 5, 6]) {
+      expect(toneFor(count - 1, count)).toBe(TONES[TONES.length - 1]);
+    }
+  });
+
+  it('starts palest and rises — 破墨法, wash first and strike last', () => {
+    for (const count of [2, 3, 4, 5]) {
+      expect(toneFor(0, count)).toBe(TONES[0]);
+      for (let i = 1; i < count; i++) {
+        expect(toneFor(i, count)).toBeGreaterThan(toneFor(i - 1, count));
+      }
+    }
+  });
+
+  it('only ever returns a real register', () => {
+    for (const count of [1, 2, 3, 4, 5, 6, 9]) {
+      for (let i = 0; i < count; i++) expect(TONES).toContain(toneFor(i, count));
     }
   });
 });
