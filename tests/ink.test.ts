@@ -15,6 +15,7 @@ import {
   strokePresence,
   valueNoise2,
 } from '@/lib/ink';
+import { TONES } from '@/lib/ink-field';
 
 
 describe('mulberry32', () => {
@@ -213,7 +214,19 @@ describe('the alpha ceiling', () => {
     // side of it. Composited normally the number is plain opacity again, the
     // wash sits behind the words, and it belongs low — a hero background must
     // not compete with the text lying on top of it.
+    //
+    // What the number *means* changed once the ink read in five registers. It
+    // is no longer the opacity of the wash; it is the ceiling the darkest
+    // register reaches, and 焦墨 is near-black by definition. So the bound that
+    // matters is not on the ceiling but on the tone that actually covers ground:
+    // the head of the throw may be dark because it is small, while the register
+    // spanning most of the sheet is what a reader has to see text through.
     expect(INK_PEAK_ALPHA).toBeGreaterThan(0.05);
-    expect(INK_PEAK_ALPHA).toBeLessThan(0.3);
+    expect(INK_PEAK_ALPHA).toBeLessThan(0.45);
+    // 重 — the middle register, and the one broad passages land on.
+    expect(INK_PEAK_ALPHA * TONES[2]!).toBeLessThan(0.22);
+    // 清 has to stay a tint. If the floor rises the whole thing is a grey slab
+    // with edges rather than ink.
+    expect(INK_PEAK_ALPHA * TONES[0]!).toBeLessThan(0.09);
   });
 });

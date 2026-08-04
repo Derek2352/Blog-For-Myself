@@ -27,13 +27,16 @@
   import {
     blurField,
     createField,
+    DENSITY_FULL,
     dropPlan,
+    fiveTones,
     injectBlob,
     inkAlpha,
     mottleAt,
     resetField,
     stepInk,
     visible,
+    voidAt,
     type Drop,
     type InkField,
   } from '@/lib/ink-field';
@@ -190,15 +193,37 @@
     const gwid = field.gw;
     for (let i = 0, p = 0; i < dep.length; i++, p += 4) {
       const d = dep[i]!;
-      // inkAfterDrying lifts the thinnest pigment first, so the wash dries from
-      // its faint edges inward rather than dimming as a whole.
-      // Mottled after the curve, not before: the curve's gamma would otherwise
-      // compress a wide swing in pigment into a narrow one in opacity.
-      const a =
-        d > 0
-          ? inkAlpha(inkAfterDrying(d > 1 ? 1 : d, presence)) *
-            mottleAt(i % gwid, (i / gwid) | 0, INK_SEED)
-          : 0;
+      // The order here is the whole 潑墨 reading, and each step depends on the
+      // one before it:
+      //
+      //   inkAfterDrying  thins the faintest pigment first, so the wash dries
+      //                   from its edges inward rather than dimming as a whole
+      //   inkAlpha        density → opacity
+      //   mottleAt        broad passages of heavier and lighter ink. After the
+      //                   curve, not before: the gamma would otherwise compress
+      //                   a wide swing in pigment into a narrow one in opacity
+      //   voidAt          留白 — reserved whites, punched out before quantising
+      //                   so each void keeps a tonal rim instead of a linear fade
+      //   fiveTones       墨分五色 — quantise the result. This is last because it
+      //                   needs something broad and continuous underneath it to
+      //                   bite on, and mottleAt is what supplies that.
+      //
+      // Drying therefore steps the ink down through the registers rather than
+      // fading it, which is what ink actually does.
+      let a = 0;
+      if (d > 0) {
+        const x = i % gwid;
+        const y = (i / gwid) | 0;
+        // Normalised against DENSITY_FULL, not clamped at 1. A settled plume
+        // runs past 2.4 here, so clamping made two thirds of the ink
+        // numerically identical before any of the steps below could see it.
+        const load = d >= DENSITY_FULL ? 1 : d / DENSITY_FULL;
+        a = fiveTones(
+          inkAlpha(inkAfterDrying(load, presence)) *
+            mottleAt(x, y, INK_SEED) *
+            voidAt(x, y, INK_SEED),
+        );
+      }
       data[p] = r;
       data[p + 1] = g;
       data[p + 2] = b;

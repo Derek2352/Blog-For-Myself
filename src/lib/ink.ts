@@ -28,8 +28,19 @@
  * and belongs low. It is a background: the text on top must stay comfortable,
  * and the whole point of dropping the blend was to allow a broad, light field
  * rather than a few dark blots.
+ *
+ * It sat at 0.2, which was too low once the ink reads in five registers: 焦墨 is
+ * near-black, and five levels inside 0.2 put the top two within 4% of each
+ * other, where nobody can tell them apart. This is the ceiling the darkest
+ * register reaches, so it has to leave room for the tones to separate.
+ *
+ * The number is set by measurement, not by taste. The ink sits behind the hero
+ * headline, so it trades directly against text contrast, and the readability
+ * pass is what decides how far it can go. What makes the rise affordable is
+ * that only the throw's dense head ever reaches the top register — the darkest
+ * tone is an accent covering a few percent of the sheet, not a slab.
  */
-export const INK_PEAK_ALPHA = 0.2;
+export const INK_PEAK_ALPHA = 0.34;
 
 /** How long the brush takes to travel its path when you arrive on the page. */
 export const ENTRANCE_MS = 2200;

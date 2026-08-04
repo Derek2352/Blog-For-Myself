@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  DENSITY_FULL,
   DEPOSIT_RATE,
   EVAPORATION,
   blurField,
@@ -8,12 +9,17 @@ import {
   dropPlan,
   fibreNoise,
   flowBias,
+  fiveTones,
   injectBand,
   injectBlob,
   inkAlpha,
   mottleAt,
   MOTTLE_DEPTH,
   MOTTLE_SCALE,
+  TONES,
+  TONE_SOFT,
+  voidAt,
+  VOID_SCALE,
   resetField,
   stepInk,
   visible,
@@ -271,16 +277,31 @@ describe('injectBand', () => {
   });
 });
 
-describe('inkAlpha — a wash needs a gentle ramp', () => {
-  it('lifts the faint majority of a plume into visibility', () => {
-    // The gamma is the whole point. A diffused plume is mostly thin, so a
-    // linear ramp renders it as a dense core on empty paper. Under `difference`
-    // this could not be fixed — lifting the thin parts pushed them into the
-    // 0.35-0.65 dead zone where text turns to mush — which is what kept every
-    // attempt at a broad wash looking like dark blots. Composited normally there
-    // is no forbidden range.
-    expect(inkAlpha(0.1)).toBeGreaterThan(0.25);
-    expect(inkAlpha(0.3)).toBeGreaterThan(0.5);
+describe('inkAlpha — density spread across the registers', () => {
+  it('does not pin the plume against the ceiling', () => {
+    // The gamma used to run the other way, lifting the thin parts hard, because
+    // the layer peaked at 0.2 opacity and unlifted ink was invisible. fiveTones
+    // took that job over — its lowest register has a floor, so anything clearing
+    // the first tonal edge renders as a visible tint regardless of density.
+    //
+    // Doing it in both places was measurable: 43% of the rendered ink landed in
+    // the top register, so 焦墨 covered most of the left panel as a slab. What
+    // this curve owes the tones is *spread* — a plume's typical density has to
+    // land in the middle registers, leaving the darkest one to the drop cores.
+    // No lift: at or below linear everywhere, rather than bowed up over it.
+    for (let d = 0.05; d < 1; d += 0.05) expect(inkAlpha(d)).toBeLessThanOrEqual(d + 1e-9);
+    // but the core still gets there
+    expect(inkAlpha(0.95)).toBeGreaterThan(0.9);
+  });
+
+  it('is fed a normalised load, not a clamped one', () => {
+    // The constant that actually carries the spread. A settled plume runs to
+    // about 2.4, so the renderer's old `min(d, 1)` collapsed two thirds of the
+    // ink onto one value — invisible until quantisation painted all of it the
+    // same register. This has to stay above where the plume's bulk sits, or the
+    // plateau comes back.
+    expect(DENSITY_FULL).toBeGreaterThan(1.8);
+    expect(DENSITY_FULL).toBeLessThan(3);
   });
 
   it('is monotonic and spans the full range', () => {
@@ -425,5 +446,168 @@ describe('dropPlan — rain, not a poured band', () => {
       expect(d.amount).toBeGreaterThan(0);
       expect(d.r).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('fiveTones — 墨分五色', () => {
+  const sweep = Array.from({ length: 2001 }, (_, i) => i / 2000);
+
+  it('is monotone and stays in range', () => {
+    let prev = -1;
+    for (const a of sweep) {
+      const v = fiveTones(a);
+      expect(v).toBeGreaterThanOrEqual(prev - 1e-9);
+      expect(v).toBeLessThanOrEqual(1 + 1e-9);
+      prev = v;
+    }
+    expect(fiveTones(0)).toBe(0);
+    expect(fiveTones(1)).toBeCloseTo(1, 6);
+  });
+
+  it('is genuinely discrete — few levels, not a ramp', () => {
+    // A tone curve that merely bends is still a gradient. What makes ink read
+    // as ink is that most of the input range maps to one of a handful of
+    // outputs, so neighbouring areas of slightly different density come out the
+    // *same* tone and the boundary between registers is visible.
+    // Counting distinct outputs is the obvious measure and the wrong one: a
+    // transition of any width at all contributes a value at every sample, so it
+    // counts a curve that is 90% flat as though it were a ramp. What matters is
+    // where the *mass* sits — how much of the input range comes out at one of
+    // the registers rather than between them. That is the same statement as the
+    // rendered histogram being multi-modal, made on the curve itself.
+    const levels = [0, ...TONES];
+    const atRegister = (f: (a: number) => number) =>
+      sweep.filter((a) => levels.some((l) => Math.abs(f(a) - l) < 0.02)).length / sweep.length;
+
+    expect(atRegister(fiveTones)).toBeGreaterThan(0.7);
+
+    // The same measure on a smooth ramp must fail, or the assertion above is
+    // measuring nothing. This is the curve fiveTones sits on top of.
+    expect(atRegister((a) => Math.pow(a, 0.62))).toBeLessThan(0.35);
+  });
+
+  it('spends more of its range on flats than on transitions', () => {
+    // Slope is what distinguishes a register from a boundary: inside a register
+    // the curve is flat, and it only moves while crossing between two.
+    let flat = 0;
+    for (let i = 1; i < sweep.length; i++) {
+      const slope = (fiveTones(sweep[i]!) - fiveTones(sweep[i - 1]!)) / (sweep[i]! - sweep[i - 1]!);
+      if (slope < 0.2) flat++;
+    }
+    expect(flat / (sweep.length - 1)).toBeGreaterThan(0.55);
+  });
+
+  it('has boundaries soft enough not to alias', () => {
+    // A hard step would stair-step wherever a tonal edge crosses a diagonal.
+    // Bounding the steepest slope is the same statement made continuously.
+    let worst = 0;
+    for (let i = 1; i < sweep.length; i++) {
+      worst = Math.max(worst, Math.abs(fiveTones(sweep[i]!) - fiveTones(sweep[i - 1]!)));
+    }
+    // Steepest smoothstep slope is 1.5/(2·TONE_SOFT) times the tallest rise.
+    const tallest = Math.max(...TONES.map((t, i) => t - (i ? TONES[i - 1]! : 0)));
+    expect(worst).toBeLessThan(((tallest * 1.5) / (2 * TONE_SOFT)) * (1 / 2000) * 1.2);
+  });
+
+  it('reaches every register', () => {
+    // Registers that no input can select are decoration in the constant table.
+    for (const level of TONES) {
+      expect(sweep.some((a) => Math.abs(fiveTones(a) - level) < 0.005)).toBe(true);
+    }
+  });
+});
+
+describe('voidAt — 留白', () => {
+  const cells: number[] = [];
+  for (let y = 0; y < 140; y++) for (let x = 0; x < 220; x++) cells.push(voidAt(x, y, INK_SEED));
+
+  it('reserves real paper, not thin patches', () => {
+    // Exactly zero matters. A void that merely dips is a light passage, which
+    // the mottling already provides plenty of; 留白 is the paper left showing.
+    const empty = cells.filter((v) => v === 0).length;
+    expect(empty / cells.length).toBeGreaterThan(0.02);
+    expect(empty / cells.length).toBeLessThan(0.3);
+  });
+
+  it('leaves most of the sheet open to ink', () => {
+    expect(cells.filter((v) => v === 1).length / cells.length).toBeGreaterThan(0.55);
+  });
+
+  it('stays in range', () => {
+    for (const v of cells) {
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('varies at a long wavelength, so voids are shapes and not holes', () => {
+    // Same assertion shape as the mottling's: at cell scale this would be the
+    // granularity that has already been removed twice.
+    const step = (dx: number) => {
+      let sum = 0;
+      let n = 0;
+      for (let y = 10; y < 130; y += 7) {
+        for (let x = 10; x < 200; x += 7) {
+          sum += Math.abs(voidAt(x + dx, y, INK_SEED) - voidAt(x, y, INK_SEED));
+          n++;
+        }
+      }
+      return sum / n;
+    };
+    expect(step(VOID_SCALE)).toBeGreaterThan(step(1) * 4);
+  });
+
+  it('is deterministic and seed-dependent', () => {
+    expect(voidAt(31, 47, INK_SEED)).toBe(voidAt(31, 47, INK_SEED));
+    const other: number[] = [];
+    for (let y = 0; y < 140; y++) for (let x = 0; x < 220; x++) other.push(voidAt(x, y, 7));
+    expect(other).not.toEqual(cells);
+  });
+});
+
+describe('dropPlan — 氣韻, the throw', () => {
+  const drops = dropPlan(288, 130, 130 * 0.12, 130 * 0.84, 24, INK_SEED);
+
+  const corr = (a: number[], b: number[]) => {
+    const ma = a.reduce((s, v) => s + v, 0) / a.length;
+    const mb = b.reduce((s, v) => s + v, 0) / b.length;
+    let num = 0;
+    let da = 0;
+    let db = 0;
+    for (let i = 0; i < a.length; i++) {
+      num += (a[i]! - ma) * (b[i]! - mb);
+      da += (a[i]! - ma) ** 2;
+      db += (b[i]! - mb) ** 2;
+    }
+    return num / Math.sqrt(da * db);
+  };
+
+  it('runs along a diagonal, not a horizontal band', () => {
+    // The old plan jittered y symmetrically about the band's middle, which is
+    // an isotropic cloud — the one thing a thrown mark is not.
+    expect(corr(drops.map((d) => d.x), drops.map((d) => d.y))).toBeGreaterThan(0.7);
+  });
+
+  it('is felt rather than drawn', () => {
+    // A clean line of drops reads as a stamp. The jitter has to be wide enough
+    // that the axis is an impression, so the correlation must be short of 1.
+    expect(corr(drops.map((d) => d.x), drops.map((d) => d.y))).toBeLessThan(0.98);
+  });
+
+  it('has a dense head and a thin tail', () => {
+    const third = Math.floor(drops.length / 3);
+    const mean = (xs: number[]) => xs.reduce((s, v) => s + v, 0) / xs.length;
+    const head = drops.slice(0, third);
+    const tail = drops.slice(-third);
+    expect(mean(head.map((d) => d.r))).toBeGreaterThan(mean(tail.map((d) => d.r)) * 1.15);
+    expect(mean(head.map((d) => d.amount))).toBeGreaterThan(
+      mean(tail.map((d) => d.amount)) * 1.15,
+    );
+  });
+
+  it('spans the axis end to end', () => {
+    const s = drops.map((d) => d.x / 288).sort((a, b) => a - b);
+    expect(s[0]!).toBeLessThan(0.2);
+    expect(s[s.length - 1]!).toBeGreaterThan(0.82);
   });
 });

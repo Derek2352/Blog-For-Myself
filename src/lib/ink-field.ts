@@ -211,6 +211,101 @@ export function mottleAt(x: number, y: number, seed = 0): number {
   return 1 - MOTTLE_DEPTH + n * MOTTLE_DEPTH * 2;
 }
 
+/* ------------------------------------------------------------------ *
+ * 潑墨 — the part that is not physics.
+ *
+ * Everything above this line is a wet-paper solver, and a solver is
+ * culturally neutral: run it and you get a soft grey cloud with smooth
+ * gradients, which is Western watercolour. What follows is the reading
+ * convention Chinese splashed ink is actually seen through, applied on top of
+ * the simulation rather than inside it.
+ * ------------------------------------------------------------------ */
+
+/**
+ * 墨分五色 — the five registers, darkest last: 焦 濃 重 淡 清.
+ *
+ * Not evenly spaced. The floor is lifted so 清 sits above the threshold where a
+ * tint stops being visible at all, and the gaps open slightly toward the top,
+ * where the eye can actually resolve them.
+ */
+export const TONES = [0.16, 0.34, 0.55, 0.78, 1.0];
+
+/** Where the alpha has to reach for each register to take over. */
+export const TONE_EDGES = [0.1, 0.28, 0.48, 0.7, 0.88];
+
+/**
+ * Half-width of each tonal boundary.
+ *
+ * Small enough that the registers read as distinct areas rather than as a ramp,
+ * wide enough that a boundary crossing a diagonal does not stair-step. Every
+ * gap between edges is wider than a full transition, so no two boundaries ever
+ * overlap and the flats survive.
+ */
+export const TONE_SOFT = 0.035;
+
+/**
+ * Quantise alpha into the five tones.
+ *
+ * This is the single change that separates 潑墨 from a stain. Ink does not read
+ * as a continuous ramp; it reads as a small number of concentrations, and the
+ * visible boundary where one was laid into another is 破墨.
+ *
+ * It only works because something already varies broadly: `mottleAt` supplies
+ * continuous swing at a 30-cell wavelength, and quantising *that* turns it into
+ * patches of distinct tone. Quantising a flat field would produce nothing, and
+ * quantising cell-scale variation would produce the speckle we removed twice.
+ *
+ * Written as a sum of rises rather than a lookup, so it is monotone by
+ * construction — a lookup with a search would need its boundaries kept in order
+ * by hand, and a non-monotone tone curve would invert the ink somewhere.
+ */
+export function fiveTones(a: number): number {
+  if (a <= 0) return 0;
+  let out = 0;
+  let prev = 0;
+  for (let k = 0; k < TONES.length; k++) {
+    const t = (a - (TONE_EDGES[k]! - TONE_SOFT)) / (2 * TONE_SOFT);
+    const c = t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
+    out += (TONES[k]! - prev) * c;
+    prev = TONES[k]!;
+  }
+  return out;
+}
+
+/** Wavelength of the reserved whites, in cells. Longer than the mottling. */
+export const VOID_SCALE = 46;
+/** How much of the noise range is reserved as paper. */
+export const VOID_THRESHOLD = 0.62;
+/** Width of a void's rim. Narrow: 留白 has an edge, it does not fade out. */
+export const VOID_EDGE = 0.06;
+
+/**
+ * 留白 — how much ink a cell is allowed to hold. 1 = all of it, 0 = paper.
+ *
+ * The white inside splashed ink is not the ink's failure to arrive; it is
+ * placed, and it is as much of the composition as the ink. A diffusion solver
+ * cannot produce it — diffusion fills — so the whites have to be reserved.
+ *
+ * Deliberately a *longer* wavelength than the mottling and a different seed, so
+ * the two do not lock together and print the same shape twice. And deliberately
+ * gated hard rather than faded: a void with a soft falloff is just a thin
+ * patch, which the field already had plenty of.
+ */
+export function voidAt(x: number, y: number, seed = 0): number {
+  const k = 1 / VOID_SCALE;
+  const raw =
+    valueNoise2(x * k, y * k, seed + 4409) * 0.7 +
+    valueNoise2(x * k * 1.9 + 3.1, y * k * 1.9, seed + 811) * 0.3;
+  // Same contrast stretch as the mottling, and for the same reason: smooth
+  // value noise clusters around 0.5, so an unstretched field never crosses a
+  // threshold set anywhere interesting.
+  const n = Math.max(0, Math.min(1, (raw - 0.5) * 2.4 + 0.5));
+  if (n <= VOID_THRESHOLD) return 1;
+  if (n >= VOID_THRESHOLD + VOID_EDGE) return 0;
+  const t = (n - VOID_THRESHOLD) / VOID_EDGE;
+  return 1 - t * t * (3 - 2 * t);
+}
+
 /**
  * Wet a band across the sheet and charge it with pigment.
  *
@@ -520,17 +615,35 @@ export interface Drop {
   at: number;
 }
 
+/** Where the throw begins and ends, as fractions of the box it is given. */
+export const AXIS_X0 = 0.16;
+export const AXIS_X1 = 0.88;
+export const AXIS_Y0 = 0.22;
+export const AXIS_Y1 = 0.78;
+
 /**
- * Where the rain falls.
+ * Where the ink falls.
  *
  * Ink arrives as discrete drops that land and then spread into one another,
  * rather than as a band poured across the sheet. That is both what actually
- * happens to ink on paper and what the model wants: a poured band had to be
- * laid down in vertical slices, and every slice boundary was a wetness step
- * that drove a flow and printed a stripe.
+ * happens to ink and what the model wants: a poured band had to be laid down in
+ * vertical slices, and every slice boundary was a wetness step that drove a
+ * flow and printed a stripe.
  *
- * Sizes follow a power law — many fine drops, a few fat ones that become the
- * dark pools. Deterministic, so the composition is chosen rather than rolled.
+ * ## 氣韻 — the throw
+ *
+ * 潑墨 is flung. The ink carries the direction of the arm, which means the
+ * composition has a head and a tail, not a centre. This used to scatter drops
+ * along a horizontal band with `y` jittered symmetrically about its middle and
+ * size drawn independently of position — an isotropic cloud, which is the one
+ * thing a thrown mark is not.
+ *
+ * So the drops now walk a diagonal, and both size and charge decay along it:
+ * heavy and wet where the arm released, sparse and dry where the gesture ran
+ * out. Jitter is generous enough that the axis is felt rather than drawn — a
+ * clean line of drops would read as a stamp.
+ *
+ * Deterministic, so the composition is chosen rather than rolled.
  */
 export function dropPlan(
   gw: number,
@@ -542,16 +655,21 @@ export function dropPlan(
 ): Drop[] {
   const rnd = mulberry32(seed + 8191);
   const drops: Drop[] = [];
-  const yc = (bandTop + bandBottom) / 2;
-  const half = (bandBottom - bandTop) / 2;
+  const band = bandBottom - bandTop;
   for (let i = 0; i < count; i++) {
+    // Position along the throw. Distinct from `at`, which is when the drop
+    // lands: the pour still runs head-first, but the last drop belongs at the
+    // end of the axis rather than two thirds of the way along it.
+    const s = count > 1 ? i / (count - 1) : 0;
     const at = i / count;
-    // land a little ahead of the front rather than anywhere, so the sheet still
-    // fills roughly left to right instead of flickering into existence
-    const x = (at * 0.82 + rnd() * 0.3 - 0.06) * gw;
-    // biased toward the middle of the band, so its edges stay ragged
-    const u = rnd() * 2 - 1;
-    const y = yc + Math.sign(u) * Math.pow(Math.abs(u), 1.5) * half;
+    const x = (AXIS_X0 + s * (AXIS_X1 - AXIS_X0) + rnd() * 0.16 - 0.08) * gw;
+    const y = bandTop + (AXIS_Y0 + s * (AXIS_Y1 - AXIS_Y0) + rnd() * 0.3 - 0.15) * band;
+    // Head dense, tail thin — and steeply, because the pour works against it.
+    // Drops land in order, so the head has been spreading for the whole pour by
+    // the time the tail arrives fresh and concentrated. A gentle decay was
+    // therefore invisible: diffusion had thinned the head below the tail before
+    // anyone saw either. The gradient has to outrun that.
+    const fall = 1 - s * 0.72;
     const p = rnd();
     drops.push({
       x,
@@ -560,8 +678,9 @@ export function dropPlan(
       // profile — a dense core with a halo too faint to render — which is why
       // small drops read as dark blobs on empty paper however far they spread.
       // A broad drop begins flat, and diffusion only has to soften its edge.
-      r: gh * (0.42 + p * p * p * 0.5),
-      amount: 0.55 + rnd() * 0.45,
+      // The tail shrinks, but never below a size that still spreads flat.
+      r: gh * (0.46 + p * p * 0.3) * (0.42 + fall * 0.58),
+      amount: (0.6 + rnd() * 0.34) * (0.3 + fall * 0.7),
       at,
     });
   }
@@ -569,23 +688,50 @@ export function dropPlan(
 }
 
 /**
- * Deposited pigment → the alpha the difference blend receives.
+ * Deposited pigment → alpha.
  *
- * A plain, gentle ramp — which is only possible now the layer composites
- * normally. Under `difference` the band around 0.5 had to be actively vacated,
- * and since a broad light wash is by definition a large area of low alpha, the
- * two demands were irreconcilable; every attempt at breadth came out as dark
- * blots on empty paper. With the soak gone there is no forbidden range, so the
- * curve simply lifts the thin parts and lets the whole plume read.
+ * ## Why the gamma is above 1 and used to be below it
+ *
+ * This lifted the thin parts hard (gamma 0.62), because a diffused plume is
+ * mostly thin and the layer's peak opacity was 0.2 — without the lift, most of
+ * the ink landed under the threshold where a tint is visible at all, and the
+ * plume rendered as a dense core on empty paper.
+ *
+ * `fiveTones` does that job now, and does it better. Its lowest register, 清,
+ * has a lifted floor: any cell that clears the first tonal edge renders at a
+ * visible tint no matter how faint it actually was. Keeping the lift here as
+ * well was doing it twice, and the cost was measurable — 43% of the ink piled
+ * into the top register, so 焦墨 came out as a slab covering most of the left
+ * panel rather than as the accent it is.
+ *
+ * So the curve is now slightly *steep*: the visibility floor comes from the
+ * tones, and this spreads the plume's densities out across all five registers
+ * instead of pinning the middle of it against the ceiling.
+ *
+ * The domain runs to 1 because that is where the caller clamps. Saturating at
+ * 0.8 threw away a fifth of the range and flattened the core before it started.
  */
 export function inkAlpha(dep: number): number {
   if (dep <= 0.012) return 0;
-  const t = dep >= 0.8 ? 1 : (dep - 0.012) / 0.788;
-  // Gamma below 1 lifts the faint majority of a diffused plume into visibility.
-  // That was impossible while this composited with `difference`, where the band
-  // either side of 0.5 alpha had to be vacated and a broad light wash therefore
-  // could not exist. Composited normally there is no forbidden range, so the
-  // curve can finally be what a wash needs: gentle, and generous to the thin
-  // parts.
-  return Math.pow(t, 0.62);
+  const t = dep >= 1 ? 1 : (dep - 0.012) / 0.988;
+  return Math.pow(t, 1.05);
 }
+
+/**
+ * The density that counts as fully loaded ink.
+ *
+ * The renderer used to clamp `visible()` at 1 before doing anything with it,
+ * which was wrong by a factor of two and invisible until the ink was quantised.
+ * A settled plume runs to about 2.4 here, with **64% of its inked cells above
+ * 1** — so the clamp flattened most of the field onto a single value, and every
+ * one of those cells then quantised to the same register. That is why 焦墨 came
+ * out as a slab: not because the tone curve was wrong, but because two thirds of
+ * the ink had been made numerically identical before the tone curve saw it.
+ *
+ * Set near the plume's 99th percentile, so the darkest register is reserved for
+ * genuine drop cores and the rest of the field has room to spread across the
+ * other four. It also restores drying: with everything pinned at the clamp,
+ * `inkAfterDrying` stripped the whole field at once instead of stepping it down
+ * through the registers.
+ */
+export const DENSITY_FULL = 2.2;
