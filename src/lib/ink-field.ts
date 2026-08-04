@@ -463,6 +463,53 @@ export const PIG_LOAD = 3.2;
  */
 export const CONC_SPREAD = 0.13;
 
+/**
+ * How far a pour's outline wanders from its ideal curve, as a share of radius.
+ *
+ * `injectStreak` and `injectBlob` used to lay their charge as a flawless radial
+ * ramp — a mathematical ellipse with a smooth dome inside it. Diffusion only
+ * rounds a shape further, so a perfect start stayed perfect, and at hero scale
+ * that reads as a cone: even slopes, rounded apex, a mountain rather than a
+ * mark. `injectBand` has always roughened itself this way; the two injectors the
+ * composition actually uses never got it.
+ */
+export const POUR_ROUGH = 0.34;
+
+/**
+ * Wavelengths for that roughness, per cell. **This band is the whole risk.**
+ *
+ * Matched to `injectBand`'s existing 0.045–0.09, which is 11 to 22 cells. Noise
+ * finer than this is the granular, dirty look that came up twice: it has to vary
+ * across a mark, not within a cell.
+ */
+export const POUR_LOBE_FREQ = 0.055;
+export const POUR_POOL_FREQ = 0.075;
+
+/**
+ * A pour's local radius multiplier and charge gate at one cell.
+ *
+ * Two jobs, one pair of noise samples: `lobe` pushes the outline in and out so
+ * the silhouette has bays and headlands, and `pool` breaks the interior up so
+ * diffusion starts from something uneven. Shared by both injectors so a streak
+ * and a droplet are made of the same stuff.
+ */
+export function pourNoise(
+  x: number,
+  y: number,
+  seed: number,
+): { lobe: number; pool: number } {
+  const lobe =
+    1 +
+    (valueNoise2(x * POUR_LOBE_FREQ, y * POUR_LOBE_FREQ, seed + 2609) - 0.5) *
+      2 *
+      POUR_ROUGH;
+  const raw = valueNoise2(x * POUR_POOL_FREQ + 11.3, y * POUR_POOL_FREQ, seed + 3181);
+  // Stretched about the midpoint, for the same reason mottleAt is: smooth value
+  // noise clusters near 0.5 and an unstretched gate barely gates anything.
+  const pool = Math.max(0.35, Math.min(1, (raw - 0.5) * 1.9 + 0.92));
+  return { lobe: lobe < 0.35 ? 0.35 : lobe, pool };
+}
+
 /** One drop — a splash of splatter, or the cursor. It will bleed on its own. */
 export function injectBlob(
   f: InkField,
@@ -473,16 +520,26 @@ export function injectBlob(
   conc = 1,
   seed = 0,
 ): void {
-  const x0 = Math.max(0, Math.floor(cx - r));
-  const x1 = Math.min(f.gw - 1, Math.ceil(cx + r));
-  const y0 = Math.max(0, Math.floor(cy - r));
-  const y1 = Math.min(f.gh - 1, Math.ceil(cy + r));
-  const rr = r * r;
+  // Scanned out to the furthest a lobe can push, not to r — clipping the
+  // outline at the box would replace the lobes with the straight edges of the
+  // bounding rectangle, which is the exact failure this is meant to remove.
+  const far = r * (1 + POUR_ROUGH);
+  const x0 = Math.max(0, Math.floor(cx - far));
+  const x1 = Math.min(f.gw - 1, Math.ceil(cx + far));
+  const y0 = Math.max(0, Math.floor(cy - far));
+  const y1 = Math.min(f.gh - 1, Math.ceil(cy + far));
+  const rr = far * far;
   for (let y = y0; y <= y1; y++) {
     for (let x = x0; x <= x1; x++) {
       const d = (x - cx) * (x - cx) + (y - cy) * (y - cy);
       if (d > rr) continue;
-      const a = (1 - Math.sqrt(d) / r) * amount;
+      // Lobed rather than circular, and pooled rather than domed — see pourNoise.
+      const n = pourNoise(x, y, seed);
+      const reach = r * n.lobe;
+      const dist = Math.sqrt(d);
+      if (dist > reach) continue;
+      const a = (1 - dist / reach) * amount * n.pool;
+      if (a <= 0) continue;
       const i = y * f.gw + x;
       const load = a * PIG_LOAD;
       const c = conc + (valueNoise2(x * 0.045, y * 0.045, seed + 1201) - 0.5) * 2 * CONC_SPREAD;
@@ -517,11 +574,13 @@ export function injectStreak(
 ): void {
   const ca = Math.cos(angle);
   const sa = Math.sin(angle);
-  const reach = r * elong;
-  const x0 = Math.max(0, Math.floor(cx - reach));
-  const x1 = Math.min(f.gw - 1, Math.ceil(cx + reach));
-  const y0 = Math.max(0, Math.floor(cy - reach));
-  const y1 = Math.min(f.gh - 1, Math.ceil(cy + reach));
+  // Out to the furthest a lobe can push, so the outline is never clipped into
+  // the straight edges of its own bounding box.
+  const span = r * elong * (1 + POUR_ROUGH);
+  const x0 = Math.max(0, Math.floor(cx - span));
+  const x1 = Math.min(f.gw - 1, Math.ceil(cx + span));
+  const y0 = Math.max(0, Math.floor(cy - span));
+  const y1 = Math.min(f.gh - 1, Math.ceil(cy + span));
   for (let y = y0; y <= y1; y++) {
     for (let x = x0; x <= x1; x++) {
       const dx = x - cx;
@@ -530,8 +589,14 @@ export function injectStreak(
       const u = (dx * ca + dy * sa) / elong;
       const v = -dx * sa + dy * ca;
       const d = Math.sqrt(u * u + v * v);
-      if (d > r) continue;
-      const a = (1 - d / r) * amount;
+      // Lobed rather than elliptical, and pooled rather than domed. A thrown
+      // ladle does not lay a perfect ellipse, and diffusion will not un-perfect
+      // one for us.
+      const n = pourNoise(x, y, seed);
+      const reach = r * n.lobe;
+      if (d > reach) continue;
+      const a = (1 - d / reach) * amount * n.pool;
+      if (a <= 0) continue;
       const i = y * f.gw + x;
       const load = a * PIG_LOAD;
       const c = conc + (valueNoise2(x * 0.045, y * 0.045, seed + 1201) - 0.5) * 2 * CONC_SPREAD;

@@ -14,6 +14,8 @@ import {
   AXIS_Y0,
   AXIS_Y1,
   ADVECT_BIAS,
+  pourNoise,
+  POUR_ROUGH,
   ceilConc,
   FILTRATION,
   haloAlpha,
@@ -1171,5 +1173,102 @@ describe('haloAlpha — a watermark, not a tone', () => {
       expect(v).toBeGreaterThanOrEqual(prev - 1e-12);
       prev = v;
     }
+  });
+});
+
+describe('irregularity — no straight edges, no smooth cones', () => {
+  /** A single fresh streak, unstepped, so this tests the injector not the solver. */
+  function freshStreak(gw = 200, gh = 200, r = 34) {
+    const f = createField(gw, gh, INK_SEED);
+    injectStreak(f, gw / 2, gh / 2, r, 0.4, 2.3, 1, 1, INK_SEED);
+    return f;
+  }
+
+  /** Radial reach of a mark's silhouette, in cells, sampled around the centre. */
+  const reaches = (f: InkField, cx: number, cy: number, cut: number) => {
+    const out: number[] = [];
+    for (let k = 0; k < 64; k++) {
+      const th = (k / 64) * Math.PI * 2;
+      let far = 0;
+      for (let rr = 1; rr < Math.min(f.gw, f.gh) / 2 - 1; rr++) {
+        const x = Math.round(cx + Math.cos(th) * rr);
+        const y = Math.round(cy + Math.sin(th) * rr);
+        if (x < 0 || y < 0 || x >= f.gw || y >= f.gh) break;
+        if (f.pig[y * f.gw + x]! > cut) far = rr;
+      }
+      out.push(far);
+    }
+    return out;
+  };
+
+  it('a pour lands with a ragged outline, not a clean ellipse', () => {
+    // Measured before any stepping: diffusion only ever rounds a shape, so a
+    // mathematically perfect start stays perfect, and at hero scale that reads
+    // as a cone — even slopes, rounded apex, a mountain rather than a mark.
+    const f = freshStreak();
+    const r = reaches(f, 100, 100, 0.02);
+    const mean = r.reduce((a, b) => a + b, 0) / r.length;
+    const std = Math.sqrt(r.reduce((s, v) => s + (v - mean) ** 2, 0) / r.length);
+    expect(mean).toBeGreaterThan(8);
+    // an ellipse sampled this way varies smoothly and slightly; lobes do not
+    expect(std / mean).toBeGreaterThan(0.12);
+  });
+
+  it('the interior is pooled, not a smooth dome', () => {
+    // Diffusion needs something uneven to work from. A perfect radial ramp
+    // gives it nothing to break up.
+    const f = freshStreak();
+    const vals: number[] = [];
+    for (let y = 70; y < 130; y++) {
+      for (let x = 70; x < 130; x++) {
+        const v = f.pig[y * f.gw + x]!;
+        if (v > 0.05) vals.push(v);
+      }
+    }
+    const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const std = Math.sqrt(vals.reduce((s, v) => s + (v - mean) ** 2, 0) / vals.length);
+    expect(vals.length).toBeGreaterThan(400);
+    expect(std / mean).toBeGreaterThan(0.3);
+  });
+
+  it('the roughness is low-frequency — not the granularity removed twice', () => {
+    // Same shape of assertion as mottleAt's. If this ever fails, the outline is
+    // fraying into speckle instead of into bays and headlands.
+    const step = (dx: number) => {
+      let sum = 0;
+      let n = 0;
+      for (let y = 20; y < 180; y += 6) {
+        for (let x = 20; x < 170; x += 6) {
+          sum += Math.abs(pourNoise(x + dx, y, INK_SEED).lobe - pourNoise(x, y, INK_SEED).lobe);
+          n++;
+        }
+      }
+      return sum / n;
+    };
+    expect(step(18)).toBeGreaterThan(step(1) * 4);
+  });
+
+  it('pourNoise stays in sane bounds', () => {
+    for (let i = 0; i < 400; i++) {
+      const n = pourNoise(i * 1.7, i * 2.9, INK_SEED);
+      expect(n.lobe).toBeGreaterThanOrEqual(0.35);
+      expect(n.lobe).toBeLessThanOrEqual(1 + POUR_ROUGH + 1e-9);
+      expect(n.pool).toBeGreaterThanOrEqual(0.35);
+      expect(n.pool).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('a lobe is never clipped by its own bounding box', () => {
+    // The box is scanned out to r*(1+POUR_ROUGH). If it were scanned to r, the
+    // outline would be cut off along four straight lines — swapping one
+    // regularity for a worse one.
+    const gw = 200;
+    const f = createField(gw, gw, INK_SEED);
+    injectBlob(f, 100, 100, 30, 1, 1, INK_SEED);
+    const r = reaches(f, 100, 100, 0.02);
+    // no direction reaches exactly the box edge in a way that repeats
+    const maxReach = Math.max(...r);
+    expect(maxReach).toBeLessThan(30 * (1 + POUR_ROUGH) + 2);
+    expect(r.filter((v) => v === maxReach).length).toBeLessThan(r.length / 3);
   });
 });
