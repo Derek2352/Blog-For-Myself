@@ -459,6 +459,106 @@ export function injectBlob(
   }
 }
 
+/**
+ * An elongated pour, laid along `angle`.
+ *
+ * The main pours were discs, and diffusion only ever rounds a shape further, so
+ * every mark the model could make was a blot. A thrown ladle does not leave
+ * blots: it leaves a mark stretched along the direction the arm was moving, and
+ * that direction is legible in the mark itself before any spreading happens.
+ *
+ * Same falloff as `injectBlob`, measured in a frame rotated to the throw and
+ * squashed across it, so the only difference is the shape of the level sets.
+ */
+export function injectStreak(
+  f: InkField,
+  cx: number,
+  cy: number,
+  r: number,
+  angle: number,
+  elong: number,
+  amount = 1,
+  conc = 1,
+  seed = 0,
+): void {
+  const ca = Math.cos(angle);
+  const sa = Math.sin(angle);
+  const reach = r * elong;
+  const x0 = Math.max(0, Math.floor(cx - reach));
+  const x1 = Math.min(f.gw - 1, Math.ceil(cx + reach));
+  const y0 = Math.max(0, Math.floor(cy - reach));
+  const y1 = Math.min(f.gh - 1, Math.ceil(cy + reach));
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const dx = x - cx;
+      const dy = y - cy;
+      // into the throw's frame: u runs along the stroke, v across it
+      const u = (dx * ca + dy * sa) / elong;
+      const v = -dx * sa + dy * ca;
+      const d = Math.sqrt(u * u + v * v);
+      if (d > r) continue;
+      const a = (1 - d / r) * amount;
+      const i = y * f.gw + x;
+      const load = a * PIG_LOAD;
+      const c = conc + (valueNoise2(x * 0.045, y * 0.045, seed + 1201) - 0.5) * 2 * CONC_SPREAD;
+      f.conc[i] = mixConc(f.conc[i]!, f.pig[i]! + f.dep[i]!, c < 0 ? 0 : c > 1 ? 1 : c, load);
+      f.wet[i] = Math.min(1.4, f.wet[i]! + a);
+      f.pig[i] = Math.min(1.6, f.pig[i]! + load);
+    }
+  }
+}
+
+/**
+ * Satellite droplets — the specks flung past the mass.
+ *
+ * The most recognisable signature of a splash, and the model had none: every
+ * pour merged into one silhouette, which is what a stain looks like. Real thrown
+ * ink sheds droplets that land *detached*, ahead of and beside the main mark,
+ * getting smaller and sparser with distance.
+ *
+ * Placed along the same axis as the throw and beyond its end, with lateral
+ * scatter that widens as they travel — a cone, which is what a flung arc
+ * actually produces. Deliberately tiny: a satellite that merges into the mass
+ * has stopped being a satellite.
+ */
+export function spatterPlan(
+  gw: number,
+  gh: number,
+  bandTop: number,
+  bandBottom: number,
+  count: number,
+  seed: number,
+): Drop[] {
+  const rnd = mulberry32(seed + 40503);
+  const band = bandBottom - bandTop;
+  const out: Drop[] = [];
+  for (let i = 0; i < count; i++) {
+    // travel along the throw, past its end — 0 is the tail of the main mark
+    const t = Math.pow(rnd(), 0.65);
+    const s = AXIS_X0 + (AXIS_X1 - AXIS_X0) * (0.55 + t * 0.85);
+    // The cone, and it has to be wide. A narrow one dropped every satellite
+    // along the axis the main mark already occupies, so all of them bled into
+    // it — measured, not one detached component survived. Landing *beside* the
+    // throw is what makes a droplet read as thrown clear of it.
+    const spread = (0.18 + t * 0.55) * (rnd() * 2 - 1);
+    out.push({
+      x: (s + rnd() * 0.05 - 0.025) * gw,
+      y: bandTop + (AXIS_Y0 + (AXIS_Y1 - AXIS_Y0) * (0.5 + t * 0.8) + spread) * band,
+      // Small, but not so small that diffusion erases them. These sit on the
+      // paper for the whole hold; at a couple of cells across they had spread
+      // to nothing long before anyone saw them.
+      r: gh * (0.03 + Math.pow(rnd(), 2) * 0.055) * (1 - t * 0.35),
+      // Heavily charged for their size — a droplet is a bead of undiluted ink,
+      // and it needs the mass to still be there after it has bled a little.
+      amount: 0.85 + rnd() * 0.4,
+      // Undiluted — a droplet that left the brush met nothing on the way.
+      conc: 1,
+      at: 0.55 + t * 0.4,
+    });
+  }
+  return out;
+}
+
 /** How fast water leaves the paper, per tick at dt = 1. */
 export const EVAPORATION = 0.0004;
 /** How readily suspended pigment settles out. */
@@ -733,11 +833,23 @@ export interface Drop {
  */
 export const TONE_ORDER = [0, 2, 4, 1, 3];
 
-/** Where the throw begins and ends, as fractions of the box it is given. */
-export const AXIS_X0 = 0.16;
-export const AXIS_X1 = 0.88;
-export const AXIS_Y0 = 0.22;
-export const AXIS_Y1 = 0.78;
+/**
+ * Where the throw begins and ends, as fractions of the box it is given.
+ *
+ * Aimed at the part of the hero anyone can actually see. The photo card is
+ * opaque and covers the right half down to about four fifths of the height, so
+ * an axis running 0.16 → 0.88 across the full width — which is what this was —
+ * put most of the mark, and most of its 焦墨, behind the picture. Measured, that
+ * was 10% of the hero above 0.5 alpha with hardly any of it visible.
+ *
+ * So the throw now dives: it starts high on the open left, and exits low enough
+ * to pass *under* the card rather than behind it. Sweeping past the picture
+ * reads as a bigger gesture than staying in the box beside it.
+ */
+export const AXIS_X0 = 0.06;
+export const AXIS_X1 = 0.66;
+export const AXIS_Y0 = 0.12;
+export const AXIS_Y1 = 0.92;
 
 /**
  * Where the ink falls.
@@ -781,7 +893,11 @@ export function dropPlan(
     const s = count > 1 ? i / (count - 1) : 0;
     const at = i / count;
     const x = (AXIS_X0 + s * (AXIS_X1 - AXIS_X0) + rnd() * 0.16 - 0.08) * gw;
-    const y = bandTop + (AXIS_Y0 + s * (AXIS_Y1 - AXIS_Y0) + rnd() * 0.3 - 0.15) * band;
+    // Clamped, because the axis now ends at 0.92 of the band and the jitter is
+    // +/-0.15 — so without this a tail drop could be placed below the band it
+    // was handed, which is the one promise this function makes to its caller.
+    const v = AXIS_Y0 + s * (AXIS_Y1 - AXIS_Y0) + rnd() * 0.3 - 0.15;
+    const y = bandTop + (v < 0 ? 0 : v > 1 ? 1 : v) * band;
     // Head dense, tail thin — and steeply, because the pour works against it.
     // Drops land in order, so the head has been spreading for the whole pour by
     // the time the tail arrives fresh and concentrated. A gentle decay was
@@ -823,7 +939,38 @@ export function dropPlan(
  * outer edge of the ink where there is barely any. Saturating early confines
  * that fade to a narrow band at the perimeter, leaving the interior flat.
  */
-export const COVERAGE_FULL = 0.12;
+export const COVERAGE_FULL = 0.055;
+
+/**
+ * The strongest ink allowed where words are, as a share of full strength.
+ *
+ * 清 — the palest register. Ink still crosses the text block; it simply cannot
+ * be *strong* there, which is a tone constraint rather than a hole in the layer
+ * and so leaves the mass unbroken.
+ *
+ * This is what licenses the contrast everywhere else. Worst case over text used
+ * to be a full-strength register at peak opacity, 1.0 × 0.34; with the ceiling
+ * it is 0.16 × 0.8, so the page got *more* readable as the splash got bolder.
+ */
+export const TONE_CEILING = TONES[0]!;
+
+/**
+ * Cap a cell's ink strength by how much of it is reserved for text.
+ *
+ * `reserve` runs 0 (open paper) to 1 (squarely under a line of text), feathered
+ * by the caller so the cap arrives as a gradient. A hard switch would print the
+ * text block's bounding box as a straight edge across the ink.
+ */
+export function ceilConc(conc: number, reserve: number): number {
+  if (reserve <= 0) return conc;
+  const cap = 1 - reserve * (1 - TONE_CEILING);
+  return conc > cap ? cap : conc;
+}
+
+/** The throw's direction in radians, for a box of the given proportions. */
+export function throwAngle(gw: number, band: number): number {
+  return Math.atan2((AXIS_Y1 - AXIS_Y0) * band, (AXIS_X1 - AXIS_X0) * gw);
+}
 
 /**
  * How much of the paper this cell's ink actually covers, 0–1.

@@ -9,7 +9,15 @@ import {
   dropPlan,
   fibreNoise,
   flowBias,
+  AXIS_X0,
+  AXIS_X1,
+  AXIS_Y0,
+  AXIS_Y1,
+  ceilConc,
   CONC_SPREAD,
+  injectStreak,
+  spatterPlan,
+  TONE_CEILING,
   fiveTones,
   mixConc,
   injectBand,
@@ -435,9 +443,13 @@ describe('dropPlan — rain, not a poured band', () => {
     expect(radii[radii.length - 1]!).toBeGreaterThan(median * 1.1);
   });
 
-  it('falls across the whole sheet, and lands in order', () => {
-    expect(Math.min(...drops.map((d) => d.x))).toBeLessThan(288 * 0.15);
-    expect(Math.max(...drops.map((d) => d.x))).toBeGreaterThan(288 * 0.8);
+  it('crosses the sheet and lands in order', () => {
+    // The far bound used to be 0.8 of the width. The throw is deliberately
+    // aimed short of that now: the hero's photo card is opaque and covers the
+    // right half, so a mark reaching 0.88 put most of itself — and most of its
+    // 焦墨 — behind the picture where nobody could see it.
+    expect(Math.min(...drops.map((d) => d.x))).toBeLessThan(288 * 0.12);
+    expect(Math.max(...drops.map((d) => d.x))).toBeGreaterThan(288 * 0.6);
     for (let i = 1; i < drops.length; i++) {
       expect(drops[i]!.at).toBeGreaterThanOrEqual(drops[i - 1]!.at);
     }
@@ -620,8 +632,8 @@ describe('dropPlan — 氣韻, the throw', () => {
 
   it('spans the axis end to end', () => {
     const s = drops.map((d) => d.x / 288).sort((a, b) => a - b);
-    expect(s[0]!).toBeLessThan(0.2);
-    expect(s[s.length - 1]!).toBeGreaterThan(0.82);
+    expect(s[0]!).toBeLessThan(0.12);
+    expect(s[s.length - 1]!).toBeGreaterThan(0.6);
   });
 });
 
@@ -786,5 +798,123 @@ describe('concentration is transported, never diffused', () => {
       return Array.from(f.conc);
     };
     expect(run()).toEqual(run());
+  });
+});
+
+describe('氣派 — a thrown mark, not a stain', () => {
+  it('injectStreak lays an elongated mark, not a blot', () => {
+    // Discs were the only shape the model could make, and diffusion only ever
+    // rounds a shape further — so every mark was a blot however it was placed.
+    // Direction has to be in the mark before spreading gets a vote.
+    const f = createField(120, 120, INK_SEED);
+    injectStreak(f, 60, 60, 12, 0, 2.5, 1, 1, INK_SEED);
+    const reach = (dx: number, dy: number) => {
+      let far = 0;
+      for (let d = 1; d < 60; d++) {
+        const x = Math.round(60 + dx * d);
+        const y = Math.round(60 + dy * d);
+        if (x < 0 || y < 0 || x >= 120 || y >= 120) break;
+        if (f.pig[y * 120 + x]! > 1e-3) far = d;
+      }
+      return far;
+    };
+    expect(reach(1, 0)).toBeGreaterThan(reach(0, 1) * 1.8);
+  });
+
+  it('a streak follows the angle it was given', () => {
+    const f = createField(120, 120, INK_SEED);
+    injectStreak(f, 60, 60, 12, Math.PI / 2, 2.5, 1, 1, INK_SEED);
+    const reach = (dx: number, dy: number) => {
+      let far = 0;
+      for (let d = 1; d < 60; d++) {
+        const x = Math.round(60 + dx * d);
+        const y = Math.round(60 + dy * d);
+        if (x < 0 || y < 0 || x >= 120 || y >= 120) break;
+        if (f.pig[y * 120 + x]! > 1e-3) far = d;
+      }
+      return far;
+    };
+    // rotated a quarter turn, so the long axis is now vertical
+    expect(reach(0, 1)).toBeGreaterThan(reach(1, 0) * 1.8);
+  });
+
+  it('spatter stays small — a satellite that merges is not a satellite', () => {
+    const spatter = spatterPlan(288, 130, 130 * 0.12, 130 * 0.84, 14, INK_SEED);
+    const main = dropPlan(288, 130, 130 * 0.12, 130 * 0.84, 3, INK_SEED);
+    const smallestMain = Math.min(...main.map((d) => d.r));
+    expect(spatter.length).toBe(14);
+    for (const d of spatter) {
+      expect(d.r).toBeGreaterThan(0);
+      expect(d.r).toBeLessThan(smallestMain * 0.25);
+    }
+  });
+
+  it('spatter is flung past the mark, and scatters wider as it goes', () => {
+    const s = spatterPlan(288, 130, 130 * 0.12, 130 * 0.84, 60, INK_SEED);
+    const band = 130 * (0.84 - 0.12);
+    const axisYAt = (x: number) => {
+      const u = (x / 288 - AXIS_X0) / (AXIS_X1 - AXIS_X0);
+      return 130 * 0.12 + (AXIS_Y0 + u * (AXIS_Y1 - AXIS_Y0)) * band;
+    };
+    // Split at the median rather than a fixed x: the satellites all start past
+    // the end of the main mark, so the interesting comparison is near half of
+    // the spray against the far half, not the sheet's coordinates.
+    const off = s
+      .map((d) => ({ t: d.x, e: Math.abs(d.y - axisYAt(d.x)) }))
+      .sort((a, b) => a.t - b.t);
+    const near = off.slice(0, Math.floor(off.length / 3));
+    const far = off.slice(-Math.floor(off.length / 3));
+    const mean = (xs: { e: number }[]) => xs.reduce((a, b) => a + b.e, 0) / xs.length;
+    expect(near.length).toBeGreaterThan(3);
+    expect(far.length).toBeGreaterThan(3);
+    // the cone: a flung arc sheds droplets that spread out with distance
+    expect(mean(far)).toBeGreaterThan(mean(near) * 1.3);
+  });
+
+  it('spatter is undiluted — it met nothing on the way', () => {
+    for (const d of spatterPlan(288, 130, 16, 109, 14, INK_SEED)) expect(d.conc).toBe(1);
+  });
+
+  it('is deterministic', () => {
+    expect(spatterPlan(288, 130, 16, 109, 14, INK_SEED)).toEqual(
+      spatterPlan(288, 130, 16, 109, 14, INK_SEED),
+    );
+  });
+});
+
+describe('ceilConc — words first', () => {
+  it('caps ink to 清 squarely under text, and leaves open paper alone', () => {
+    expect(ceilConc(1, 1)).toBeCloseTo(TONE_CEILING, 9);
+    expect(ceilConc(1, 0)).toBe(1);
+    expect(ceilConc(0.1, 1)).toBe(0.1);
+  });
+
+  it('arrives as a gradient — a hard switch would print a straight edge', () => {
+    let prev = 2;
+    for (let r = 0; r <= 1; r += 0.05) {
+      const v = ceilConc(1, r);
+      expect(v).toBeLessThanOrEqual(prev + 1e-9);
+      expect(v).toBeGreaterThanOrEqual(TONE_CEILING - 1e-9);
+      prev = v;
+    }
+  });
+
+  it('bounds what a reader can ever see', () => {
+    // The check that licenses every bit of the contrast elsewhere.
+    expect(fiveTones(ceilConc(1, 1))).toBeLessThanOrEqual(TONE_CEILING + 1e-6);
+  });
+});
+
+describe('coverage is near-binary', () => {
+  it('spends almost none of its range in between', () => {
+    // A splash has a boundary. While this was a full-range transfer curve the
+    // silhouette was a long fade with no edge anywhere in it.
+    let mid = 0;
+    const n = 2000;
+    for (let i = 0; i <= n; i++) {
+      const v = coverage(i / n);
+      if (v > 0.02 && v < 0.98) mid++;
+    }
+    expect(mid / n).toBeLessThan(0.06);
   });
 });

@@ -15,7 +15,7 @@ import {
   strokePresence,
   valueNoise2,
 } from '@/lib/ink';
-import { TONES } from '@/lib/ink-field';
+import { TONES, TONE_CEILING } from '@/lib/ink-field';
 
 
 describe('mulberry32', () => {
@@ -208,25 +208,26 @@ describe('inkAfterDrying', () => {
 });
 
 describe('the alpha ceiling', () => {
-  it('stays a background', () => {
-    // This once had to exceed 0.7: under `difference` the middle of the scale
-    // was a dead zone where text turned to grey mush, so the soak needed the far
-    // side of it. Composited normally the number is plain opacity again, the
-    // wash sits behind the words, and it belongs low — a hero background must
-    // not compete with the text lying on top of it.
+  it('is bounded where it has to be — over the words', () => {
+    // This has been three different claims, because what the number means kept
+    // changing. Under `difference` it had to exceed 0.7 to clear a dead zone.
+    // Composited normally it was plain opacity and belonged low. Once the ink
+    // read in five registers it became the ceiling only 焦墨 reaches.
     //
-    // What the number *means* changed once the ink read in five registers. It
-    // is no longer the opacity of the wash; it is the ceiling the darkest
-    // register reaches, and 焦墨 is near-black by definition. So the bound that
-    // matters is not on the ceiling but on the tone that actually covers ground:
-    // the head of the throw may be dark because it is small, while the register
-    // spanning most of the sheet is what a reader has to see text through.
+    // It is now free at the top, because the constraint moved somewhere better:
+    // ink crossing a text block is capped at TONE_CEILING, so the worst case a
+    // reader ever sees is that product — not the peak. Bounding the peak instead
+    // is what kept the whole splash grey, and grey soft-edged ink is a smudge.
     expect(INK_PEAK_ALPHA).toBeGreaterThan(0.05);
-    expect(INK_PEAK_ALPHA).toBeLessThan(0.45);
-    // 重 — the middle register, and the one broad passages land on.
-    expect(INK_PEAK_ALPHA * TONES[2]!).toBeLessThan(0.22);
-    // 清 has to stay a tint. If the floor rises the whole thing is a grey slab
-    // with edges rather than ink.
-    expect(INK_PEAK_ALPHA * TONES[0]!).toBeLessThan(0.09);
+    expect(INK_PEAK_ALPHA).toBeLessThanOrEqual(1);
+    // The number that actually protects reading. 0.8 × 0.16 ≈ 0.13, against
+    // 0.34 before this — the page got more readable as the ink got bolder.
+    expect(INK_PEAK_ALPHA * TONE_CEILING).toBeLessThan(0.16);
+  });
+
+  it('has range enough for 焦墨 to be near-black', () => {
+    // The other half: a splash needs darks that land on bare paper. Capped at
+    // 0.34 there was nothing in the composition darker than mid-grey.
+    expect(INK_PEAK_ALPHA * TONES[4]!).toBeGreaterThan(0.6);
   });
 });

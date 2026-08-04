@@ -40,7 +40,7 @@
  * that only the throw's dense head ever reaches the top register — the darkest
  * tone is an accent covering a few percent of the sheet, not a slab.
  */
-export const INK_PEAK_ALPHA = 0.34;
+export const INK_PEAK_ALPHA = 0.8;
 
 /** How long the brush takes to travel its path when you arrive on the page. */
 export const ENTRANCE_MS = 2200;

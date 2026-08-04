@@ -26,15 +26,19 @@
   } from '@/lib/ink';
   import {
     blurField,
+    ceilConc,
     coverage,
     createField,
     DENSITY_FULL,
     dropPlan,
     fiveTones,
     injectBlob,
+    injectStreak,
     mottleAt,
     resetField,
+    spatterPlan,
     stepInk,
+    throwAngle,
     TONES,
     visible,
     voidAt,
@@ -50,13 +54,29 @@
   const INJECT_MS = 2200;
   /** Drops per pour. Many fine, a few fat — see dropPlan. */
   const DROPS = 3;
-  /** Render-time softening radius, in cells. */
-  const BLUR = 2;
+  /**
+   * Render-time softening radius, in cells.
+   *
+   * Halved. This was suppressing cell-scale noise back when the mottling swung
+   * +/-72% and the alpha curve magnified whatever it touched; with tone coming
+   * from a piecewise-constant field and mottling at 0.22 there is far less to
+   * suppress, and what it was costing was the thing a splash needs most — an
+   * edge that stops. Watch it: too little blur is what made the ink read as
+   * granular and dirty, twice.
+   */
+  const BLUR = 1;
+  /** Satellite droplets flung past the mark. */
+  const SPATTER = 22;
+  /** How wide, in CSS pixels, the tone ceiling fades in around a text block. */
+  const RESERVE_FEATHER = 44;
+  /** How far the main pours are stretched along the throw. */
+  const ELONGATION = 2.3;
   /** Simulation ticks per painted frame. More is faster ink, not smoother. */
   const TICKS = 8;
   /** Vertical share of the hero the band wets. */
-  const BAND_TOP = 0.12;
-  const BAND_BOTTOM = 0.84;
+  const BAND_TOP = 0.1;
+  /** Down to the section's own edge, so the throw can exit under the card. */
+  const BAND_BOTTOM = 0.96;
   /** Hard cap on live cursor drips, so a fast scribble stays bounded. */
   const MAX_DRIPS = 26;
   /** Minimum travel between drips, in CSS pixels. */
@@ -90,6 +110,10 @@
   /** How far through the rain we are, 0–1. */
   let injectedTo = 0;
   let drops: Drop[] = [];
+  /** Per-cell weight for the text tone ceiling — see buildReserve. */
+  let reserve: Float32Array | null = null;
+  /** The throw's direction, in radians. */
+  let axis = 0;
   let smooth: Float32Array | null = null;
   let scratch: Float32Array | null = null;
   let dripCount = 0;
@@ -129,7 +153,14 @@
     if (!field || front <= injectedTo) return;
     for (const d of drops) {
       if (d.at > injectedTo && d.at <= front) {
-        injectBlob(field, d.x, d.y, d.r, d.amount, d.conc, INK_SEED);
+        // The main pours are stretched along the throw; the satellites are not.
+        // A droplet that has left the brush is travelling as a bead, so it lands
+        // round — it is the arm's sweep that elongates a mark, not the flight.
+        if (d.r > field.gh * 0.1) {
+          injectStreak(field, d.x, d.y, d.r, axis, ELONGATION, d.amount, d.conc, INK_SEED);
+        } else {
+          injectBlob(field, d.x, d.y, d.r, d.amount, d.conc, INK_SEED);
+        }
       }
     }
     injectedTo = front;
@@ -226,9 +257,12 @@
         // leading edge rendered as blank paper and the ink looked like it had
         // stopped spreading. The drip check caught it as coverage going
         // *backwards* while the ink was still travelling.
-        const c = conc[i]!;
+        let c = conc[i]!;
+        if (c < TONES[0]!) c = TONES[0]!;
+        // Words first: ink may cross the text, it may not be strong there.
+        if (reserve) c = ceilConc(c, reserve[i]!);
         a =
-          fiveTones(c < TONES[0]! ? TONES[0]! : c) *
+          fiveTones(c) *
           coverage(inkAfterDrying(load, presence)) *
           mottleAt(x, y, INK_SEED) *
           voidAt(x, y, INK_SEED);
@@ -296,13 +330,57 @@
     field = createField(gw, gh, INK_SEED);
     smooth = new Float32Array(gw * gh);
     scratch = new Float32Array(gw * gh);
-    // Rain only where it can be seen. The mask fades the canvas out by ~48% of
-    // its width to keep ink off the photograph, so drops scattered across the
-    // full width put a third of them somewhere invisible — which at three drops
-    // is most of the composition.
-    drops = dropPlan(Math.round(gw * 0.46), gh, gh * BAND_TOP, gh * BAND_BOTTOM, DROPS, INK_SEED);
+    buildReserve(gw, gh, rect);
+    // The whole hero, at last. This used to be handed `gw * 0.46`, because the
+    // layer was masked out past 48% of its width and drops beyond that landed
+    // somewhere invisible — which also meant every mark the wash could make was
+    // squeezed into the column the text occupies. The mask is gone and the words
+    // are protected by a tone ceiling instead, so the throw gets the full sheet.
+    const band = gh * (BAND_BOTTOM - BAND_TOP);
+    drops = dropPlan(gw, gh, gh * BAND_TOP, gh * BAND_BOTTOM, DROPS, INK_SEED);
+    drops = drops.concat(spatterPlan(gw, gh, gh * BAND_TOP, gh * BAND_BOTTOM, SPATTER, INK_SEED));
+    axis = throwAngle(gw, band);
     injectedTo = 0;
     dripCount = 0;
+  }
+
+  /**
+   * Where the words are, as a per-cell weight in [0,1].
+   *
+   * Feathered, because a hard switch would print the text block's bounding box
+   * on the paper as a straight edge — the one shape ink never makes. The falloff
+   * is measured in CSS pixels and converted, so it stays the same visual width
+   * whatever the grid resolution works out to be.
+   */
+  function buildReserve(gw: number, gh: number, rect: DOMRect): void {
+    reserve = new Float32Array(gw * gh);
+    if (!host) return;
+    const feather = RESERVE_FEATHER / CELL;
+    for (const el of host.querySelectorAll<HTMLElement>('[data-ink-reserve]')) {
+      const r = el.getBoundingClientRect();
+      // into grid cells, relative to the canvas
+      const x0 = (r.left - rect.left) / CELL;
+      const x1 = (r.right - rect.left) / CELL;
+      const y0 = (r.top - rect.top) / CELL;
+      const y1 = (r.bottom - rect.top) / CELL;
+      const px0 = Math.max(0, Math.floor(x0 - feather));
+      const px1 = Math.min(gw - 1, Math.ceil(x1 + feather));
+      const py0 = Math.max(0, Math.floor(y0 - feather));
+      const py1 = Math.min(gh - 1, Math.ceil(y1 + feather));
+      for (let y = py0; y <= py1; y++) {
+        for (let x = px0; x <= px1; x++) {
+          // distance outside the rect, 0 within it
+          const dx = x < x0 ? x0 - x : x > x1 ? x - x1 : 0;
+          const dy = y < y0 ? y0 - y : y > y1 ? y - y1 : 0;
+          const d = Math.hypot(dx, dy);
+          if (d >= feather) continue;
+          const t = 1 - d / feather;
+          const w = t * t * (3 - 2 * t);
+          const i = y * gw + x;
+          if (w > reserve[i]!) reserve[i] = w;
+        }
+      }
+    }
   }
 
   function onPointerMove(e: PointerEvent): void {

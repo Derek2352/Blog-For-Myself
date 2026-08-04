@@ -258,16 +258,20 @@
        the soak goes and the field can finally be soft. */
     z-index: -1;
     pointer-events: none;
-    -webkit-mask-image: linear-gradient(to right, #000 0%, #000 34%, transparent 48%);
-    mask-image: linear-gradient(to right, #000 0%, #000 34%, transparent 48%);
-  }
-  /* Stacked layout: the photo sits *below* the text rather than beside it, so
-     the boundary to respect is horizontal. */
-  @media (max-width: 1023px) {
-    .ink-wash {
-      -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 38%, transparent 54%);
-      mask-image: linear-gradient(to bottom, #000 0%, #000 38%, transparent 54%);
-    }
+    /* This used to fade the layer out by 48% of the width to keep ink off the
+       photograph — which confined the ink to *exactly* the text column. Ink that
+       has to live under words has to stay faint, and faint plus soft-edged is a
+       smudge; the mask forbade any boldness before the ink code got a say. It
+       was also unnecessary: the photo card is opaque and paints above a
+       `z-index: -1` canvas, so ink behind it never showed anyway.
+
+       Keeping words legible is now a *tone* ceiling rather than a hole in the
+       layer — see `data-ink-reserve` in src/components/InkWash.astro — so the
+       mass can run right across the hero and merely thin where it crosses text.
+       All that is left here is a short fade so the ink is not visibly guillotined
+       by the section's own edges. */
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 4%, #000 93%, transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0%, #000 4%, #000 93%, transparent 100%);
   }
 
   /* category tab strip: two deliberate tiers on wide screens, one scrolling
