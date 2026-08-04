@@ -13,7 +13,11 @@ import {
   AXIS_X1,
   AXIS_Y0,
   AXIS_Y1,
+  ADVECT_BIAS,
   ceilConc,
+  FILTRATION,
+  haloAlpha,
+  SOAK_FULL,
   CONC_SPREAD,
   injectStreak,
   spatterPlan,
@@ -1023,5 +1027,149 @@ describe('framing — the source is outside the picture', () => {
       for (let x = OFF_X; x < FW; x++) if (vis[y * FW + x]! > 0.05) inked++;
     }
     expect(inked / (WIN_H * WIN_W)).toBeGreaterThan(0.15);
+  });
+});
+
+describe('滲透 — water runs ahead of the ink', () => {
+  /** One drop on open paper, settled. */
+  function blot(steps = 300, gw = 140, gh = 140, r = 6) {
+    const f = createField(gw, gh, INK_SEED);
+    injectBlob(f, gw / 2, gh / 2, r, 1, 1, INK_SEED);
+    for (let i = 0; i < steps; i++) stepInk(f, 1, INK_SEED);
+    return f;
+  }
+
+  /** Where the ink layer starts to render: coverage()'s floor, unnormalised. */
+  const INK_FLOOR = 0.012 * DENSITY_FULL;
+  /** Where the halo layer starts to render — see haloAlpha. */
+  const HALO_FLOOR = 0.004;
+
+  /** Mean radius of the outermost ring above an absolute threshold. */
+  const frontRadius = (f: InkField, a: Float32Array, cut: number) => {
+    const c = f.gw / 2;
+    let sum = 0;
+    let n = 0;
+    for (let k = 0; k < 48; k++) {
+      const th = (k / 48) * Math.PI * 2;
+      let far = 0;
+      for (let rr = 1; rr < f.gw / 2 - 1; rr++) {
+        const x = Math.round(c + Math.cos(th) * rr);
+        const y = Math.round(c + Math.sin(th) * rr);
+        if (x < 0 || y < 0 || x >= f.gw || y >= f.gh) break;
+        if (a[y * f.gw + x]! > cut) far = rr;
+      }
+      sum += far;
+      n++;
+    }
+    return sum / n;
+  };
+
+  it('the water front leads the pigment front', () => {
+    // The whole point, as a number. On 宣紙 the fibre passes water and traps
+    // carbon, so the wet edge is always outside the ink edge — which is why a
+    // mark is a compact core inside a much wider watermark rather than a blob.
+    //
+    // Measured at the thresholds where each layer actually *renders*, not at a
+    // share of each field's own peak. The first version did the latter and read
+    // backwards: the two fields have very different peaks, so "6% of peak" is a
+    // different physical amount for each and compares nothing.
+    const f = blot();
+    const ink = visible(f);
+    expect(frontRadius(f, f.soak, HALO_FLOOR)).toBeGreaterThan(
+      frontRadius(f, ink, INK_FLOOR) * 1.2,
+    );
+  });
+
+  it('leaves a watermark ring outside the ink', () => {
+    // The visible consequence: a real annulus that is damp paper and not ink.
+    // Without it the halo would exist in the field and never be seen.
+    const f = blot();
+    const ink = visible(f);
+    let inked = 0;
+    let halo = 0;
+    for (let i = 0; i < ink.length; i++) {
+      if (ink[i]! > INK_FLOOR) inked++;
+      else if (f.soak[i]! > HALO_FLOOR) halo++;
+    }
+    expect(inked).toBeGreaterThan(100);
+    expect(halo / (halo + inked)).toBeGreaterThan(0.25);
+  });
+
+  it('soak is a high-water mark, not live wetness', () => {
+    // A halo that evaporates with the water is not a tide line, and paper keeps
+    // its tide line. If this ever fails the watermark will vanish as the sheet
+    // dries, which is the one thing it must not do.
+    const f = createField(60, 60, INK_SEED);
+    injectBlob(f, 30, 30, 6, 1, 1, INK_SEED);
+    let prev = new Float32Array(f.soak);
+    for (let step = 0; step < 12; step++) {
+      for (let i = 0; i < 40; i++) stepInk(f, 1, INK_SEED);
+      for (let i = 0; i < f.soak.length; i++) {
+        expect(f.soak[i]!).toBeGreaterThanOrEqual(prev[i]! - 1e-9);
+      }
+      prev = new Float32Array(f.soak);
+    }
+    // and it is still there once the paper is bone dry
+    expect(sum(f.wet)).toBeCloseTo(0, 4);
+    expect(Math.max(...f.soak)).toBeGreaterThan(0.05);
+  });
+
+  it('filtration keeps the ink edge sharper than the water edge', () => {
+    // Every cell the pigment enters takes a cut, so the ink front advances
+    // slowly and steeply while the water front runs on soft. That contrast is
+    // the look of ink on raw 生宣.
+    const f = blot();
+    const ink = visible(f);
+    const width = (a: Float32Array) =>
+      frontRadius(f, a, 0.03) - frontRadius(f, a, 0.5);
+    expect(width(ink)).toBeLessThan(width(f.soak));
+  });
+
+  it('filtration conserves pigment — it moves it, it does not spend it', () => {
+    expect(FILTRATION).toBeGreaterThan(0);
+    expect(FILTRATION).toBeLessThan(0.5);
+    const f = createField(60, 60, INK_SEED);
+    injectBlob(f, 30, 30, 6, 1, 1, INK_SEED);
+    const before = sum(f.pig) + sum(f.dep);
+    for (let i = 0; i < 120; i++) stepInk(f, 1, INK_SEED);
+    const after = sum(f.pig) + sum(f.dep);
+    expect(after).toBeGreaterThan(before * 0.98);
+    expect(after).toBeLessThan(before * 1.02);
+  });
+
+  it('water still outruns ink rather than pushing it — ADVECT_BIAS below 1', () => {
+    // Above 1 pigment outruns its water, strands at a drying perimeter, and the
+    // blot dries darkest at the rim. That coffee ring was measured *off* the
+    // reference and removed; widening the gap for 滲透 must not bring it back.
+    expect(ADVECT_BIAS).toBeLessThan(1);
+    expect(ADVECT_BIAS).toBeGreaterThan(0.2);
+  });
+});
+
+describe('haloAlpha — a watermark, not a tone', () => {
+  it('stays far below the palest ink', () => {
+    // The halo is a change in the paper. If it ever reached 清 it would read as
+    // haze over the whole hero instead of as damp fibre.
+    for (let s = 0; s <= 1; s += 0.02) {
+      expect(haloAlpha(s)).toBeLessThan(TONES[0]! * 0.6);
+      expect(haloAlpha(s)).toBeGreaterThanOrEqual(0);
+    }
+    expect(haloAlpha(0)).toBe(0);
+  });
+
+  it('rises then flattens, so the tide line has an edge', () => {
+    // A halo that faded gradually all the way out would be a gradient, and a
+    // gradient is what the whole composition has been escaping.
+    expect(haloAlpha(SOAK_FULL)).toBeCloseTo(haloAlpha(1), 9);
+    expect(haloAlpha(SOAK_FULL * 0.5)).toBeGreaterThan(haloAlpha(SOAK_FULL) * 0.3);
+  });
+
+  it('is monotonic', () => {
+    let prev = -1;
+    for (let s = 0; s <= 1; s += 0.01) {
+      const v = haloAlpha(s);
+      expect(v).toBeGreaterThanOrEqual(prev - 1e-12);
+      prev = v;
+    }
   });
 });

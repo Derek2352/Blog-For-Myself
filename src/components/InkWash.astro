@@ -32,6 +32,7 @@
     DENSITY_FULL,
     dropPlan,
     fiveTones,
+    haloAlpha,
     injectBlob,
     injectStreak,
     mottleAt,
@@ -268,6 +269,8 @@
     const b = Number(parts[2]);
     const fw = field.gw;
     const conc = field.conc;
+    // `soak` is taken by the entrance envelope above, hence the longer name.
+    const soakField = field.soak;
     // Two loops, not one flat pass: the canvas is a *window* into a field that
     // extends past it on the left and below. Walking the field flat would paint
     // the margins — the part of the plume that is deliberately out of shot.
@@ -318,6 +321,17 @@
             mottleAt(fx, fy, INK_SEED) *
             voidAt(fx, fy, INK_SEED);
         }
+        // 滲透: the watermark the water left, where it ran on past the ink.
+        //
+        // Composited as a max rather than added, so it can only darken bare
+        // paper — the halo must never deepen ink that is already there, or it
+        // stops being a property of the sheet and becomes another tone.
+        //
+        // Needs no blur of its own: water diffuses, so `soak` is smooth
+        // already. It is also unaffected by the tone ceiling, which is correct
+        // — a watermark over text is a watermark, and it is far below 清.
+        const halo = haloAlpha(soakField[i]!) * voidAt(fx, fy, INK_SEED);
+        if (halo > a) a = halo;
         data[p] = r;
         data[p + 1] = g;
         data[p + 2] = b;

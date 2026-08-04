@@ -48,6 +48,20 @@ export interface InkField {
    * straight back, one level down.
    */
   conc: Float32Array;
+  /**
+   * 滲透 — the greatest wetness this cell has ever held.
+   *
+   * The water front, remembered. On 宣紙 water wicks through the fibre network
+   * faster than the carbon can follow, because the particles are filtered and
+   * adsorbed as they travel; so a mark is a compact dark core sitting inside a
+   * much wider faint watermark, rather than one soft blob.
+   *
+   * A high-water mark rather than live wetness, because a 水暈 is a *tide
+   * line*: rendering `wet` would make the halo evaporate along with the water,
+   * and it is the permanence that makes a mark look absorbed into the sheet
+   * instead of floated on it.
+   */
+  soak: Float32Array;
   /** Paper absorbency. Oriented fibre, seeded once and never touched again. */
   fibre: Float32Array;
   /** What the renderer shows: suspended plus settled. */
@@ -174,6 +188,7 @@ export function createField(gw: number, gh: number, seed: number): InkField {
     pig: new Float32Array(n),
     dep: new Float32Array(n),
     conc: new Float32Array(n),
+    soak: new Float32Array(n),
     fibre,
     biasX,
     biasY,
@@ -190,6 +205,7 @@ export function resetField(f: InkField): void {
   f.pig.fill(0);
   f.dep.fill(0);
   f.conc.fill(0);
+  f.soak.fill(0);
   f.vis.fill(0);
 }
 
@@ -589,13 +605,35 @@ export const DEPOSIT_RATE = 0.1;
  * a drying perimeter, and the blot dries darkest at the rim. That is correct
  * for ink on **paper**, and it is what this was set to.
  *
- * It is wrong for ink in **water**, which is the reference now. Measuring that
- * image gives core alpha 0.549 against 0.329 at the edge — denser in the middle,
- * fading outward — because a drop in a bowl has no contact line to pin and no
- * fast-drying perimeter to strand against. So pigment now travels slightly
- * *slower* than the water carrying it and stays where it fell.
+ * It is wrong for ink in **water**, which was the reference for a while.
+ * Measuring that image gives core alpha 0.549 against 0.329 at the edge —
+ * denser in the middle, fading outward — because a drop in a bowl has no
+ * contact line to pin and no fast-drying perimeter to strand against.
+ *
+ * Now well below 1 rather than just under it, which is 滲透. On 宣紙 the water
+ * genuinely outruns the ink: it wicks along the fibre while the carbon is
+ * filtered out behind it. At 0.85 the two travelled almost together and there
+ * was no gap for a halo to live in. Still below 1, so the measured
+ * "denser in the middle, no coffee ring" property is untouched — this only
+ * widens a separation that already existed.
  */
-export const ADVECT_BIAS = 0.85;
+export const ADVECT_BIAS = 0.5;
+
+/**
+ * How much of the pigment arriving in a cell is caught by the fibre there.
+ *
+ * The actual mechanism behind 滲透, and the reason ink on raw 生宣 has a hard
+ * edge inside a soft one. Paper is a filter: water passes through the fibre
+ * network, carbon particles are too large and get trapped and adsorbed as they
+ * go. So the pigment front advances slowly and *sharply* — every cell it enters
+ * takes a cut — while the water front runs on ahead and soft.
+ *
+ * It is also what the satellites needed. A droplet had no way to keep its
+ * pigment compact while its water spread, so each one simply bled into the
+ * mass; filtration pins the core in place within a cell or two of where it
+ * landed.
+ */
+export const FILTRATION = 0.16;
 
 /**
  * Carry pigment along the swirl, without diffusing it.
@@ -684,7 +722,7 @@ export const SWIRL = 0.4;
  * do by hand.
  */
 export function stepInk(f: InkField, dt = 1, seed = 0): void {
-  const { gw, gh, wet, pig, dep, conc, fibre, biasX, biasY, tmpWet, tmpPig, tmpConc } = f;
+  const { gw, gh, wet, pig, dep, conc, soak, fibre, biasX, biasY, tmpWet, tmpPig, tmpConc } = f;
   tmpWet.set(wet);
   tmpPig.set(pig);
   tmpConc.set(conc);
@@ -747,8 +785,15 @@ export function stepInk(f: InkField, dt = 1, seed = 0): void {
         const j = nb[k]!;
         const inP = moveP * (share[k]! / total);
         wet[j] = wet[j]! + moveW * (share[k]! / total);
-        if (inP > 0) conc[j] = mixConc(conc[j]!, pig[j]! + dep[j]!, cSrc, inP);
-        pig[j] = pig[j]! + inP;
+        if (inP > 0) {
+          conc[j] = mixConc(conc[j]!, pig[j]! + dep[j]!, cSrc, inP);
+          // Filtered on arrival: the fibre keeps a cut of everything passing
+          // through it. Conserved — it moves from suspension to deposit, not
+          // out of the field — so the mass checks still hold.
+          const caught = inP * FILTRATION;
+          dep[j] = dep[j]! + caught;
+          pig[j] = pig[j]! + (inP - caught);
+        }
       }
       wet[i] = wet[i]! - moveW;
       // Losing pigment does not dilute what stays behind, so conc[i] is untouched.
@@ -763,6 +808,9 @@ export function stepInk(f: InkField, dt = 1, seed = 0): void {
   // ---- deposit + evaporate
   for (let i = 0; i < wet.length; i++) {
     const w = wet[i]!;
+    // The tide line. Recorded here because the wetness is already in hand, and
+    // never lowered — the paper does not forget where the water reached.
+    if (w > soak[i]!) soak[i] = w;
     if (w > 0) {
       const p = pig[i]!;
       if (p > 0) {
@@ -995,6 +1043,40 @@ export function ceilConc(conc: number, reserve: number): number {
   if (reserve <= 0) return conc;
   const cap = 1 - reserve * (1 - TONE_CEILING);
   return conc > cap ? cap : conc;
+}
+
+/**
+ * Wetness at which the watermark is at full (still faint) strength.
+ *
+ * Low, because the halo's job is to show where water reached at all, not to
+ * shade how much of it there was. At 0.22 it was doing the latter: almost the
+ * whole damp region sits well under that, so the watermark faded away instead
+ * of holding, and only 1.6% of the hero showed any of it. Saturating early is
+ * what turns a gradient into a tide line.
+ */
+export const SOAK_FULL = 0.06;
+
+/**
+ * How dark the 水暈 gets, relative to the palest ink register.
+ *
+ * A fraction of 清, because a watermark is a change in the *paper* — fibre
+ * swelled and sizing moved — not a tone in the ink. Too strong and it stops
+ * reading as damp paper and starts reading as haze, which is the specific way
+ * this can go wrong.
+ */
+export const HALO_STRENGTH = 0.42;
+
+/**
+ * The watermark's alpha at a cell, from its high-water mark.
+ *
+ * Deliberately not a ramp all the way up: it rises quickly and then flattens,
+ * so the halo has an outline — a tide line — rather than fading gradually into
+ * the paper. That edge is what says a liquid stopped here.
+ */
+export function haloAlpha(soak: number): number {
+  if (soak <= 0.004) return 0;
+  const t = soak >= SOAK_FULL ? 1 : (soak - 0.004) / (SOAK_FULL - 0.004);
+  return TONES[0]! * HALO_STRENGTH * (t * t * (3 - 2 * t));
 }
 
 /** The throw's direction in radians, for a box of the given proportions. */
