@@ -28,6 +28,26 @@ export interface InkField {
   pig: Float32Array;
   /** Pigment settled onto the paper. This is what renders. */
   dep: Float32Array;
+  /**
+   * Ink **strength** — how concentrated the 墨 at this cell is, 0–1.
+   *
+   * Distinct from `pig`, which is only *how much*. A model with amount but no
+   * strength cannot express 墨分五色 at all: the five tones are five
+   * concentrations, not five densities of one ink, which is exactly the
+   * difference between a painter loading 濃墨 and dipping for 淡墨.
+   *
+   * Not having it is what made the tones read as contour lines. Quantising a
+   * single smooth density field draws its level sets, and the level sets of a
+   * blob are nested rings; there is no setting of the tone table that escapes
+   * that. Concentration is piecewise-constant instead — flat across one pour,
+   * stepping only where a different pour's ink reached — so quantising it draws
+   * material fronts, which is what 破墨 boundaries are.
+   *
+   * Carried by the pigment and mixed mass-weighted. Never diffused on its own:
+   * a diffusion pass here would smooth it into a gradient and put the contours
+   * straight back, one level down.
+   */
+  conc: Float32Array;
   /** Paper absorbency. Oriented fibre, seeded once and never touched again. */
   fibre: Float32Array;
   /** What the renderer shows: suspended plus settled. */
@@ -35,6 +55,7 @@ export interface InkField {
   /** Scratch buffers, so a step allocates nothing. */
   tmpWet: Float32Array;
   tmpPig: Float32Array;
+  tmpConc: Float32Array;
 }
 
 /** Direction of the paper's grain, in radians. Ink wicks along it. */
@@ -136,10 +157,12 @@ export function createField(gw: number, gh: number, seed: number): InkField {
     wet: new Float32Array(n),
     pig: new Float32Array(n),
     dep: new Float32Array(n),
+    conc: new Float32Array(n),
     fibre,
     vis: new Float32Array(n),
     tmpWet: new Float32Array(n),
     tmpPig: new Float32Array(n),
+    tmpConc: new Float32Array(n),
   };
 }
 
@@ -148,15 +171,44 @@ export function resetField(f: InkField): void {
   f.wet.fill(0);
   f.pig.fill(0);
   f.dep.fill(0);
+  f.conc.fill(0);
   f.vis.fill(0);
+}
+
+/**
+ * Blend ink of strength `cIn` into a cell that already holds `have` pigment.
+ *
+ * Mass-weighted, which is simply what happens when two inks meet: the result
+ * cannot be stronger than the stronger of them or weaker than the weaker, and a
+ * trickle of dilute wash cannot bleach a cell that has already put down a lot of
+ * 焦墨. The weight on the receiving side counts settled pigment as well as
+ * suspended, because what is already dry on the paper still decides how the cell
+ * reads.
+ */
+export function mixConc(cHere: number, have: number, cIn: number, inMass: number): number {
+  const tot = have + inMass;
+  if (tot <= 1e-9) return cIn;
+  return (cHere * have + cIn * inMass) / tot;
 }
 
 /**
  * Wavelength of the mottling, in cells. Long on purpose — see `visible`.
  */
 export const MOTTLE_SCALE = 30;
-/** How far the mottling swings the density either side of neutral. */
-export const MOTTLE_DEPTH = 0.72;
+/**
+ * How far the mottling swings the ink either side of neutral.
+ *
+ * This was 0.72 — a ±72% swing — back when it was the only thing stopping a
+ * smooth diffusion gradient from reading as one flat grey shape. It is now
+ * applied *after* the tones are quantised, and at that depth it simply undid
+ * them: multiplying a flat register by anything between 0.28 and 1.72 smears it
+ * straight back into a gradient, which the rendered histogram showed as three
+ * broad humps where there should have been five peaks.
+ *
+ * The concentration field supplies the structure now, so this returns to what
+ * mottling is for: the soft unevenness *within* one wash of one strength.
+ */
+export const MOTTLE_DEPTH = 0.22;
 
 /**
  * What is actually visible: pigment in suspension plus pigment settled,
@@ -322,6 +374,7 @@ export function injectBand(
   seed: number,
   amount = 1,
   feather = 0,
+  conc = 1,
 ): void {
   const rnd = mulberry32(seed);
   const jitter = rnd() * 40;
@@ -345,8 +398,10 @@ export function injectBand(
       const a = fall * gate * amount * edgeW;
       if (a <= 0) continue;
       const i = y * f.gw + x;
+      const load = a * PIG_LOAD;
+      f.conc[i] = mixConc(f.conc[i]!, f.pig[i]! + f.dep[i]!, conc, load);
       f.wet[i] = Math.min(1.4, f.wet[i]! + a);
-      f.pig[i] = Math.min(1.6, f.pig[i]! + a * PIG_LOAD);
+      f.pig[i] = Math.min(1.6, f.pig[i]! + load);
     }
   }
 }
@@ -362,6 +417,18 @@ export function injectBand(
  */
 export const PIG_LOAD = 3.2;
 
+/**
+ * How much a single pour's strength varies within itself.
+ *
+ * A loaded brush is not uniform, and neither is a thrown ladle of 墨. Without
+ * this each pour is one flat concentration, which with three drops risks
+ * reading as three cut-out slabs meeting at seams rather than as ink. Low
+ * frequency and modest: enough that a pour crosses a register boundary here and
+ * there, giving irregular patches. It cannot bring the rings back, because it is
+ * noise rather than a radial gradient — its level sets are blobs, not circles.
+ */
+export const CONC_SPREAD = 0.13;
+
 /** One drop — a splash of splatter, or the cursor. It will bleed on its own. */
 export function injectBlob(
   f: InkField,
@@ -369,6 +436,8 @@ export function injectBlob(
   cy: number,
   r: number,
   amount = 1,
+  conc = 1,
+  seed = 0,
 ): void {
   const x0 = Math.max(0, Math.floor(cx - r));
   const x1 = Math.min(f.gw - 1, Math.ceil(cx + r));
@@ -381,8 +450,11 @@ export function injectBlob(
       if (d > rr) continue;
       const a = (1 - Math.sqrt(d) / r) * amount;
       const i = y * f.gw + x;
+      const load = a * PIG_LOAD;
+      const c = conc + (valueNoise2(x * 0.045, y * 0.045, seed + 1201) - 0.5) * 2 * CONC_SPREAD;
+      f.conc[i] = mixConc(f.conc[i]!, f.pig[i]! + f.dep[i]!, c < 0 ? 0 : c > 1 ? 1 : c, load);
       f.wet[i] = Math.min(1.4, f.wet[i]! + a);
-      f.pig[i] = Math.min(1.6, f.pig[i]! + a * PIG_LOAD);
+      f.pig[i] = Math.min(1.6, f.pig[i]! + load);
     }
   }
 }
@@ -422,8 +494,9 @@ export const ADVECT_BIAS = 0.85;
  * swirl is deliberately fast.
  */
 export function advectPig(f: InkField, seed: number, dt = 1): void {
-  const { gw, gh, wet, pig, tmpPig } = f;
+  const { gw, gh, wet, pig, conc, tmpPig, tmpConc } = f;
   tmpPig.set(pig);
+  tmpConc.set(conc);
   let before = 0;
   for (let i = 0; i < pig.length; i++) before += pig[i]!;
   for (let y = 0; y < gh; y++) {
@@ -439,12 +512,31 @@ export function advectPig(f: InkField, seed: number, dt = 1): void {
       if (x0 < 0 || y0 < 0 || x0 >= gw - 1 || y0 >= gh - 1) continue;
       const fx = sx - x0;
       const fy = sy - y0;
-      const a = tmpPig[y0 * gw + x0]!;
-      const bb = tmpPig[y0 * gw + x0 + 1]!;
-      const c = tmpPig[(y0 + 1) * gw + x0]!;
-      const d = tmpPig[(y0 + 1) * gw + x0 + 1]!;
-      pig[i] =
-        a * (1 - fx) * (1 - fy) + bb * fx * (1 - fy) + c * (1 - fx) * fy + d * fx * fy;
+      const i00 = y0 * gw + x0;
+      const i10 = i00 + 1;
+      const i01 = i00 + gw;
+      const i11 = i01 + 1;
+      const w00 = (1 - fx) * (1 - fy);
+      const w10 = fx * (1 - fy);
+      const w01 = (1 - fx) * fy;
+      const w11 = fx * fy;
+      const a = tmpPig[i00]!;
+      const bb = tmpPig[i10]!;
+      const c = tmpPig[i01]!;
+      const d = tmpPig[i11]!;
+      const moved = a * w00 + bb * w10 + c * w01 + d * w11;
+      pig[i] = moved;
+      // Strength is interpolated by *mass*, not by area. A plain bilinear blend
+      // of concentration would let a corner holding almost no pigment drag the
+      // cell's tone around, which smears interfaces the swirl is meant to fold.
+      if (moved > 1e-9) {
+        conc[i] =
+          (tmpConc[i00]! * a * w00 +
+            tmpConc[i10]! * bb * w10 +
+            tmpConc[i01]! * c * w01 +
+            tmpConc[i11]! * d * w11) /
+          moved;
+      }
     }
   }
 
@@ -474,9 +566,10 @@ export const SWIRL = 0.4;
  * do by hand.
  */
 export function stepInk(f: InkField, dt = 1, seed = 0): void {
-  const { gw, gh, wet, pig, dep, fibre, tmpWet, tmpPig } = f;
+  const { gw, gh, wet, pig, dep, conc, fibre, tmpWet, tmpPig, tmpConc } = f;
   tmpWet.set(wet);
   tmpPig.set(pig);
+  tmpConc.set(conc);
 
   // ---- flow + advection. Water relaxes downhill toward its neighbours and
   // pigment rides along, but faster (see ADVECT_BIAS). Both are gated by the
@@ -527,12 +620,19 @@ export function stepInk(f: InkField, dt = 1, seed = 0): void {
       const moveW = Math.min(w * 0.5, total * 1.6 * dt * fibre[i]!);
       const p = tmpPig[i]!;
       const moveP = Math.min(p * 0.6, moveW * (p / (w + 1e-6)) * ADVECT_BIAS);
+      // Strength travels with the pigment. Read from the snapshot so a cell that
+      // has already taken inflow this sweep still hands on the ink it started
+      // the tick with, rather than something half-mixed by scan order.
+      const cSrc = tmpConc[i]!;
       for (let k = 0; k < count; k++) {
-        const frac = share[k]! / total;
-        wet[nb[k]!] = wet[nb[k]!]! + moveW * frac;
-        pig[nb[k]!] = pig[nb[k]!]! + moveP * frac;
+        const j = nb[k]!;
+        const inP = moveP * (share[k]! / total);
+        wet[j] = wet[j]! + moveW * (share[k]! / total);
+        if (inP > 0) conc[j] = mixConc(conc[j]!, pig[j]! + dep[j]!, cSrc, inP);
+        pig[j] = pig[j]! + inP;
       }
       wet[i] = wet[i]! - moveW;
+      // Losing pigment does not dilute what stays behind, so conc[i] is untouched.
       pig[i] = pig[i]! - moveP;
     }
   }
@@ -611,9 +711,27 @@ export interface Drop {
   y: number;
   r: number;
   amount: number;
+  /** Ink strength for this pour — one of the five registers. */
+  conc: number;
   /** 0-1 through the pour when this one lands. */
   at: number;
 }
+
+/**
+ * Which register each successive pour is charged at, as indices into `TONES`.
+ *
+ * Ascending, and this is 破墨法 rather than an arbitrary choice: lay the 淡墨
+ * wash first, then break 濃墨 into it while it is still wet. The dark strike
+ * goes in last precisely so that nothing lands on top of it afterwards.
+ *
+ * Starting dark was the first attempt and it measured badly. The head pour is
+ * the one that spreads longest and takes every later pour on top of it, so
+ * mass-weighted mixing pulled its 焦墨 down toward the average and the rendered
+ * histogram lost its top two registers entirely — five peaks collapsed to two,
+ * all of them pale. Pouring light-to-dark leaves the strongest ink undiluted
+ * because it arrives last.
+ */
+export const TONE_ORDER = [0, 2, 4, 1, 3];
 
 /** Where the throw begins and ends, as fractions of the box it is given. */
 export const AXIS_X0 = 0.16;
@@ -671,6 +789,7 @@ export function dropPlan(
     // anyone saw either. The gradient has to outrun that.
     const fall = 1 - s * 0.72;
     const p = rnd();
+    const conc = TONES[TONE_ORDER[i % TONE_ORDER.length]!]!;
     drops.push({
       x,
       y,
@@ -680,7 +799,12 @@ export function dropPlan(
       // A broad drop begins flat, and diffusion only has to soften its edge.
       // The tail shrinks, but never below a size that still spreads flat.
       r: gh * (0.46 + p * p * 0.3) * (0.42 + fall * 0.58),
-      amount: (0.6 + rnd() * 0.34) * (0.3 + fall * 0.7),
+      // Charge follows *strength*, not position. 濃墨 is loaded ink — a heavy
+      // brush of it, not a trace — and the mass matters as much as the number:
+      // a strong pour carrying little pigment is simply outvoted when the
+      // mixing weighs it against the wash it landed in.
+      amount: (0.45 + rnd() * 0.25) * (0.55 + conc * 0.75),
+      conc,
       at,
     });
   }
@@ -688,33 +812,36 @@ export function dropPlan(
 }
 
 /**
- * Deposited pigment → alpha.
+ * The share of `COVERAGE_FULL` at which ink stops getting any more opaque.
  *
- * ## Why the gamma is above 1 and used to be below it
+ * Low, and that is the point. This used to be a full-range transfer curve
+ * deciding how dark every cell was from its density, which meant density
+ * gradients showed as tonal gradients — and quantising those gradients drew
+ * their level sets as contour rings.
  *
- * This lifted the thin parts hard (gamma 0.62), because a diffused plume is
- * mostly thin and the layer's peak opacity was 0.2 — without the lift, most of
- * the ink landed under the threshold where a tint is visible at all, and the
- * plume rendered as a dense core on empty paper.
- *
- * `fiveTones` does that job now, and does it better. Its lowest register, 清,
- * has a lifted floor: any cell that clears the first tonal edge renders at a
- * visible tint no matter how faint it actually was. Keeping the lift here as
- * well was doing it twice, and the cost was measurable — 43% of the ink piled
- * into the top register, so 焦墨 came out as a slab covering most of the left
- * panel rather than as the accent it is.
- *
- * So the curve is now slightly *steep*: the visibility floor comes from the
- * tones, and this spreads the plume's densities out across all five registers
- * instead of pinning the middle of it against the ceiling.
- *
- * The domain runs to 1 because that is where the caller clamps. Saturating at
- * 0.8 threw away a fifth of the range and flattened the core before it started.
+ * Tone comes from concentration now, so all this has left to do is fade the
+ * outer edge of the ink where there is barely any. Saturating early confines
+ * that fade to a narrow band at the perimeter, leaving the interior flat.
  */
-export function inkAlpha(dep: number): number {
-  if (dep <= 0.012) return 0;
-  const t = dep >= 1 ? 1 : (dep - 0.012) / 0.988;
-  return Math.pow(t, 1.05);
+export const COVERAGE_FULL = 0.12;
+
+/**
+ * How much of the paper this cell's ink actually covers, 0–1.
+ *
+ * Not the tone. Density says *how much* pigment is present, which decides
+ * whether ink covers the cell at all; `conc` says how strong that ink is, which
+ * decides what shade it reads as. Conflating the two is what produced a
+ * contour map: with a single field driving opacity, every iso-density curve
+ * became an iso-alpha curve, and quantising drew all of them.
+ *
+ * Smoothstep rather than a power curve, because what is wanted is saturation —
+ * a plateau over the body of the ink with the whole transition spent at the
+ * edge.
+ */
+export function coverage(load: number): number {
+  if (load <= 0.012) return 0;
+  const t = load >= COVERAGE_FULL ? 1 : (load - 0.012) / (COVERAGE_FULL - 0.012);
+  return t * t * (3 - 2 * t);
 }
 
 /**

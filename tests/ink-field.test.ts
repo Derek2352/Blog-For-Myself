@@ -9,10 +9,13 @@ import {
   dropPlan,
   fibreNoise,
   flowBias,
+  CONC_SPREAD,
   fiveTones,
+  mixConc,
   injectBand,
   injectBlob,
-  inkAlpha,
+  coverage,
+  COVERAGE_FULL,
   mottleAt,
   MOTTLE_DEPTH,
   MOTTLE_SCALE,
@@ -23,6 +26,7 @@ import {
   resetField,
   stepInk,
   visible,
+  type Drop,
   type InkField,
 } from '@/lib/ink-field';
 import { INK_SEED } from '@/lib/ink';
@@ -277,29 +281,22 @@ describe('injectBand', () => {
   });
 });
 
-describe('inkAlpha — density spread across the registers', () => {
-  it('does not pin the plume against the ceiling', () => {
-    // The gamma used to run the other way, lifting the thin parts hard, because
-    // the layer peaked at 0.2 opacity and unlifted ink was invisible. fiveTones
-    // took that job over — its lowest register has a floor, so anything clearing
-    // the first tonal edge renders as a visible tint regardless of density.
-    //
-    // Doing it in both places was measurable: 43% of the rendered ink landed in
-    // the top register, so 焦墨 covered most of the left panel as a slab. What
-    // this curve owes the tones is *spread* — a plume's typical density has to
-    // land in the middle registers, leaving the darkest one to the drop cores.
-    // No lift: at or below linear everywhere, rather than bowed up over it.
-    for (let d = 0.05; d < 1; d += 0.05) expect(inkAlpha(d)).toBeLessThanOrEqual(d + 1e-9);
-    // but the core still gets there
-    expect(inkAlpha(0.95)).toBeGreaterThan(0.9);
+describe('coverage — how much paper the ink covers, not how dark it is', () => {
+  it('saturates early, so its transition is spent at the edge', () => {
+    // This used to be a full-range transfer curve deciding darkness from
+    // density, which meant a density gradient showed as a tonal gradient — and
+    // quantising those gradients drew their level sets as contour rings. Tone
+    // belongs to concentration now. All this owes the ink is a fade where there
+    // is barely any of it, confined to a narrow band at the perimeter.
+    expect(coverage(COVERAGE_FULL)).toBe(1);
+    expect(coverage(0.6)).toBe(1);
+    // and the body of a plume — well past the saturation point — is flat
+    expect(coverage(0.9)).toBe(coverage(0.5));
   });
 
   it('is fed a normalised load, not a clamped one', () => {
-    // The constant that actually carries the spread. A settled plume runs to
-    // about 2.4, so the renderer's old `min(d, 1)` collapsed two thirds of the
-    // ink onto one value — invisible until quantisation painted all of it the
-    // same register. This has to stay above where the plume's bulk sits, or the
-    // plateau comes back.
+    // A settled plume runs to about 2.4, so the renderer's old `min(d, 1)`
+    // collapsed two thirds of the ink onto one value.
     expect(DENSITY_FULL).toBeGreaterThan(1.8);
     expect(DENSITY_FULL).toBeLessThan(3);
   });
@@ -307,18 +304,18 @@ describe('inkAlpha — density spread across the registers', () => {
   it('is monotonic and spans the full range', () => {
     let prev = -1;
     for (let i = 0; i <= 100; i++) {
-      const a = inkAlpha(i / 100);
+      const a = coverage(i / 100);
       expect(a).toBeGreaterThanOrEqual(prev);
       expect(a).toBeGreaterThanOrEqual(0);
       expect(a).toBeLessThanOrEqual(1);
       prev = a;
     }
-    expect(inkAlpha(0)).toBe(0);
-    expect(inkAlpha(1)).toBe(1);
+    expect(coverage(0)).toBe(0);
+    expect(coverage(1)).toBe(1);
   });
 
   it('still discards a whisper, so clean paper stays clean', () => {
-    expect(inkAlpha(0.005)).toBe(0);
+    expect(coverage(0.005)).toBe(0);
   });
 });
 
@@ -330,12 +327,19 @@ describe('visible — mottling, which is not grain', () => {
     return out;
   };
 
-  it('varies broadly across the field', () => {
-    // flat ink reads as one grey shape; real pigment has passages
+  it('varies, but no longer carries the composition', () => {
+    // The bar here used to be 0.15, from when mottling was the only thing
+    // between a smooth diffusion gradient and one flat grey shape. It is applied
+    // after the tones are quantised now, and at that strength it undid them:
+    // multiplying a flat register by 0.28-1.72 smears it back into a gradient,
+    // and the rendered histogram showed three broad humps instead of five peaks.
+    // Structure comes from the concentration field; what is left for this is the
+    // soft unevenness within a single wash.
     const v = mk();
     const mean = v.reduce((s, x) => s + x, 0) / v.length;
     const std = Math.sqrt(v.reduce((s, x) => s + (x - mean) ** 2, 0) / v.length);
-    expect(std / mean).toBeGreaterThan(0.15);
+    expect(std / mean).toBeGreaterThan(0.05);
+    expect(std / mean).toBeLessThan(0.14);
   });
 
   it('is low-frequency — this is the whole distinction from grain', () => {
@@ -594,20 +598,193 @@ describe('dropPlan — 氣韻, the throw', () => {
     expect(corr(drops.map((d) => d.x), drops.map((d) => d.y))).toBeLessThan(0.98);
   });
 
-  it('has a dense head and a thin tail', () => {
+  it('has a broad head and a small tail', () => {
     const third = Math.floor(drops.length / 3);
     const mean = (xs: number[]) => xs.reduce((s, v) => s + v, 0) / xs.length;
-    const head = drops.slice(0, third);
-    const tail = drops.slice(-third);
-    expect(mean(head.map((d) => d.r))).toBeGreaterThan(mean(tail.map((d) => d.r)) * 1.15);
-    expect(mean(head.map((d) => d.amount))).toBeGreaterThan(
-      mean(tail.map((d) => d.amount)) * 1.15,
+    expect(mean(drops.slice(0, third).map((d) => d.r))).toBeGreaterThan(
+      mean(drops.slice(-third).map((d) => d.r)) * 1.15,
     );
+  });
+
+  it('charges each pour by its strength, not its place in the throw', () => {
+    // 濃墨 is loaded ink. Tying charge to position instead left the dark strike
+    // carrying almost no pigment, so the mixing simply outvoted it against the
+    // pale wash it landed in and the top registers never reached the screen.
+    const strong = drops.filter((d) => d.conc > 0.6);
+    const weak = drops.filter((d) => d.conc < 0.4);
+    const mean = (xs: Drop[]) => xs.reduce((s, d) => s + d.amount, 0) / xs.length;
+    expect(strong.length).toBeGreaterThan(0);
+    expect(weak.length).toBeGreaterThan(0);
+    expect(mean(strong)).toBeGreaterThan(mean(weak) * 1.2);
   });
 
   it('spans the axis end to end', () => {
     const s = drops.map((d) => d.x / 288).sort((a, b) => a - b);
     expect(s[0]!).toBeLessThan(0.2);
     expect(s[s.length - 1]!).toBeGreaterThan(0.82);
+  });
+});
+
+describe('墨分五色 as material, not as contour lines', () => {
+  /** A field with three pours of different strength, settled. */
+  function poured(gw = 200, gh = 120) {
+    const f = createField(gw, gh, INK_SEED);
+    const drops = dropPlan(gw, gh, gh * 0.12, gh * 0.84, 3, INK_SEED);
+    for (const d of drops) injectBlob(f, d.x, d.y, d.r, d.amount, d.conc, INK_SEED);
+    for (let i = 0; i < 400; i++) stepInk(f, 1, INK_SEED);
+    return f;
+  }
+
+  /** Which register a cell reads as, or -1 for bare paper. */
+  const registerOf = (f: InkField, i: number) => {
+    if (f.pig[i]! + f.dep[i]! < 0.05) return -1;
+    const q = fiveTones(f.conc[i]!);
+    let best = 0;
+    for (let k = 1; k < TONES.length; k++)
+      if (Math.abs(q - TONES[k]!) < Math.abs(q - TONES[best]!)) best = k;
+    return best;
+  };
+
+  /** Connected regions of constant register, largest first. */
+  function regions(f: InkField) {
+    const { gw, gh } = f;
+    const lab = new Int32Array(gw * gh).fill(-1);
+    const sizes: number[] = [];
+    const stack: number[] = [];
+    for (let s0 = 0; s0 < gw * gh; s0++) {
+      if (lab[s0] !== -1) continue;
+      const v = registerOf(f, s0);
+      if (v < 0) { lab[s0] = -2; continue; }
+      lab[s0] = sizes.length;
+      stack.length = 0;
+      stack.push(s0);
+      let n = 0;
+      while (stack.length) {
+        const i = stack.pop()!;
+        n++;
+        const x = i % gw;
+        const y = (i / gw) | 0;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) continue;
+          const j = ny * gw + nx;
+          if (lab[j] !== -1 || registerOf(f, j) !== v) continue;
+          lab[j] = sizes.length;
+          stack.push(j);
+        }
+      }
+      sizes.push(n);
+    }
+    return sizes.sort((a, b) => b - a);
+  }
+
+  it('the ink is a few territories, not a contour map', () => {
+    // THE assertion, and it took two attempts to find one that works.
+    //
+    // The obvious test — walk rays outward and check the tone sequence is not
+    // monotone — measures nothing. Both pipelines score high on it, and the
+    // *contoured* one scores higher (0.98 against 0.69), because `mottleAt`
+    // swings hard enough to decorrelate register from radius. Rings that are not
+    // concentric are still rings.
+    //
+    // What actually separates a contour map from 破墨 is how much boundary there
+    // is. Contours are many thin closed curves; material fronts are a few large
+    // territories meeting along a short seam. Measured on the same field, the
+    // build this replaced gives 211 regions holding 51% of the ink in its
+    // largest three, against 59 regions and 89% here.
+    const f = poured();
+    const sizes = regions(f);
+    const inked = sizes.reduce((a, b) => a + b, 0);
+    expect(sizes.length).toBeLessThan(120);
+    expect(sizes.slice(0, 3).reduce((a, b) => a + b, 0) / inked).toBeGreaterThan(0.7);
+  });
+
+  it('tone is flat inside a pour', () => {
+    // The other half of "not a contour map": between the fronts there must be
+    // nothing happening. A quantised smooth field steps constantly, because its
+    // input never stops sliding.
+    const f = poured();
+    let pairs = 0;
+    let same = 0;
+    for (let y = 1; y < f.gh - 1; y++) {
+      for (let x = 1; x < f.gw - 1; x++) {
+        const i = y * f.gw + x;
+        const a = registerOf(f, i);
+        if (a < 0) continue;
+        const b = registerOf(f, i + 1);
+        if (b < 0) continue;
+        pairs++;
+        if (a === b) same++;
+      }
+    }
+    expect(pairs).toBeGreaterThan(500);
+    expect(same / pairs).toBeGreaterThan(0.9);
+  });
+
+  it('pours are charged at the registers, and not in descending order', () => {
+    const drops = dropPlan(200, 120, 14, 100, 5, INK_SEED);
+    for (const d of drops) expect(TONES).toContain(d.conc);
+    // Steadily weakening pours would lay a gradient along the throw, which is
+    // the thing being escaped — the darkest ink has to sit next to the palest.
+    expect(drops.some((d, i) => i > 0 && d.conc > drops[i - 1]!.conc)).toBe(true);
+  });
+});
+
+describe('mixConc — two inks meeting', () => {
+  it('never leaves the range of its inputs', () => {
+    for (let i = 0; i < 200; i++) {
+      const a = Math.random();
+      const b = Math.random();
+      const v = mixConc(a, Math.random() * 3, b, Math.random() * 3);
+      expect(v).toBeGreaterThanOrEqual(Math.min(a, b) - 1e-9);
+      expect(v).toBeLessThanOrEqual(Math.max(a, b) + 1e-9);
+    }
+  });
+
+  it('weights by mass — a trickle cannot bleach a loaded cell', () => {
+    expect(mixConc(1, 5, 0, 0.01)).toBeGreaterThan(0.99);
+    expect(mixConc(1, 0.01, 0, 5)).toBeLessThan(0.01);
+  });
+
+  it('takes the incoming ink when the cell is empty', () => {
+    expect(mixConc(0, 0, 0.7, 1)).toBeCloseTo(0.7, 9);
+  });
+});
+
+describe('concentration is transported, never diffused', () => {
+  it('stays put where no pigment moves', () => {
+    // If this ever fails, something is smoothing conc on its own — which would
+    // turn it back into a gradient and put the contour rings straight back.
+    const f = createField(40, 40, INK_SEED);
+    injectBlob(f, 20, 20, 6, 1, 0.55, INK_SEED);
+    const far = 3 * f.gw + 3;
+    expect(f.conc[far]).toBe(0);
+    for (let i = 0; i < 60; i++) stepInk(f, 1, INK_SEED);
+    expect(f.conc[far]).toBe(0);
+  });
+
+  it('carries strength outward with the ink', () => {
+    const f = createField(60, 60, INK_SEED);
+    injectBlob(f, 30, 30, 6, 1, 0.78, INK_SEED);
+    for (let i = 0; i < 80; i++) stepInk(f, 1, INK_SEED);
+    // somewhere the ink has reached that it had not at injection
+    let reached = 0;
+    for (let i = 0; i < f.conc.length; i++) {
+      if (f.pig[i]! + f.dep[i]! > 0.02 && f.conc[i]! > 0.3) reached++;
+    }
+    expect(reached).toBeGreaterThan(200);
+    // and nothing anywhere is stronger than the ink that was poured
+    for (const c of f.conc) expect(c).toBeLessThanOrEqual(0.78 + CONC_SPREAD + 1e-6);
+  });
+
+  it('is deterministic', () => {
+    const run = () => {
+      const f = createField(40, 40, INK_SEED);
+      injectBlob(f, 20, 20, 6, 1, 0.55, INK_SEED);
+      for (let i = 0; i < 40; i++) stepInk(f, 1, INK_SEED);
+      return Array.from(f.conc);
+    };
+    expect(run()).toEqual(run());
   });
 });

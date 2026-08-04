@@ -26,15 +26,16 @@
   } from '@/lib/ink';
   import {
     blurField,
+    coverage,
     createField,
     DENSITY_FULL,
     dropPlan,
     fiveTones,
     injectBlob,
-    inkAlpha,
     mottleAt,
     resetField,
     stepInk,
+    TONES,
     visible,
     voidAt,
     type Drop,
@@ -128,7 +129,7 @@
     if (!field || front <= injectedTo) return;
     for (const d of drops) {
       if (d.at > injectedTo && d.at <= front) {
-        injectBlob(field, d.x, d.y, d.r, d.amount);
+        injectBlob(field, d.x, d.y, d.r, d.amount, d.conc, INK_SEED);
       }
     }
     injectedTo = front;
@@ -191,25 +192,25 @@
     const g = Number(parts[1]);
     const b = Number(parts[2]);
     const gwid = field.gw;
+    const conc = field.conc;
     for (let i = 0, p = 0; i < dep.length; i++, p += 4) {
       const d = dep[i]!;
-      // The order here is the whole 潑墨 reading, and each step depends on the
-      // one before it:
+      // Tone and coverage are two different questions, and answering them with
+      // one number is what drew contour lines. `conc` says how strong the ink
+      // here is — 焦 濃 重 淡 清 — and that is what gets quantised, because it is
+      // piecewise-constant already: flat across one pour, stepping where a
+      // different pour's ink reached. Those steps are material fronts, which is
+      // what 破墨 boundaries are. Density only says how much ink is present,
+      // which decides whether it covers the paper at all.
       //
-      //   inkAfterDrying  thins the faintest pigment first, so the wash dries
-      //                   from its edges inward rather than dimming as a whole
-      //   inkAlpha        density → opacity
-      //   mottleAt        broad passages of heavier and lighter ink. After the
-      //                   curve, not before: the gamma would otherwise compress
-      //                   a wide swing in pigment into a narrow one in opacity
-      //   voidAt          留白 — reserved whites, punched out before quantising
-      //                   so each void keeps a tonal rim instead of a linear fade
-      //   fiveTones       墨分五色 — quantise the result. This is last because it
-      //                   needs something broad and continuous underneath it to
-      //                   bite on, and mottleAt is what supplies that.
+      // **The product is never quantised.** Quantising `tone × coverage` would
+      // put every iso-alpha curve back on the page — that was the bug. Coverage
+      // multiplies afterwards, and saturates early enough that its transition is
+      // spent at the ink's edge rather than across its body.
       //
-      // Drying therefore steps the ink down through the registers rather than
-      // fading it, which is what ink actually does.
+      // Drying therefore shrinks the ink inward from its edges instead of
+      // stepping its tone down. That is the better reading anyway: 墨 that dries
+      // does not become weaker ink, it covers less paper.
       let a = 0;
       if (d > 0) {
         const x = i % gwid;
@@ -218,11 +219,19 @@
         // runs past 2.4 here, so clamping made two thirds of the ink
         // numerically identical before any of the steps below could see it.
         const load = d >= DENSITY_FULL ? 1 : d / DENSITY_FULL;
-        a = fiveTones(
-          inkAlpha(inkAfterDrying(load, presence)) *
-            mottleAt(x, y, INK_SEED) *
-            voidAt(x, y, INK_SEED),
-        );
+        // Floored at 清. There is no register below "the palest wash you can
+        // still see", so ink that exists reads as at least that — and letting
+        // dilution fall through to nothing had a specific cost: the advancing
+        // front of a bleed is always the most dilute part of it, so the plume's
+        // leading edge rendered as blank paper and the ink looked like it had
+        // stopped spreading. The drip check caught it as coverage going
+        // *backwards* while the ink was still travelling.
+        const c = conc[i]!;
+        a =
+          fiveTones(c < TONES[0]! ? TONES[0]! : c) *
+          coverage(inkAfterDrying(load, presence)) *
+          mottleAt(x, y, INK_SEED) *
+          voidAt(x, y, INK_SEED);
       }
       data[p] = r;
       data[p + 1] = g;
@@ -308,7 +317,8 @@
     if (x < 0 || y < 0 || x > field.gw || y > field.gh) return;
     // A drip is real ink now: it wets the paper and then bleeds outward on its
     // own, rather than being a shape that fades on a timer.
-    injectBlob(field, x, y, 1.4 + Math.random() * 1.8, 0.85);
+    // A fresh drip is undiluted 焦墨 — it has not met anything to weaken it.
+    injectBlob(field, x, y, 1.4 + Math.random() * 1.8, 0.85, 1, INK_SEED);
     dripCount++;
     sync();
   }
