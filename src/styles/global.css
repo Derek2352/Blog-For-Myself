@@ -268,10 +268,14 @@
        Keeping words legible is now a *tone* ceiling rather than a hole in the
        layer — see `data-ink-reserve` in src/components/InkWash.astro — so the
        mass can run right across the hero and merely thin where it crosses text.
-       All that is left here is a short fade so the ink is not visibly guillotined
-       by the section's own edges. */
-    -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 4%, #000 93%, transparent 100%);
-    mask-image: linear-gradient(to right, transparent 0%, #000 4%, #000 93%, transparent 100%);
+
+       There is no mask at all any more. A short edge fade replaced the old one,
+       to stop the ink looking guillotined by the section's boundary — but that
+       was standing in for the real problem, which is that the ink *stopped* at
+       the boundary. The simulation now runs past the frame on the left and
+       below, so the mark genuinely continues off-canvas, and fading it out at
+       the edge would destroy exactly the effect the padding buys: a fragment
+       has to meet the frame at full strength. */
   }
 
   /* category tab strip: two deliberate tiers on wide screens, one scrolling

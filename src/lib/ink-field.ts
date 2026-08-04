@@ -52,6 +52,17 @@ export interface InkField {
   fibre: Float32Array;
   /** What the renderer shows: suspended plus settled. */
   vis: Float32Array;
+  /**
+   * The drift, precomputed per cell.
+   *
+   * `flowBias` is a pure function of position and seed, so it returns the same
+   * vector on every tick for the life of the field — and it was being recomputed
+   * for every cell on every tick, six noise evaluations at a time. At eight
+   * ticks a frame over a padded field that came to roughly two million noise
+   * evaluations per frame, which is where the frame budget was going.
+   */
+  biasX: Float32Array;
+  biasY: Float32Array;
   /** Scratch buffers, so a step allocates nothing. */
   tmpWet: Float32Array;
   tmpPig: Float32Array;
@@ -139,8 +150,13 @@ export const DRIFT_FLOOR = 0.15;
 export function createField(gw: number, gh: number, seed: number): InkField {
   const n = gw * gh;
   const fibre = new Float32Array(n);
+  const biasX = new Float32Array(n);
+  const biasY = new Float32Array(n);
   for (let y = 0; y < gh; y++) {
     for (let x = 0; x < gw; x++) {
+      const b = flowBias(x, y, seed);
+      biasX[y * gw + x] = b.dx;
+      biasY[y * gw + x] = b.dy;
       // Nearly uniform, and deliberately so. This was widened to a 9:1 ratio to
       // channel the flow into fingers, which worked and was the wrong idea:
       // there is no paper in a bowl of water. Those channels are what made the
@@ -159,6 +175,8 @@ export function createField(gw: number, gh: number, seed: number): InkField {
     dep: new Float32Array(n),
     conc: new Float32Array(n),
     fibre,
+    biasX,
+    biasY,
     vis: new Float32Array(n),
     tmpWet: new Float32Array(n),
     tmpPig: new Float32Array(n),
@@ -528,6 +546,7 @@ export function spatterPlan(
   bandBottom: number,
   count: number,
   seed: number,
+  sizeRef = gh,
 ): Drop[] {
   const rnd = mulberry32(seed + 40503);
   const band = bandBottom - bandTop;
@@ -547,7 +566,7 @@ export function spatterPlan(
       // Small, but not so small that diffusion erases them. These sit on the
       // paper for the whole hold; at a couple of cells across they had spread
       // to nothing long before anyone saw them.
-      r: gh * (0.03 + Math.pow(rnd(), 2) * 0.055) * (1 - t * 0.35),
+      r: sizeRef * (0.03 + Math.pow(rnd(), 2) * 0.055) * (1 - t * 0.35),
       // Heavily charged for their size — a droplet is a bead of undiluted ink,
       // and it needs the mass to still be there after it has bled a little.
       amount: 0.85 + rnd() * 0.4,
@@ -594,7 +613,7 @@ export const ADVECT_BIAS = 0.85;
  * swirl is deliberately fast.
  */
 export function advectPig(f: InkField, seed: number, dt = 1): void {
-  const { gw, gh, wet, pig, conc, tmpPig, tmpConc } = f;
+  const { gw, gh, wet, pig, conc, biasX, biasY, tmpPig, tmpConc } = f;
   tmpPig.set(pig);
   tmpConc.set(conc);
   let before = 0;
@@ -604,9 +623,8 @@ export function advectPig(f: InkField, seed: number, dt = 1): void {
       const i = y * gw + x;
       // only where there is water to carry it
       if (wet[i]! <= 0.002) continue;
-      const b = flowBias(x, y, seed);
-      const sx = x - b.dx * SWIRL * dt;
-      const sy = y - b.dy * SWIRL * dt;
+      const sx = x - biasX[i]! * SWIRL * dt;
+      const sy = y - biasY[i]! * SWIRL * dt;
       const x0 = Math.floor(sx);
       const y0 = Math.floor(sy);
       if (x0 < 0 || y0 < 0 || x0 >= gw - 1 || y0 >= gh - 1) continue;
@@ -666,7 +684,7 @@ export const SWIRL = 0.4;
  * do by hand.
  */
 export function stepInk(f: InkField, dt = 1, seed = 0): void {
-  const { gw, gh, wet, pig, dep, conc, fibre, tmpWet, tmpPig, tmpConc } = f;
+  const { gw, gh, wet, pig, dep, conc, fibre, biasX, biasY, tmpWet, tmpPig, tmpConc } = f;
   tmpWet.set(wet);
   tmpPig.set(pig);
   tmpConc.set(conc);
@@ -691,27 +709,28 @@ export function stepInk(f: InkField, dt = 1, seed = 0): void {
       // a cell drain faster or slower but equally in every direction, so the
       // front stays a disc however much contrast the paper has. Gating by where
       // the water is going is what channels it, and channelling is fingering.
-      const bias = flowBias(x, y, seed);
+      const bdx = biasX[i]!;
+      const bdy = biasY[i]!;
       let count = 0;
       let total = 0;
       if (x > 0) {
         const j = i - 1;
-        const d = (w - tmpWet[j]!) * (1 + DRIFT * -bias.dx) * fibre[j]!;
+        const d = (w - tmpWet[j]!) * (1 + DRIFT * -bdx) * fibre[j]!;
         if (d > 0) { nb[count] = j; share[count] = d; total += d; count++; }
       }
       if (x < gw - 1) {
         const j = i + 1;
-        const d = (w - tmpWet[j]!) * (1 + DRIFT * bias.dx) * fibre[j]!;
+        const d = (w - tmpWet[j]!) * (1 + DRIFT * bdx) * fibre[j]!;
         if (d > 0) { nb[count] = j; share[count] = d; total += d; count++; }
       }
       if (y > 0) {
         const j = i - gw;
-        const d = (w - tmpWet[j]!) * (1 + DRIFT * -bias.dy) * fibre[j]!;
+        const d = (w - tmpWet[j]!) * (1 + DRIFT * -bdy) * fibre[j]!;
         if (d > 0) { nb[count] = j; share[count] = d; total += d; count++; }
       }
       if (y < gh - 1) {
         const j = i + gw;
-        const d = (w - tmpWet[j]!) * (1 + DRIFT * bias.dy) * fibre[j]!;
+        const d = (w - tmpWet[j]!) * (1 + DRIFT * bdy) * fibre[j]!;
         if (d > 0) { nb[count] = j; share[count] = d; total += d; count++; }
       }
       if (count === 0 || total <= 0) continue;
@@ -836,20 +855,24 @@ export const TONE_ORDER = [0, 2, 4, 1, 3];
 /**
  * Where the throw begins and ends, as fractions of the box it is given.
  *
- * Aimed at the part of the hero anyone can actually see. The photo card is
- * opaque and covers the right half down to about four fifths of the height, so
- * an axis running 0.16 → 0.88 across the full width — which is what this was —
- * put most of the mark, and most of its 焦墨, behind the picture. Measured, that
- * was 10% of the hero above 0.5 alpha with hardly any of it visible.
+ * The box is now the **padded field**, which is larger than the canvas — see
+ * MARGIN_X/MARGIN_Y in src/components/InkWash.astro. That is what lets the
+ * throw start at 0.88 of the height and 0.08 of the width and still be *outside
+ * the picture*: those coordinates fall in the margin, below and left of the
+ * visible window.
  *
- * So the throw now dives: it starts high on the open left, and exits low enough
- * to pass *under* the card rather than behind it. Sweeping past the picture
- * reads as a bigger gesture than staying in the box beside it.
+ * So the head — the biggest, wettest pour — never appears. What reaches the
+ * canvas is the upper-right arc of its spread, which is the difference between
+ * a mark on a page and a fragment of something larger.
+ *
+ * It runs upward for the same reason. The dense end belongs off the bottom-left
+ * corner, thinning as it climbs toward the text, which the tone ceiling already
+ * protects.
  */
-export const AXIS_X0 = 0.06;
+export const AXIS_X0 = 0.1;
 export const AXIS_X1 = 0.66;
-export const AXIS_Y0 = 0.12;
-export const AXIS_Y1 = 0.92;
+export const AXIS_Y0 = 0.9;
+export const AXIS_Y1 = 0.33;
 
 /**
  * Where the ink falls.
@@ -873,6 +896,12 @@ export const AXIS_Y1 = 0.92;
  * out. Jitter is generous enough that the axis is felt rather than drawn — a
  * clean line of drops would read as a stamp.
  *
+ * `sizeRef` exists because placement and scale stopped being the same thing.
+ * Radii were taken from `gh`, which was fine while the field *was* the canvas —
+ * then the field grew a margin on every side so the throw could be sourced
+ * off-frame, and every drop silently grew with it, to 648px across on a 519px
+ * hero. Position belongs to the padded field; size belongs to the window.
+ *
  * Deterministic, so the composition is chosen rather than rolled.
  */
 export function dropPlan(
@@ -882,6 +911,7 @@ export function dropPlan(
   bandBottom: number,
   count: number,
   seed: number,
+  sizeRef = gh,
 ): Drop[] {
   const rnd = mulberry32(seed + 8191);
   const drops: Drop[] = [];
@@ -914,7 +944,7 @@ export function dropPlan(
       // small drops read as dark blobs on empty paper however far they spread.
       // A broad drop begins flat, and diffusion only has to soften its edge.
       // The tail shrinks, but never below a size that still spreads flat.
-      r: gh * (0.46 + p * p * 0.3) * (0.42 + fall * 0.58),
+      r: sizeRef * (0.46 + p * p * 0.3) * (0.42 + fall * 0.58),
       // Charge follows *strength*, not position. 濃墨 is loaded ink — a heavy
       // brush of it, not a trace — and the mass matters as much as the number:
       // a strong pour carrying little pigment is simply outvoted when the

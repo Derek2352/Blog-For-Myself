@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import {
   DENSITY_FULL,
   DEPOSIT_RATE,
@@ -17,6 +17,7 @@ import {
   CONC_SPREAD,
   injectStreak,
   spatterPlan,
+  throwAngle,
   TONE_CEILING,
   fiveTones,
   mixConc,
@@ -601,13 +602,17 @@ describe('dropPlan — 氣韻, the throw', () => {
   it('runs along a diagonal, not a horizontal band', () => {
     // The old plan jittered y symmetrically about the band's middle, which is
     // an isotropic cloud — the one thing a thrown mark is not.
-    expect(corr(drops.map((d) => d.x), drops.map((d) => d.y))).toBeGreaterThan(0.7);
+    //
+    // The sign is negative because the throw now climbs: it is sourced outside
+    // the frame's bottom-left corner and travels up and to the right, and screen
+    // y grows downward. Strength of the correlation is what is being asserted.
+    expect(corr(drops.map((d) => d.x), drops.map((d) => d.y))).toBeLessThan(-0.7);
   });
 
   it('is felt rather than drawn', () => {
     // A clean line of drops reads as a stamp. The jitter has to be wide enough
     // that the axis is an impression, so the correlation must be short of 1.
-    expect(corr(drops.map((d) => d.x), drops.map((d) => d.y))).toBeLessThan(0.98);
+    expect(Math.abs(corr(drops.map((d) => d.x), drops.map((d) => d.y)))).toBeLessThan(0.98);
   });
 
   it('has a broad head and a small tail', () => {
@@ -916,5 +921,107 @@ describe('coverage is near-binary', () => {
       if (v > 0.02 && v < 0.98) mid++;
     }
     expect(mid / n).toBeLessThan(0.06);
+  });
+});
+
+describe('framing — the source is outside the picture', () => {
+  /**
+   * The component's arrangement: a field padded on the left and below, with the
+   * visible canvas a window into its top-right. Mirrors MARGIN_X / MARGIN_Y in
+   * src/components/InkWash.astro.
+   */
+  const WIN_W = 200;
+  const WIN_H = 110;
+  const OFF_X = Math.round(WIN_W * 0.38);
+  const FW = WIN_W + OFF_X;
+  const FH = WIN_H + Math.round(WIN_H * 0.42);
+
+  // Settled once, in beforeAll with its own budget: this is a 276x156 field
+  // stepped 400 times. Building it inside the first assertion made whichever
+  // test happened to run first blow the default 5s timeout, which reads as that
+  // test failing rather than as the fixture being expensive.
+  let cached: InkField;
+  beforeAll(() => {
+    const f = createField(FW, FH, INK_SEED);
+    for (const d of dropPlan(FW, FH, 0, FH, 3, INK_SEED)) {
+      injectStreak(f, d.x, d.y, d.r, throwAngle(FW, FH), 2.3, d.amount, d.conc, INK_SEED);
+    }
+    for (let i = 0; i < 400; i++) stepInk(f, 1, INK_SEED);
+    cached = f;
+  }, 60000);
+  const thrown = () => cached;
+
+  const inWindow = (x: number, y: number) => x >= OFF_X && x < FW && y >= 0 && y < WIN_H;
+
+  it('places the head off-frame — the plain statement of the whole change', () => {
+    // Every drop used to land inside the canvas, so what showed was a whole
+    // blob, rounded far side and all. A complete shape centred in view reads as
+    // an object on a page; a fragment entering from off-frame reads as scale.
+    const head = dropPlan(FW, FH, 0, FH, 3, INK_SEED)[0]!;
+    expect(inWindow(head.x, head.y)).toBe(false);
+    // and specifically below and to the left, which is where the throw starts
+    expect(head.x).toBeLessThan(OFF_X);
+    expect(head.y).toBeGreaterThan(WIN_H);
+  });
+
+  it('spends a real share of the mark out of shot', () => {
+    // The direct statement of "you are seeing part of something larger".
+    //
+    // This first asserted that the *densest cell* was off-frame, which was the
+    // wrong proxy and failed honestly: pours run light-to-dark (see TONE_ORDER,
+    // which is 破墨法 and also what keeps the top registers from being diluted
+    // away), and charge follows strength — so the heaviest ink is the last
+    // pour, which lands in frame by design. What framing actually needs is that
+    // a substantial part of the mark never appears, not that any particular
+    // pour is the one hidden.
+    const f = thrown();
+    const vis = visible(f);
+    let inside = 0;
+    let outside = 0;
+    for (let y = 0; y < FH; y++) {
+      for (let x = 0; x < FW; x++) {
+        const v = vis[y * FW + x]!;
+        if (inWindow(x, y)) inside += v;
+        else outside += v;
+      }
+    }
+    expect(outside / (inside + outside)).toBeGreaterThan(0.25);
+  });
+
+  it('meets the frame at full strength — a fragment does not fade at the edge', () => {
+    const f = thrown();
+    const vis = visible(f);
+    // the window's left column and bottom row: where the mark crosses out of shot
+    let leftMax = 0;
+    for (let y = 0; y < WIN_H; y++) leftMax = Math.max(leftMax, vis[y * FW + OFF_X]!);
+    let bottomMax = 0;
+    for (let x = OFF_X; x < FW; x++) bottomMax = Math.max(bottomMax, vis[(WIN_H - 1) * FW + x]!);
+    expect(leftMax).toBeGreaterThan(0.5);
+    expect(bottomMax).toBeGreaterThan(0.5);
+  });
+
+  it('banks no ink against the window edge', () => {
+    // The field's own boundary is a no-flux wall, so ink piles against it. The
+    // padding exists to move that wall out of shot; if the ridge showed up at
+    // the window's edge instead, the margin would be doing nothing.
+    const f = thrown();
+    const vis = visible(f);
+    const colMean = (x: number) => {
+      let s = 0;
+      for (let y = 0; y < WIN_H; y++) s += vis[y * FW + x]!;
+      return s / WIN_H;
+    };
+    // no spike at the frame relative to just inside it
+    expect(colMean(OFF_X)).toBeLessThan(colMean(OFF_X + 6) * 1.35);
+  });
+
+  it('still puts ink inside the window — an off-frame source is not an empty hero', () => {
+    const f = thrown();
+    const vis = visible(f);
+    let inked = 0;
+    for (let y = 0; y < WIN_H; y++) {
+      for (let x = OFF_X; x < FW; x++) if (vis[y * FW + x]! > 0.05) inked++;
+    }
+    expect(inked / (WIN_H * WIN_W)).toBeGreaterThan(0.15);
   });
 });
