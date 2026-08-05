@@ -39,6 +39,7 @@ import {
   voidAt,
   VOID_SCALE,
   reseedField,
+  sampleSmooth,
   resetField,
   stepInk,
   visible,
@@ -1416,5 +1417,75 @@ describe('reseedField — a fresh mark on the same buffers', () => {
     }
     expect(lo).toBeGreaterThan(0.8);
     expect(hi / lo).toBeLessThan(1.3);
+  });
+});
+
+describe('sampleSmooth — deciding tone per pixel, not per cell', () => {
+  const gw = 8;
+  const gh = 8;
+  const ramp = new Float32Array(gw * gh);
+  for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) ramp[y * gw + x] = x / (gw - 1);
+
+  it('is exact at cell centres', () => {
+    for (let y = 0; y < gh; y++) {
+      for (let x = 0; x < gw; x++) {
+        expect(sampleSmooth(ramp, gw, gh, x, y)).toBeCloseTo(ramp[y * gw + x]!, 6);
+      }
+    }
+  });
+
+  it('clamps rather than wrapping or reading out of bounds', () => {
+    for (const [x, y] of [[-5, -5], [gw + 9, gh + 9], [-1, 3], [3, -1]] as const) {
+      const v = sampleSmooth(ramp, gw, gh, x, y);
+      expect(Number.isFinite(v)).toBe(true);
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('stays within the range of the cells it reads', () => {
+    const noisy = new Float32Array(gw * gh);
+    for (let i = 0; i < noisy.length; i++) noisy[i] = (i * 37) % 11 / 10;
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const v of noisy) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    for (let y = 0; y < gh - 1; y += 0.25) {
+      for (let x = 0; x < gw - 1; x += 0.25) {
+        const v = sampleSmooth(noisy, gw, gh, x, y);
+        expect(v).toBeGreaterThanOrEqual(lo - 1e-6);
+        expect(v).toBeLessThanOrEqual(hi + 1e-6);
+      }
+    }
+  });
+
+  it('is smooth across cell boundaries, which plain bilinear is not', () => {
+    // A threshold over a C0 field comes out as a polyline with its vertices on
+    // the cell corners — a subtler version of the staircase this exists to
+    // remove. Smoothstepped weights make the derivative continuous, so the
+    // second difference stays bounded where a linear blend would kink.
+    const step = 0.02;
+    let worst = 0;
+    for (let x = 1; x < gw - 2; x += step) {
+      const a = sampleSmooth(ramp, gw, gh, x - step, 3.5);
+      const bb = sampleSmooth(ramp, gw, gh, x, 3.5);
+      const c = sampleSmooth(ramp, gw, gh, x + step, 3.5);
+      worst = Math.max(worst, Math.abs(a - 2 * bb + c));
+    }
+    expect(worst).toBeLessThan(0.01);
+  });
+
+  it('interpolates — a threshold lands between cells, not on them', () => {
+    // The point of the whole change: a silhouette boundary must be able to fall
+    // anywhere, not only on a cell edge.
+    const crossings = new Set<string>();
+    for (let y = 0; y < gh - 1; y += 0.5) {
+      let prev = sampleSmooth(ramp, gw, gh, 0, y);
+      for (let x = 0.05; x < gw - 1; x += 0.05) {
+        const v = sampleSmooth(ramp, gw, gh, x, y);
+        if (prev < 0.5 && v >= 0.5) crossings.add(x.toFixed(2));
+        prev = v;
+      }
+    }
+    for (const c of crossings) expect(Number(c) % 1).not.toBe(0);
   });
 });

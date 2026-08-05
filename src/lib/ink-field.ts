@@ -1126,6 +1126,49 @@ export function haloAlpha(soak: number): number {
   return TONES[0]! * HALO_STRENGTH * (t * t * (3 - 2 * t));
 }
 
+/**
+ * Sample a cell field at fractional coordinates, smoothly.
+ *
+ * The renderer used to evaluate one alpha per *simulation cell* and let
+ * `drawImage` upscale the result, which put every tonal step and the whole
+ * silhouette on the cell grid — a 4px staircase around the ink, plainly visible.
+ * Interpolating the field first and deciding tone per output pixel moves those
+ * boundaries onto the ink instead.
+ *
+ * Weights are smoothstepped rather than linear. Plain bilinear is only C0, so a
+ * threshold across it comes out as a polyline with its vertices on the cell
+ * corners — a subtler version of the same artefact. This is the trick
+ * `valueNoise2` already uses on its lattice, for the same reason.
+ */
+export function sampleSmooth(
+  a: Float32Array,
+  gw: number,
+  gh: number,
+  x: number,
+  y: number,
+): number {
+  const cx = x < 0 ? 0 : x > gw - 1 ? gw - 1 : x;
+  const cy = y < 0 ? 0 : y > gh - 1 ? gh - 1 : y;
+  const ix = Math.floor(cx);
+  const iy = Math.floor(cy);
+  const jx = ix + 1 > gw - 1 ? gw - 1 : ix + 1;
+  const jy = iy + 1 > gh - 1 ? gh - 1 : iy + 1;
+  const fx = cx - ix;
+  const fy = cy - iy;
+  const ux = fx * fx * (3 - 2 * fx);
+  const uy = fy * fy * (3 - 2 * fy);
+  const i00 = iy * gw + ix;
+  const i10 = iy * gw + jx;
+  const i01 = jy * gw + ix;
+  const i11 = jy * gw + jx;
+  return (
+    a[i00]! * (1 - ux) * (1 - uy) +
+    a[i10]! * ux * (1 - uy) +
+    a[i01]! * (1 - ux) * uy +
+    a[i11]! * ux * uy
+  );
+}
+
 /** The throw's direction in radians, for a box of the given proportions. */
 export function throwAngle(gw: number, band: number): number {
   return Math.atan2((AXIS_Y1 - AXIS_Y0) * band, (AXIS_X1 - AXIS_X0) * gw);

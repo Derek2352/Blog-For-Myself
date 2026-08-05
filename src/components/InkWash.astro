@@ -38,6 +38,7 @@
     injectBlob,
     injectStreak,
     mottleAt,
+    sampleSmooth,
     reseedField,
     resetField,
     stepInk,
@@ -63,8 +64,17 @@
    * 0.024) and lost two of the four detached satellites.
    */
   const CELL = 4;
-  /** Ink moves slowly; 60fps would buy nothing and cost battery. */
-  const FRAME_MS = 1000 / 15;
+  /**
+   * Ink moves slowly; 60fps would buy nothing and cost battery.
+   *
+   * 10 rather than 15, to pay for deciding tone per output pixel instead of per
+   * cell — that is what took the staircase off the ink's edge, and it cost about
+   * 40ms a frame, which 15fps had no room for. Fewer, longer frames is the right
+   * trade for a wash: the ink advances at the same rate per second because TICKS
+   * rose to match, so only the repaint rate changed, and the mark is slow enough
+   * that nobody can see the difference between 10 and 15.
+   */
+  const FRAME_MS = 1000 / 10;
   /** How long the rain takes to fall across the sheet. */
   const INJECT_MS = 2200;
   /**
@@ -121,10 +131,26 @@
   const RESERVE_FEATHER = 44;
   /** How far that fade's reach wanders, so its edge is not the box's edge. */
   const RESERVE_WANDER = 0.75;
+  /**
+   * Output pixels per simulation cell, per axis.
+   *
+   * The silhouette and the tonal steps are decided per *output* pixel now, not
+   * per cell, so this is what takes the 4px staircase off the ink's edge. 2
+   * rather than 4: it removes the visible facets while leaving a 2x upscale for
+   * `drawImage` to smooth, and full resolution would be four times the per-pixel
+   * work for a difference the blur and the upscale hide anyway.
+   */
+  const SUPERSAMPLE = 2;
   /** How far the main pours are stretched along the throw. */
   const ELONGATION = 2.3;
-  /** Simulation ticks per painted frame. More is faster ink, not smoother. */
-  const TICKS = 8;
+  /**
+   * Simulation ticks per painted frame. More is faster ink, not smoother.
+   *
+   * 12 at 10fps is 120 ticks a second, exactly what 8 at 15fps was. The ink's
+   * pace is a property of ticks per second, not per frame, so this has to move
+   * whenever FRAME_MS does or the whole animation changes speed.
+   */
+  const TICKS = 12;
   /** Hard cap on live cursor drips, so a fast scribble stays bounded. */
   const MAX_DRIPS = 26;
   /** Minimum travel between drips, in CSS pixels. */
@@ -185,6 +211,7 @@
     if (!field) return;
     seed = rollSeed();
     dropCount = DROPS_MIN + Math.floor(mulberry32(seed + 6421)() * (DROPS_MAX - DROPS_MIN + 1));
+    buildPaper(field.gw, field.gh);
     if (reseed) {
       reseedField(field, seed);
       if (canvas) buildReserve(field.gw, canvas.getBoundingClientRect());
@@ -231,6 +258,18 @@
   let drops: Drop[] = [];
   /** Per-cell weight for the text tone ceiling — see buildReserve. */
   let reserve: Float32Array | null = null;
+  /**
+   * The paper's appearance, precomputed per cell: mottling times 留白.
+   *
+   * Both are pure functions of position and seed, so they are the same on every
+   * frame of a pour — and they were being recomputed for every cell on every
+   * frame, four noise evaluations at a time. That is ~150k wasted noise samples
+   * a frame, and paying for them is what makes rendering above cell resolution
+   * affordable. Same reasoning as caching flowBias on the field.
+   */
+  let paper: Float32Array | null = null;
+  /** 留白 alone — the halo is modulated by the voids but not by the mottling. */
+  let voids: Float32Array | null = null;
   /** The throw's direction, in radians. */
   let axis = 0;
   /** The visible window's origin within the (larger) field, in cells. */
@@ -357,28 +396,24 @@
     // Two loops, not one flat pass: the canvas is a *window* into a field that
     // extends past it on the left and below. Walking the field flat would paint
     // the margins — the part of the plume that is deliberately out of shot.
-    for (let y = 0, p = 0; y < winH; y++) {
-      for (let x = 0; x < winW; x++, p += 4) {
-        const fx = x + offX;
-        const fy = y + offY;
-        const i = fy * fw + fx;
-        const d = dep[i]!;
-        // Tone and coverage are two different questions, and answering them
-        // with one number is what drew contour lines. `conc` says how strong
-        // the ink here is — 焦 濃 重 淡 清 — and that is what gets quantised,
-        // because it is piecewise-constant already: flat across one pour,
-        // stepping where a different pour's ink reached. Those steps are
-        // material fronts, which is what 破墨 boundaries are. Density only says
-        // how much ink is present, which decides whether it covers the paper.
-        //
-        // **The product is never quantised.** Quantising `tone × coverage`
-        // would put every iso-alpha curve back on the page — that was the bug.
-        // Coverage multiplies afterwards, and saturates early enough that its
-        // transition is spent at the ink's edge rather than across its body.
-        //
-        // Drying therefore shrinks the ink inward from its edges instead of
-        // stepping its tone down. That is the better reading anyway: 墨 that
-        // dries does not become weaker ink, it covers less paper.
+    const fh = field.gh;
+    const ss = SUPERSAMPLE;
+    const outW = winW * ss;
+    const outH = winH * ss;
+    // One decision per *output* pixel, on an interpolated field — not one per
+    // simulation cell with the result upscaled afterwards.
+    //
+    // That ordering was the whole "pixel edge" problem. `coverage` is nearly a
+    // step and `fiveTones` is deliberately a staircase, so evaluating them at
+    // cell resolution put every silhouette and every tonal boundary exactly on
+    // the cell grid, and a 4x upscale then rendered each cell as a 4px facet.
+    // Interpolating first puts those boundaries on the ink.
+    for (let oy = 0, p = 0; oy < outH; oy++) {
+      // cell coordinates of this output pixel's centre
+      const fy = (oy + 0.5) / ss - 0.5 + offY;
+      for (let ox = 0; ox < outW; ox++, p += 4) {
+        const fx = (ox + 0.5) / ss - 0.5 + offX;
+        const d = sampleSmooth(dep, fw, fh, fx, fy);
         let a = 0;
         if (d > 0) {
           // Normalised against DENSITY_FULL, not clamped at 1. A settled plume
@@ -390,30 +425,23 @@
           // dilution fall through to nothing had a specific cost: the advancing
           // front of a bleed is always its most dilute part, so the plume's
           // leading edge rendered as blank paper and the ink looked like it had
-          // stopped spreading. The drip check caught it as coverage going
-          // *backwards* while the ink was still travelling.
-          let c = conc[i]!;
+          // stopped spreading.
+          let c = sampleSmooth(conc, fw, fh, fx, fy);
           if (c < TONES[0]!) c = TONES[0]!;
           // Words first: ink may cross the text, it may not be strong there.
-          if (reserve) c = ceilConc(c, reserve[i]!);
+          if (reserve) c = ceilConc(c, sampleSmooth(reserve, fw, fh, fx, fy));
           a =
             fiveTones(c) *
             coverage(inkAfterDrying(load, presence)) *
-            // Sampled in field space, so the paper's texture stays fixed to the
-            // ink rather than sliding when the window's origin changes.
-            mottleAt(fx, fy, seed) *
-            voidAt(fx, fy, seed);
+            (paper ? sampleSmooth(paper, fw, fh, fx, fy) : 1);
         }
         // 滲透: the watermark the water left, where it ran on past the ink.
-        //
         // Composited as a max rather than added, so it can only darken bare
         // paper — the halo must never deepen ink that is already there, or it
         // stops being a property of the sheet and becomes another tone.
-        //
-        // Needs no blur of its own: water diffuses, so `soak` is smooth
-        // already. It is also unaffected by the tone ceiling, which is correct
-        // — a watermark over text is a watermark, and it is far below 清.
-        const halo = haloAlpha(soakField[i]!) * voidAt(fx, fy, seed);
+        const halo =
+          haloAlpha(sampleSmooth(soakField, fw, fh, fx, fy)) *
+          (voids ? sampleSmooth(voids, fw, fh, fx, fy) : 1);
         if (halo > a) a = halo;
         data[p] = r;
         data[p + 1] = g;
@@ -478,9 +506,9 @@
     offY = Math.round(winH * MARGIN_T);
     const gw = winW + offX + Math.round(winW * MARGIN_R);
     const gh = winH + offY + Math.round(winH * MARGIN_B);
-    grid.width = winW;
-    grid.height = winH;
-    pixels = gridCtx.createImageData(winW, winH);
+    grid.width = winW * SUPERSAMPLE;
+    grid.height = winH * SUPERSAMPLE;
+    pixels = gridCtx.createImageData(grid.width, grid.height);
     field = createField(gw, gh, seed);
     smooth = new Float32Array(gw * gh);
     scratch = new Float32Array(gw * gh);
@@ -491,19 +519,25 @@
     // occupies. Words are protected by a tone ceiling now, and the frame is no
     // longer the world, so the axis alone decides where the throw runs: in from
     // outside the bottom-left corner, climbing to the right.
-    // Placed across the padded field, but *sized* to the window — see sizeRef.
-    //
-    // Scaled by 1/sqrt(count) so a four-drop roll uses four smaller drops
-    // rather than a third more ink than a three-drop one. Without it the roll
-    // varied the *amount* as well as the arrangement, and measured coverage
-    // swung from 18% of the hero to 58% — the heavy end being a far more
-    // oppressive page than anything the composition was judged against. Total
-    // area is what should stay put; where it lands is what should vary.
-    const spread = winH * Math.sqrt(3 / dropCount);
-    drops = dropPlan(gw, gh, 0, gh, dropCount, seed, spread);
     axis = throwAngle(gw, gh);
-    injectedTo = -1;
-    dripCount = 0;
+    // Reseeding here even though createField above just cut the paper: planPour
+    // rolls the seed, so without it the medium would come from one composition
+    // and the drops, mottling and voids from another.
+    planPour(true);
+  }
+
+  /** Bake the mottling and the voids for this seed, once per pour. */
+  function buildPaper(gw: number, gh: number): void {
+    paper = new Float32Array(gw * gh);
+    voids = new Float32Array(gw * gh);
+    for (let y = 0; y < gh; y++) {
+      for (let x = 0; x < gw; x++) {
+        const i = y * gw + x;
+        const v = voidAt(x, y, seed);
+        voids[i] = v;
+        paper[i] = mottleAt(x, y, seed) * v;
+      }
+    }
   }
 
   /**
