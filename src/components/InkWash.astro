@@ -38,6 +38,7 @@
     injectBlob,
     injectStreak,
     mottleAt,
+    reseedField,
     resetField,
     stepInk,
     throwAngle,
@@ -150,32 +151,53 @@
   let dropCount = 3;
 
   /**
-   * Choose the composition for this arrival.
+   * Whether the composition is pinned, and to what.
    *
-   * Session-scoped rather than per page load: navigating away from the homepage
-   * and back should return to the *same* mark, or the hero would feel unstable
-   * rather than composed. A visit gets one gesture.
-   *
-   * `?ink=<n>` pins it, which is not a debug leftover — the measurement
-   * harnesses need a fixed composition or every run reports different numbers,
-   * and there would be no way to tell a regression from a different roll.
-   *
-   * sessionStorage throws when storage is blocked, so a failure just means an
-   * unremembered roll rather than no ink.
+   * `?ink=<n>` fixes the mark for the whole visit — not a debug leftover, but
+   * what lets the measurement harnesses report comparable numbers instead of a
+   * different roll on every run and every pour.
    */
-  function pickSeed(): number {
-    const pinned = new URLSearchParams(location.search).get('ink');
-    if (pinned && /^\d{1,10}$/.test(pinned)) return Number(pinned);
-    const roll = () => (Math.random() * 0xffffffff) >>> 0;
-    try {
-      const held = sessionStorage.getItem('ink-seed');
-      if (held && /^\d{1,10}$/.test(held)) return Number(held);
-      const fresh = roll();
-      sessionStorage.setItem('ink-seed', String(fresh));
-      return fresh;
-    } catch {
-      return roll();
+  function pinnedSeed(): number | null {
+    const q = new URLSearchParams(location.search).get('ink');
+    return q && /^\d{1,10}$/.test(q) ? Number(q) : null;
+  }
+
+  /**
+   * Roll the next composition.
+   *
+   * This used to hold its roll in sessionStorage so that leaving the homepage
+   * and coming back showed the same mark. That rationale is gone: the mark now
+   * changes on every pour, roughly every twelve seconds, so persisting the first
+   * one bought nothing but a storage dependency.
+   */
+  function rollSeed(): number {
+    return pinnedSeed() ?? ((Math.random() * 0xffffffff) >>> 0);
+  }
+
+  /**
+   * Choose the seed, cut the paper for it, and plan the pour.
+   *
+   * Shared by the mount path and the per-pour wipe so the two cannot drift.
+   * `reseed` false is the mount case, where `resize` has just built the field
+   * from the seed already and re-cutting it would be wasted work.
+   */
+  function planPour(reseed: boolean): void {
+    if (!field) return;
+    seed = rollSeed();
+    dropCount = DROPS_MIN + Math.floor(mulberry32(seed + 6421)() * (DROPS_MAX - DROPS_MIN + 1));
+    if (reseed) {
+      reseedField(field, seed);
+      if (canvas) buildReserve(field.gw, canvas.getBoundingClientRect());
     }
+    // Placed across the padded field, but *sized* to the window — see sizeRef.
+    //
+    // Scaled by 1/sqrt(count) so a four-drop roll uses four smaller drops
+    // rather than a third more ink. The roll should vary the arrangement, not
+    // the amount; without it the sparse end sat at 18% of the hero covered.
+    const spread = winH * Math.sqrt(3 / dropCount);
+    drops = dropPlan(field.gw, field.gh, 0, field.gh, dropCount, seed, spread);
+    injectedTo = -1;
+    dripCount = 0;
   }
 
   let canvas: HTMLCanvasElement | null = null;
@@ -290,9 +312,16 @@
       if (step > 0) rainTo(Math.min(1, Math.max(0, injectedTo) + step / INJECT_MS));
       for (let t = 0; t < TICKS; t++) stepInk(field, 1, seed);
     } else if (injectedTo >= 0) {
+      // A fresh mark, not the same one poured again. The seed used to be chosen
+      // once at mount, so every pour in a visit re-laid an identical
+      // composition and the variety only showed on refresh — the one moment
+      // nobody is watching.
+      //
+      // This is also the cheapest frame in the cycle to do expensive work: the
+      // branch runs the moment presence hits 0, and the very next statement
+      // clears the canvas and returns without rendering anything.
       resetField(field);
-      injectedTo = -1;
-      dripCount = 0;
+      planPour(true);
     }
 
     // Nothing on the paper and nothing to simulate: clear once and stop doing
@@ -600,9 +629,8 @@
     el.hidden = false;
 
     readInk();
-    // Rolled before resize(), because resize() is what builds the paper and
-    // plans the drops — everything downstream reads `seed`.
-    seed = pickSeed();
+    // Rolled before resize(), because resize() builds the paper from `seed`.
+    seed = rollSeed();
     dropCount = DROPS_MIN + Math.floor(mulberry32(seed + 6421)() * (DROPS_MAX - DROPS_MIN + 1));
     resize();
 

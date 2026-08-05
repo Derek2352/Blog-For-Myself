@@ -199,7 +199,32 @@ export function createField(gw: number, gh: number, seed: number): InkField {
   };
 }
 
-/** Clear everything except the medium, which never changes. */
+/**
+ * Re-cut the paper for a new composition, in place.
+ *
+ * The medium — fibre lay and drift — follows the seed, so a fresh mark needs it
+ * recomputed. `createField` already does exactly this work; this is the same
+ * loop against the buffers that already exist, because it runs once per pour and
+ * allocating three Float32Arrays of ~69k floats every twelve seconds would churn
+ * for no reason.
+ *
+ * Deliberately does *not* touch wet, pigment, deposit, concentration or soak.
+ * `resetField` owns those, and the caller runs both.
+ */
+export function reseedField(f: InkField, seed: number): void {
+  const { gw, gh, fibre, biasX, biasY } = f;
+  for (let y = 0; y < gh; y++) {
+    for (let x = 0; x < gw; x++) {
+      const i = y * gw + x;
+      const b = flowBias(x, y, seed);
+      biasX[i] = b.dx;
+      biasY[i] = b.dy;
+      fibre[i] = 0.86 + fibreNoise(x, y, seed) * 0.14;
+    }
+  }
+}
+
+/** Clear everything except the medium, which never changes within a pour. */
 export function resetField(f: InkField): void {
   f.wet.fill(0);
   f.pig.fill(0);

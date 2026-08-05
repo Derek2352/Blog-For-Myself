@@ -150,8 +150,21 @@ export function entrance(
 export const HOLD_MS = 5000;
 /** Drying off the page. */
 export const DRY_MS = 1800;
-/** Gone — a clean hero. Deliberately the longest phase. */
-export const CLEAR_MS = 9000;
+/**
+ * Gone — a clean hero.
+ *
+ * This was 9000, deliberately the longest phase, on the reasoning that a mark
+ * present most of the time has not solved anything. That reasoning has expired.
+ * It dates from when the ink could put a dark register over the headline and the
+ * only protection was for it to be *absent*; readability is a tone ceiling now
+ * (see TONE_CEILING), so the ink can be on the page far more of the time without
+ * costing a reader anything. Nine seconds of plain hero was just a wait.
+ *
+ * Only this phase moved. HOLD_MS is untouched on purpose: every measurement
+ * harness samples the first cycle between 1.2s and 4.8s after load, and all of
+ * those stay inside the hold.
+ */
+export const CLEAR_MS = 3000;
 /** Painting itself back. */
 export const RETURN_MS = 2000;
 export const CYCLE_MS = HOLD_MS + DRY_MS + CLEAR_MS + RETURN_MS;
@@ -159,10 +172,11 @@ export const CYCLE_MS = HOLD_MS + DRY_MS + CLEAR_MS + RETURN_MS;
 /**
  * How much of the stroke is on the page, over one cycle.
  *
- * A mark sitting permanently across the tagline stays legible under the
- * difference blend, but legible is not comfortable. So the ink lands, holds long
- * enough to be seen, dries off, and leaves the words alone for longer than it
- * covered them.
+ * The ink lands, holds long enough to be seen, dries off, and leaves the sheet
+ * clean for a beat before returning. That clean stretch used to be the majority
+ * of the cycle, because a dark register over the headline could only be made
+ * safe by absence; with the tone ceiling doing that job it is now a pause rather
+ * than a wait — see CLEAR_MS.
  *
  * Takes a position *within* the cycle rather than a clock, so the caller can
  * hold time still while someone is reading without this needing to know that

@@ -119,12 +119,29 @@ describe('strokePresence — coming and going', () => {
     expect(strokePresence(HOLD_MS + DRY_MS + CLEAR_MS - 1)).toBe(0);
   });
 
-  it('leaves the hero clean for longer than it covers it', () => {
-    // the whole point of the feature — a mark that is present most of the time
-    // has not solved anything
+  it('still gives the hero a clean beat, but no longer a wait', () => {
+    // This asserted the opposite bound — clear for more than half the cycle — on
+    // the reasoning that a mark present most of the time has not solved
+    // anything. That was right while the ink's only protection for a reader was
+    // being *absent*. Readability is a tone ceiling now, so presence costs
+    // nothing, and nine seconds of plain hero was just a wait.
+    //
+    // What is still wanted is a beat: a stretch long enough to read as the hero
+    // settling, and short of the ink never leaving at all.
     let clear = 0;
-    for (let t = 0; t < CYCLE_MS; t += 10) if (strokePresence(t) < 0.02) clear += 10;
-    expect(clear).toBeGreaterThan(CYCLE_MS / 2);
+    let run = 0;
+    let longest = 0;
+    for (let t = 0; t < CYCLE_MS; t += 10) {
+      if (strokePresence(t) < 0.02) {
+        clear += 10;
+        run += 10;
+        if (run > longest) longest = run;
+      } else run = 0;
+    }
+    expect(longest).toBeGreaterThan(2000);
+    // present most of the cycle, but the sheet does empty
+    expect(clear / CYCLE_MS).toBeGreaterThan(0.12);
+    expect(clear / CYCLE_MS).toBeLessThan(0.45);
   });
 
   it('falls monotonically while drying and rises monotonically returning', () => {

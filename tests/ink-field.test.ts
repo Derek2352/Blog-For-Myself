@@ -38,6 +38,7 @@ import {
   TONE_SOFT,
   voidAt,
   VOID_SCALE,
+  reseedField,
   resetField,
   stepInk,
   visible,
@@ -1357,5 +1358,63 @@ describe('toneFor — the darkest register at any drop count', () => {
     for (const count of [1, 2, 3, 4, 5, 6, 9]) {
       for (let i = 0; i < count; i++) expect(TONES).toContain(toneFor(i, count));
     }
+  });
+});
+
+describe('reseedField — a fresh mark on the same buffers', () => {
+  it('produces exactly what createField would for that seed', () => {
+    // The invariant that matters. Every pour after the first re-cuts the paper
+    // through this path instead of createField, so any drift between the two
+    // would make the first mark of a visit differ from all the rest — a bug that
+    // would present as taste rather than as a failure.
+    for (const seed of [INK_SEED, 7, 3_000_000_017]) {
+      const made = createField(37, 29, seed);
+      const reused = createField(37, 29, seed + 12345);
+      reseedField(reused, seed);
+      expect(Array.from(reused.fibre)).toEqual(Array.from(made.fibre));
+      expect(Array.from(reused.biasX)).toEqual(Array.from(made.biasX));
+      expect(Array.from(reused.biasY)).toEqual(Array.from(made.biasY));
+    }
+  });
+
+  it('allocates nothing — the same buffers come back out', () => {
+    // It runs once per pour over ~69k cells. Allocating three Float32Arrays that
+    // size every twelve seconds would churn for no reason.
+    const f = createField(24, 24, INK_SEED);
+    const { fibre, biasX, biasY, wet, pig, dep, conc, soak } = f;
+    reseedField(f, 999);
+    expect(f.fibre).toBe(fibre);
+    expect(f.biasX).toBe(biasX);
+    expect(f.biasY).toBe(biasY);
+    expect(f.wet).toBe(wet);
+    expect(f.pig).toBe(pig);
+    expect(f.dep).toBe(dep);
+    expect(f.conc).toBe(conc);
+    expect(f.soak).toBe(soak);
+  });
+
+  it('leaves the ink alone — resetField owns that', () => {
+    const f = createField(30, 30, INK_SEED);
+    injectBlob(f, 15, 15, 6, 1, 1, INK_SEED);
+    for (let i = 0; i < 20; i++) stepInk(f, 1, INK_SEED);
+    const before = [sum(f.wet), sum(f.pig), sum(f.dep), sum(f.soak)];
+    reseedField(f, 4242);
+    expect([sum(f.wet), sum(f.pig), sum(f.dep), sum(f.soak)]).toEqual(before);
+  });
+
+  it('actually changes the medium', () => {
+    const f = createField(40, 40, INK_SEED);
+    const was = Array.from(f.fibre);
+    reseedField(f, INK_SEED + 1);
+    expect(Array.from(f.fibre)).not.toEqual(was);
+    // still the near-uniform paper the wash needs, not a channelled one
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const v of f.fibre) {
+      lo = Math.min(lo, v);
+      hi = Math.max(hi, v);
+    }
+    expect(lo).toBeGreaterThan(0.8);
+    expect(hi / lo).toBeLessThan(1.3);
   });
 });
