@@ -1,0 +1,501 @@
+# GDD — "Whose Screen Is It" (cat boss fight)
+
+**Version** 0.1 · design only, nothing implemented
+**Status** hypothesis. Every number below is `[PH]` (placeholder) until playtested.
+
+## Changelog
+
+| Ver | Change |
+|---|---|
+| 0.1 | First draft. Core loop, mechanic specs, dialogue table, replayability. All values `[PH]`. |
+
+---
+
+## 0. What already exists (design constraints, not wishes)
+
+This is **not** a greenfield design. `src/components/SiteCat.astro` (1202 lines) and
+`src/lib/cat-game.ts` already ship:
+
+| Existing thing | Where | The fight reuses it as |
+|---|---|---|
+| Modes `walk / idle / away / climb / chase / fetch` | SiteCat.astro:504 | Boss state machine base — `chase` **is** the pursuit mechanic |
+| `chase` — cat runs at the cursor when within 34px | :773–804 | The threat. Already written. |
+| `fetch` — cat abandons everything for a treat | :691, :746 | The player's defensive tool. Already written. |
+| `climb` — cat scales a side edge | :930–983 | Boss repositioning / phase transition |
+| One treat per navigable tab, 7 tabs | cat-game.ts:24 | **Ammunition.** Explore the site → arm yourself |
+| `TREATS = fish, yarn, bell, feather, biscuit`, hashed per slug | cat-game.ts:20–28 | **Loadout.** Which tabs you explored decides your kit |
+| 7-rung affection ladder, ratio-derived | cat-game.ts:34–57 | Difficulty input and post-fight consequence |
+| Collar SVG, appears only at completion | SiteCat.astro:46–56 | The *patient* path's reward — the fight must not duplicate it |
+| Paw row + `tallyFor` caption | cat-game.ts:79 | Existing HUD. Becomes the ammo counter. |
+| `transition:persist`, session-only state, nothing stored | cat-game.ts:6–7 | Session-only stakes. No permanent loss is possible. |
+| `aria-hidden`, reduced-motion → sits still | SiteCat.astro header | Hard accessibility floor, see §8 |
+
+**Nothing new is drawn.** No new SVG, no sprite sheet, no audio. The site has 24
+entries still showing `COVER · PENDING`; taking on art debt for an easter egg
+would be the wrong call.
+
+---
+
+## 1. Design pillars
+
+1. **The page is the arena.** Every mechanic must touch real page furniture. If
+   the fight could be lifted into an `<iframe>` unchanged, the design has failed.
+2. **Opt-in, and reversible in one gesture.** This sits on a portfolio a recruiter
+   may be reading. Esc ends it, instantly, with the DOM exactly as found.
+3. **The cat is bluffing, not malevolent.** It is a shy ink silhouette that warms
+   to you. The boss is a housecat doing a dragon impression, and the writing must
+   never lose that.
+4. **Accessible or absent.** Decorative today. Reduced motion gets a turn-based
+   variant or no invitation at all — never a degraded action game.
+5. **Spend nothing the site hasn't already earned.** Ammo comes from exploring
+   the site. The fight is a *sink* for the existing treat economy, not a new one.
+
+**Fun hypothesis** (the one thing that must feel good, or scrap it):
+> Holding your cursor still on a claimed element while a cat visibly stalks
+> toward it is tense, and throwing a treat to buy three seconds is a relief.
+
+If that single interaction isn't fun with placeholder art and no scoring, no
+amount of systems on top will save it.
+
+---
+
+## 2. Core loop
+
+### Moment-to-moment (0–30s)
+- **Action** — Player parks the cursor on a **claimed** element and holds. A ring
+  fills. Element reverts to normal on completion.
+- **Feedback** — Ring fill + the element's colour returning + the cat's ears
+  flattening (existing `.cat-ear` nodes, rotated). At 70% the cat **telegraphs** a
+  pounce: tail stiffens, `.cat-eye` widens.
+- **Reward** — Territory bar moves toward the player. One element is *visibly*
+  yours again — the feedback is the page healing.
+
+### Session loop (90s–3 min — one fight)
+- **Goal** — Drive territory from 100% cat to 0%.
+- **Tension** — The cat pounces on the cursor and interrupts channels. You hold
+  `N` treats and nothing else. Every throw is one you can't make later.
+- **Resolution** — Win: cat routs, page restores, you get a **notch**. Lose (all
+  treats spent + territory back to 100%): cat taunts, page restores anyway.
+  Losing costs no exploration progress — see §7.
+
+### Long-term (a visit, and return visits)
+- **Two paths to the same cat.** Patience (find 7 treats → collar) and
+  confrontation (win the fight → notch). They are *alternative* top rewards, not
+  a ladder — a player who does both in one session gets the top state (§7.4).
+- **Retention hook** — Deliberately weak. This is a portfolio. The hook is "tell
+  a friend the cat fights back", not a daily streak. Explicitly **no** login,
+  leaderboard, or daily reward: a résumé site with retention mechanics is a
+  category error.
+
+---
+
+## 3. Core activity and player interactions
+
+**Core activity**: *territorial scrubbing under threat.* You reclaim page regions
+by dwelling on them; the cat interrupts by reaching your cursor; you buy time with
+a finite resource.
+
+### Player inputs — the complete set
+
+| Input | Action | Why so few |
+|---|---|---|
+| Move pointer | Aim / flee | The cat's `chase` already keys off cursor proximity. Zero new plumbing. |
+| Hold still on a claim | **Scrub** (channel) | The core verb. Holding *still* while being hunted is the whole tension. |
+| Click / tap | **Throw treat** at cursor position | Sends the cat into existing `fetch`. One button, one resource. |
+| `Esc` | Truce (abort, restore) | Pillar 2. Non-negotiable. |
+| Long-press the cat (existing tap) | Start the fight | Reuses the existing tap-to-scamper affordance |
+
+Three verbs. Everything else is emergent from their interaction. **No dash, no
+attack button, no combo** — added complexity that adds no new decision.
+
+### The decision, stated plainly
+At any moment: *scrub now and gamble the interrupt, or spend a treat to make the
+next window safe?* That is the game. If playtesting shows players never throw
+treats, the pounce is too weak. If they throw immediately every time, too strong.
+
+---
+
+## 4. Required game objects
+
+```
+Arena          viewport bounds + queried list of claimable elements
+               (NOT authored — see §6.1)
+Claim          { el, strength 0..1, decay }  — a real DOM node under cat control
+CatBoss        existing mode machine + { pounce, recover, taunt, rout }
+               + stance (§9.3), + aggression (rubber band, §7.3)
+Scrubber       cursor as AoE: { radius, channelProgress, interrupted }
+TreatProjectile existing treat SVG + { flightArc, landing, lureDuration }
+Loadout        the treat *types* the player found → 5 distinct effects (§9.5)
+TerritoryMeter single float 0..1, the win/lose axis
+DialogueRibbon anchored above the cat, follows it, stage-gated (§6.3, §8)
+```
+
+### 4.1 Claimable elements — queried, never authored
+
+The arena is built by querying what the page already has:
+
+```
+[data-ink-reserve], .panel, .frame, .card, .kicker, .rail, h1, h2, figure
+```
+
+Consequences, all good: **the board differs per route for free** (§9.1); a new
+category page is a new arena with no code change (the same bargain `resolveTreat`
+already makes); and it satisfies pillar 1 by construction.
+
+Excluded from claiming: `body > header`, the tab bar, anything focusable, and
+`.glass` — the hero pane stays legible so the page never becomes unreadable.
+
+---
+
+## 5. Mechanic specifications
+
+### 5.1 Mechanic: Claim
+
+**Purpose** Make "the cat took my screen" literal and visible.
+**Player fantasy** Something is wrong with my page and I can fix it.
+**Input** Fight start (initial pattern), and cat re-claims on a successful pounce.
+**Output** Element gets `data-cat-claimed`; CSS desaturates it, tilts it `[PH 0.6deg]`,
+and stamps a paw watermark. **Transform and filter only** — never `display`,
+`visibility` or layout, so nothing reflows and nothing is hidden from a
+screen-reader.
+**Success condition** Page reads as invaded but every word is still selectable.
+**Failure state** If a claim ever makes text fail AA contrast, the claim CSS is
+wrong. Gate: reuse the measurement harness from `scratchpad/glass.mjs` — it
+already samples true backdrops and computes WCAG ratios.
+**Edge cases**
+- Element removed mid-fight (client-side nav) → claim drops silently, territory
+  recalculated against the *current* arena, never a stale denominator.
+- Zero claimable elements (a sparse page) → refuse the fight, cat yawns. Better
+  than an empty arena.
+- Element larger than viewport → clamp the scrub target to the visible rect.
+**Tuning levers** `CLAIM_TILT`, `CLAIM_DESAT`, `INITIAL_CLAIM_FRACTION`, `RECLAIM_COUNT`
+**Dependencies** Arena query, TerritoryMeter, InkWash (must not fight the ink wash
+visually — claims are cool-grey, the ink is warm)
+
+### 5.2 Mechanic: Scrub (the core verb)
+
+**Purpose** The channel that creates tension.
+**Player fantasy** Steady hands under pressure.
+**Input** Pointer within `[PH 40px]` of a claimed element's centre, **moving less
+than `[PH 6px]` per frame**, held.
+**Output** `channelProgress += dt / SCRUB_MS`. At 1.0 the claim clears, territory
+drops by `1 / arenaSize`.
+**Success condition** `SCRUB_MS [PH 1400ms]` — long enough that a pounce can
+plausibly arrive, short enough that a clean window always finishes it.
+**Failure state** Interrupted by a pounce → progress resets to `[PH 0]`, not
+partial. Partial retention would remove the reason to buy a safe window.
+**Edge cases**
+- Two claims overlapping under the cursor → scrub the one whose centre is nearer;
+  never both, or clear-speed doubles in dense layouts.
+- Player scrolls while channelling → treat as movement, interrupt. Scroll-scrubbing
+  would let a player clear the board by flicking.
+- Pointer leaves the window → pause, don't reset (they may be reaching for a
+  treat click). Resets on `blur` after `[PH 2s]`.
+- Touch: no hover, so "hold still" is a press-and-hold. Same timer.
+**Tuning levers** `SCRUB_MS`, `SCRUB_RADIUS`, `STILL_TOLERANCE`, `INTERRUPT_PENALTY`
+**Dependencies** CatBoss.pounce, Claim
+
+### 5.3 Mechanic: Pounce
+
+**Purpose** The threat that makes holding still a decision.
+**Player fantasy** Being hunted by something small and smug.
+**Input** Cat within `[PH 90px]` of the cursor **and** player is channelling
+above `[PH 0.35]` progress. Cat prefers interrupting a nearly-finished scrub —
+that is what makes it feel like it's *reading* you.
+**Output** 3 phases: **telegraph** `[PH 420ms]` (tail stiff, eye wide, ears back)
+→ **leap** `[PH 260ms]` (ballistic arc to the cursor's *predicted* position) →
+**recover** `[PH 700ms]` (cat is helpless — the player's free window).
+**Success condition** The telegraph is long enough to dodge if you're watching,
+short enough to punish inattention. A missed pounce must feel like *your* read,
+not a dice roll.
+**Failure state** If pounce lands during telegraph (bug) it's unreactable. Assert:
+leap cannot begin before telegraph elapses, even at low frame rates — clamp `dt`,
+the ink wash already does this at `Math.min(250, now - lastTick)`.
+**Edge cases**
+- Cursor leaves the viewport mid-leap → cat lands where it aimed, whiffs, recovers.
+  Never follow the pointer out of frame.
+- Two pounces queued → impossible by construction; single state machine.
+- Cat in `fetch` (treat in flight) → **cannot pounce**. This is the treat's whole
+  value; if `fetch` can be cancelled, the resource is worthless.
+- Reduced motion → no leap; see §8.
+**Tuning levers** `TELEGRAPH_MS`, `LEAP_MS`, `RECOVER_MS`, `POUNCE_RANGE`, `AGGRESSION`
+**Dependencies** Scrubber, Loadout (bell lengthens telegraph), rubber band (§7.3)
+
+### 5.4 Mechanic: Throw treat
+
+**Purpose** Convert exploration into tactical relief. The sink for the existing
+economy.
+**Player fantasy** Bribery. Correctly identifying that this is a cat.
+**Input** Click/tap. Consumes 1 treat from the found set.
+**Output** Treat arcs to the pointer, lands, cat enters existing `fetch`, ignores
+the player for `lureDuration` (by type, §9.5). Cat cannot pounce while fetching.
+**Success condition** A thrown treat reliably buys one complete scrub. If
+`lureDuration < SCRUB_MS` the resource does nothing.
+**Failure state** Zero treats and territory rising = the losing spiral. That is
+intended, and it must be *visible* — the paw row empties, so the player can see
+the loss coming rather than being surprised by it.
+**Edge cases**
+- Throw with 0 treats → cat looks at you. No penalty, no error state. Silence is
+  the feedback.
+- Throw during cat's `recover` → wasted; warn by dimming the cursor during
+  recover, since the cat is already harmless.
+- Throw onto a claimed element → treat lands, cat fetches, *and* the claim is
+  unaffected. No accidental double-duty.
+**Tuning levers** `lureDuration` per type, `THROW_ARC_MS`, treat count (= tabs explored)
+**Dependencies** Loadout, existing `fetch` mode
+
+---
+
+## 6. UI layout
+
+Vertical territory, because the cat already owns the bottom of the page:
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ ███████████░░░░░░░░░░░░░░  TERRITORY  (top edge, 3px)    │ ← you push down
+│                                                          │
+│   [ claimed h1 — desaturated, tilted, paw watermark ]    │
+│                                                          │
+│   ┌ .glass — NEVER claimable, stays legible ┐            │
+│   │  Hi — I'm Derek.                        │            │
+│   └─────────────────────────────────────────┘            │
+│                                                          │
+│        ( ) ← scrub ring at cursor                        │
+│                                                          │
+│              ╭─ "You can stop any time." ─╮              │ ← ribbon, follows cat
+│                        /\_/\                             │
+│ ┌──────────────┐       ( •.• )  ← boss                   │
+│ │ ●●●○○○○ 4    │                              [Esc: truce]│
+│ └──────────────┘                                          │
+└──────────────────────────────────────────────────────────┘
+   ↑ existing paw widget, reused as ammo
+```
+
+**Decisions and why:**
+- **Territory on the top edge**, 3px, no numbers. The cat pushes up from the
+  bottom, you push down from the top; the bar's direction *is* the fiction. A
+  numeric percentage would invite optimisation of a thing that should be felt.
+- **Ammo = the existing paw row.** It already reads as a count and already sits
+  bottom-left. Filled paw = treat in hand. Nothing new drawn, and the widget
+  finally has a second job.
+- **No health bar for the cat.** Territory is the only axis. Two bars would imply
+  two failure states; there is one.
+- **Truce always visible**, bottom-right, low contrast. Pillar 2 must be legible
+  as an affordance, not a hidden keystroke.
+- **Ribbon follows the cat**, never centre-screen. Centre-screen dialogue would
+  cover the portfolio, which is the actual product.
+
+---
+
+## 7. Progression, stakes, and the long-term goal
+
+### 7.1 Long-term player goal
+**The cat's respect, on the record.** The affection ladder already ends at
+"yours" with a collar. The fight adds a *parallel* proof: a **notch** in the ear
+(one new 6-point SVG path on the existing `.cat-ear`, and nothing else).
+
+- Patient path → **collar** (find 7 treats)
+- Confrontation path → **notch** (win a fight)
+- Both in one session → the cat sits *on* the cursor when idle. The top state,
+  reachable only by playing both ways.
+
+### 7.2 What losing costs
+**Nothing permanent, by design.** Progress is session-only already
+(`cat-game.ts:6`). Losing spends the treats you threw and nothing else — the
+found-set is untouched, so exploration is never punished. The cost of losing is
+that the cat *says something about it* (§8), which is the real sting and costs
+the player nothing.
+
+I considered staking affection on the fight (loss aversion is a strong hook). I
+am **rejecting it**: on a portfolio, punishing a visitor for touching an easter
+egg is a bad trade for a designer's engagement metric.
+
+### 7.3 Difficulty: rubber band as characterisation
+Aggression scales with how the player is doing, and it is *expressed as
+behaviour*, not hidden numbers:
+
+| Player state | Aggression | How it reads |
+|---|---|---|
+| Territory > 70% cat, 0 treats | `[PH 0.6]` | Cat gets bored, grooms itself. "Supporting" dialogue fires. |
+| Even fight | `[PH 1.0]` | Baseline |
+| Territory < 20% cat | `[PH 1.4]` | Desperate, faster telegraph, more taunting |
+
+A losing player sees a cat easing off and reads it as *the cat pitying them* —
+which is in character, funnier, and does the same job as an invisible fudge.
+
+### 7.4 Onboarding checklist
+- [x] Core verb (scrub) available within 30s — it is the *first* thing, no unlocks
+- [x] First beat unloseable: the opening `[PH 6s]` has aggression pinned to 0,
+      cat only watches. Guaranteed first success.
+- [x] Each mechanic in a safe context: pounce introduced only after one clear
+      scrub; treats explained by the cat *asking* for one, not by a tooltip
+- [x] One mechanic found by exploration: nothing says the cat can't pounce during
+      `fetch`. Players discover the safe window themselves — the best moment
+      available, so it must not be spoiled by UI
+- [x] Ends on a hook: on a win, the cat re-claims **one** element and walks off.
+      Unfinished business, no modal, no "play again?" button
+
+---
+
+## 8. Cat dialogue
+
+Rules: **never more than 7 words**; lower-case, no exclamation marks (this cat
+does not shout); the ribbon is `aria-hidden` like the rest of the cat, so nothing
+here may carry information the player needs.
+
+### 8.1 Bluffing — opening and while winning
+
+| Stage | Line |
+|---|---|
+| Fight start | `this is my page now.` |
+| Start (alt) | `you were done reading anyway.` |
+| First claim planted | `i have been very patient.` |
+| Territory 90% cat | `i could do this all day.` |
+| Territory 75% cat | `you are making this loud.` |
+| After a successful pounce | `mine. still mine.` |
+| Player misses a scrub twice | `try holding stiller. or don't.` |
+| Player has 0 treats | `oh. you brought nothing.` |
+| Territory back to 100% (won a round) | `as it was. as it should be.` |
+
+### 8.2 Supporting — when the player is losing
+
+Fires when aggression drops to the bored tier. The cat is being kind and will not
+admit it.
+
+| Trigger | Line |
+|---|---|
+| 0 treats, territory > 70% cat | `i'll wait. go find a fish.` |
+| Player idle > 8s | `you can stop any time.` |
+| Third interrupt in a row | `that one was mine. mostly.` |
+| Player throws their last treat | `spending everything. bold.` |
+| Territory unchanged for 20s | `we could both sit down.` |
+
+### 8.3 Rattled — while losing
+
+| Stage | Line |
+|---|---|
+| Territory 50% | `that one didn't count.` |
+| Territory 35% | `i am letting you have it.` |
+| Territory 20% | `this was my spot first.` |
+| Territory 10% | `fine. fine.` |
+| Last claim being scrubbed | `wait —` |
+
+### 8.4 Endings
+
+| Ending | Line |
+|---|---|
+| Player wins | `keep it. it's drafty anyway.` |
+| Player wins with 0 treats spent | `you didn't even bribe me.` |
+| Cat wins | `you may read on. quietly.` |
+| Truce (Esc) | `sensible.` |
+| Truce during cat's recovery | `...that was cowardly. respect.` |
+| Win, having already earned the collar | `both, then. show-off.` |
+
+---
+
+## 9. Structural replayability
+
+Not "add more content" — five ways the *system* produces a different fight.
+
+### 9.1 The arena is whatever page you're on
+Claimables are queried (§4.1), so `/timeline` (dense, many `.panel`) plays nothing
+like `/` (sparse, two big figures). Dense boards = short scrubs, many of them;
+sparse boards = long defensible holds. **Cost: zero.** Every category page the
+author publishes is a new board.
+
+### 9.2 Daily seed
+Opening claim pattern and stance seeded from `YYYY-MM-DD` via the existing
+`hash()` in `src/lib/wash.ts`. Everyone gets the same fight today and a different
+one tomorrow — shareable ("did you get the siege cat?") with no server, no
+account, no storage. Reuses machinery the ink wash already relies on.
+
+### 9.3 Stances — the cat picks one per fight
+Same verbs, different counter-play. This is where the fight gets legs.
+
+| Stance | Behaviour | Counter |
+|---|---|---|
+| **Ambush** | Hides behind claimed elements, short telegraph, long recovery | Scrub next to it — punish the whiff |
+| **Siege** | Never leaves the bottom edge; claims *regrow* over time | Clear top-down, accept the churn |
+| **Trickster** | Fakes telegraphs `[PH 30%]` of the time | Learn the tell; feather treats to force commitment |
+| **Sleepy** (rare) | Barely fights; a joke fight | Nothing. It's a gift. |
+
+### 9.4 Handicap ladder
+On a win the cat offers a rematch at `treats - 1`. Self-selected difficulty
+ratchet, no menus, and it converts the win into a decision rather than an
+endpoint. Bottoms out at zero treats — a pure-skill fight for whoever wants it.
+
+### 9.5 Loadout from the treats you actually found
+`resolveTreat(slug)` already hashes a treat *type* per tab. So **which pages you
+explored determines your kit** — replayability sourced from existing content, at
+no authoring cost:
+
+| Treat | Effect | `lureDuration` |
+|---|---|---|
+| fish | Plain, long lure | `[PH 3.0s]` |
+| bell | Cat is startled: next telegraph doubled | `[PH 1.8s]` |
+| yarn | Tangles: cat's next return walk is slowed | `[PH 2.2s]` |
+| feather | Cat plays with it *where it lands* — a movable no-go zone | `[PH 2.6s]` |
+| biscuit | Slow to eat: shortest interrupt immunity but cat stays put longest | `[PH 4.0s]` |
+
+Two players who explored different halves of the site bring different tools to
+the same board. **Design risk:** if one treat is strictly best, players will
+tab-hunt for it and the site's exploration incentive inverts. Balance target: no
+treat's win-rate contribution exceeds any other's by more than `[PH 10%]`.
+
+---
+
+## 10. Tuning table — all placeholders, with rationale
+
+| Var | `[PH]` | Rationale | "Broken" looks like |
+|---|---|---|---|
+| `SCRUB_MS` | 1400 | Long enough for a pounce to plausibly arrive | <900: pounce irrelevant. >2200: tedium |
+| `TELEGRAPH_MS` | 420 | Human reaction ~250ms + read time | <300: unreactable. >600: trivially dodged |
+| `LEAP_MS` | 260 | Fast enough to feel like a pounce | >400: reads as a stroll |
+| `RECOVER_MS` | 700 | Must exceed `SCRUB_MS/2` so a whiff is a real reward | <500: whiffing costs the cat nothing |
+| `POUNCE_RANGE` | 90px | ~2.5× existing `chase` trigger (34px) | Too large: nowhere is safe |
+| `INITIAL_CLAIM_FRACTION` | 0.55 | Invaded, not unusable | 1.0: page unreadable, breaks pillar 2 |
+| `lureDuration` (fish) | 3.0s | Must exceed `SCRUB_MS` or treats are worthless | <1.4s: resource does nothing |
+| `AGGRESSION` (bored) | 0.6 | Visible mercy without becoming a walkover | <0.4: cat stops being a threat |
+| Fight length | 90–180s | One coffee. Longer and it competes with the portfolio | >4min: nobody finishes |
+
+Build these as a spreadsheet with formulas before writing the code, per §Balance
+Process — `SCRUB_MS`, `RECOVER_MS` and `lureDuration` are *coupled*, and hardcoding
+them independently is how this gets unbalanced.
+
+---
+
+## 11. Accessibility and exit conditions (hard requirements)
+
+- **`prefers-reduced-motion`** — no invitation is shown at all. The cat sits still
+  today and that behaviour is untouched. A turn-based variant is a *possible*
+  follow-up, not a launch requirement; a half-speed action game is worse than none.
+- **The fight is `aria-hidden`**, as the cat already is. It carries no information
+  and announces nothing. A screen-reader user's page is unchanged.
+- **Keyboard** — Esc ends it. The fight never traps focus, never adds a focus
+  trap, and never claims a focusable element (§4.1).
+- **Claims are transform + filter only.** No layout, no `display`, no
+  `visibility`. Text stays selectable and copyable throughout.
+- **Contrast gate** — no claimed element may push text below WCAG AA. Verify with
+  the existing backdrop-sampling harness, not by eye; sampling the composite
+  gives false passes (it reads the glyphs — that mistake already cost a round on
+  the glass panel).
+- **Auto-truce** — if the tab is hidden `[PH 10s]`, or the pointer leaves for
+  `[PH 20s]`, the fight ends itself and restores. Nobody returns to a page mid-
+  invasion.
+
+---
+
+## 12. Build order (smallest testable increments)
+
+1. **Claim + Scrub only.** No cat, no treats. Is scrubbing a page satisfying at
+   all? If not, stop here — that is the fun hypothesis failing cheaply.
+2. Add **Pounce** with a fixed telegraph. Tune §10 rows 1–4 until the read feels
+   fair. This is where the game is won or lost.
+3. Add **Treats** as a single type. Verify the safe window is a real decision.
+4. Add **Territory + endings + dialogue**. First full loop.
+5. Add **stances**, then **loadout**. Replayability last — it is worthless before
+   the loop is fun.
+
+Ship gate for each step: the existing 20-check ink harness, `npm test`, and the
+contrast gate above must all stay green. The fight lives on the same page as the
+ink wash and the glass pane; it does not get to break them.
