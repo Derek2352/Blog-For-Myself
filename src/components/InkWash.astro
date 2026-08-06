@@ -349,7 +349,7 @@
     // cycle is a fresh pour rather than the same stain fading in and out.
     if (presence > 0) {
       if (step > 0) rainTo(Math.min(1, Math.max(0, injectedTo) + step / INJECT_MS));
-      for (let t = 0; t < TICKS; t++) stepInk(field, 1, seed);
+      for (let t = 0; t < TICKS; t++) stepInk(field, 1);
     } else if (injectedTo >= 0) {
       // A fresh mark, not the same one poured again. The seed used to be chosen
       // once at mount, so every pour in a visit re-laid an identical

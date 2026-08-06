@@ -656,7 +656,7 @@ describe('墨分五色 as material, not as contour lines', () => {
     const f = createField(gw, gh, INK_SEED);
     const drops = dropPlan(gw, gh, gh * 0.12, gh * 0.84, 3, INK_SEED);
     for (const d of drops) injectBlob(f, d.x, d.y, d.r, d.amount, d.conc, INK_SEED);
-    for (let i = 0; i < 400; i++) stepInk(f, 1, INK_SEED);
+    for (let i = 0; i < 400; i++) stepInk(f, 1);
     return f;
   }
 
@@ -785,14 +785,14 @@ describe('concentration is transported, never diffused', () => {
     injectBlob(f, 20, 20, 6, 1, 0.55, INK_SEED);
     const far = 3 * f.gw + 3;
     expect(f.conc[far]).toBe(0);
-    for (let i = 0; i < 60; i++) stepInk(f, 1, INK_SEED);
+    for (let i = 0; i < 60; i++) stepInk(f, 1);
     expect(f.conc[far]).toBe(0);
   });
 
   it('carries strength outward with the ink', () => {
     const f = createField(60, 60, INK_SEED);
     injectBlob(f, 30, 30, 6, 1, 0.78, INK_SEED);
-    for (let i = 0; i < 80; i++) stepInk(f, 1, INK_SEED);
+    for (let i = 0; i < 80; i++) stepInk(f, 1);
     // somewhere the ink has reached that it had not at injection
     let reached = 0;
     for (let i = 0; i < f.conc.length; i++) {
@@ -807,7 +807,7 @@ describe('concentration is transported, never diffused', () => {
     const run = () => {
       const f = createField(40, 40, INK_SEED);
       injectBlob(f, 20, 20, 6, 1, 0.55, INK_SEED);
-      for (let i = 0; i < 40; i++) stepInk(f, 1, INK_SEED);
+      for (let i = 0; i < 40; i++) stepInk(f, 1);
       return Array.from(f.conc);
     };
     expect(run()).toEqual(run());
@@ -912,7 +912,7 @@ describe('framing — the source is outside the picture', () => {
     for (const d of dropPlan(FW, FH, 0, FH, 3, INK_SEED)) {
       injectStreak(f, d.x, d.y, d.r, throwAngle(FW, FH), 2.3, d.amount, d.conc, INK_SEED);
     }
-    for (let i = 0; i < 400; i++) stepInk(f, 1, INK_SEED);
+    for (let i = 0; i < 400; i++) stepInk(f, 1);
     cached = f;
   }, 60000);
   const thrown = () => cached;
@@ -997,7 +997,7 @@ describe('滲透 — water runs ahead of the ink', () => {
   function blot(steps = 300, gw = 140, gh = 140, r = 6) {
     const f = createField(gw, gh, INK_SEED);
     injectBlob(f, gw / 2, gh / 2, r, 1, 1, INK_SEED);
-    for (let i = 0; i < steps; i++) stepInk(f, 1, INK_SEED);
+    for (let i = 0; i < steps; i++) stepInk(f, 1);
     return f;
   }
 
@@ -1065,7 +1065,7 @@ describe('滲透 — water runs ahead of the ink', () => {
     injectBlob(f, 30, 30, 6, 1, 1, INK_SEED);
     let prev = new Float32Array(f.soak);
     for (let step = 0; step < 12; step++) {
-      for (let i = 0; i < 40; i++) stepInk(f, 1, INK_SEED);
+      for (let i = 0; i < 40; i++) stepInk(f, 1);
       for (let i = 0; i < f.soak.length; i++) {
         expect(f.soak[i]!).toBeGreaterThanOrEqual(prev[i]! - 1e-9);
       }
@@ -1093,7 +1093,7 @@ describe('滲透 — water runs ahead of the ink', () => {
     const f = createField(60, 60, INK_SEED);
     injectBlob(f, 30, 30, 6, 1, 1, INK_SEED);
     const before = sum(f.pig) + sum(f.dep);
-    for (let i = 0; i < 120; i++) stepInk(f, 1, INK_SEED);
+    for (let i = 0; i < 120; i++) stepInk(f, 1);
     const after = sum(f.pig) + sum(f.dep);
     expect(after).toBeGreaterThan(before * 0.98);
     expect(after).toBeLessThan(before * 1.02);
@@ -1288,7 +1288,7 @@ describe('any roll is a composition that works', () => {
       for (const d of drops) {
         injectStreak(f, d.x, d.y, d.r, throwAngle(FW, FH), 2.3, d.amount, d.conc, seed);
       }
-      for (let i = 0; i < 150; i++) stepInk(f, 1, seed);
+      for (let i = 0; i < 150; i++) stepInk(f, 1);
       const vis = visible(f);
       let inked = 0;
       for (let y = OFF_Y; y < OFF_Y + WIN_H; y++) {
@@ -1397,7 +1397,7 @@ describe('reseedField — a fresh mark on the same buffers', () => {
   it('leaves the ink alone — resetField owns that', () => {
     const f = createField(30, 30, INK_SEED);
     injectBlob(f, 15, 15, 6, 1, 1, INK_SEED);
-    for (let i = 0; i < 20; i++) stepInk(f, 1, INK_SEED);
+    for (let i = 0; i < 20; i++) stepInk(f, 1);
     const before = [sum(f.wet), sum(f.pig), sum(f.dep), sum(f.soak)];
     reseedField(f, 4242);
     expect([sum(f.wet), sum(f.pig), sum(f.dep), sum(f.soak)]).toEqual(before);

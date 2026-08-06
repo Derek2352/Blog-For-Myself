@@ -688,7 +688,7 @@ export const FILTRATION = 0.16;
  * bilinearly. Unconditionally stable at any step size, which matters because the
  * swirl is deliberately fast.
  */
-export function advectPig(f: InkField, seed: number, dt = 1): void {
+export function advectPig(f: InkField, dt = 1): void {
   const { gw, gh, wet, pig, conc, biasX, biasY, tmpPig, tmpConc } = f;
   tmpPig.set(pig);
   tmpConc.set(conc);
@@ -758,8 +758,14 @@ export const SWIRL = 0.4;
  * the flow strands there and settles. **Edge darkening falls out of the physics**
  * instead of being stroked on, which is exactly what the previous version had to
  * do by hand.
+ *
+ * Takes no seed: the composition's randomness lives *in* the field, baked into
+ * `fibre`/`biasX`/`biasY` by `createField`/`reseedField`. It used to take one and
+ * re-evaluate `flowBias` per cell per tick, which cost ~2M noise evaluations a
+ * frame. Callers that still passed a seed here were being told a lie about where
+ * determinism comes from.
  */
-export function stepInk(f: InkField, dt = 1, seed = 0): void {
+export function stepInk(f: InkField, dt = 1): void {
   const { gw, gh, wet, pig, dep, conc, soak, fibre, biasX, biasY, tmpWet, tmpPig, tmpConc } = f;
   tmpWet.set(wet);
   tmpPig.set(pig);
@@ -841,7 +847,7 @@ export function stepInk(f: InkField, dt = 1, seed = 0): void {
 
   // ---- carry pigment along the swirl. Transport, not diffusion: this is what
   // stretches the plume into filaments instead of averaging it into a disc.
-  advectPig(f, seed, dt);
+  advectPig(f, dt);
 
   // ---- deposit + evaporate
   for (let i = 0; i < wet.length; i++) {
