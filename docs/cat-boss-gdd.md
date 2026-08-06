@@ -1,6 +1,6 @@
 # GDD — "Whose Screen Is It" (cat boss fight)
 
-**Version** 0.1 · design only, nothing implemented
+**Version** 0.2 · design only, nothing implemented
 **Status** hypothesis. Every number below is `[PH]` (placeholder) until playtested.
 
 ## Changelog
@@ -8,6 +8,7 @@
 | Ver | Change |
 |---|---|
 | 0.1 | First draft. Core loop, mechanic specs, dialogue table, replayability. All values `[PH]`. |
+| 0.2 | Added §13 arena toggle and §14 loading transition. **Revised §11**: the toggle overturns the reduced-motion decision — an explicit opt-in is a prompt, so hiding the game from those users was paternalistic. Added a photosensitivity requirement the full-screen transition makes load-bearing. **Revised §3**: long-press-to-start removed; the toggle is the only entry point, because an invisible gesture is not an opt-in. **Revised §12**: the toggle becomes step 0 with an instant swap, the transition moves to last. §6 diagram shows the toggle. |
 
 ---
 
@@ -28,7 +29,7 @@ This is **not** a greenfield design. `src/components/SiteCat.astro` (1202 lines)
 | Collar SVG, appears only at completion | SiteCat.astro:46–56 | The *patient* path's reward — the fight must not duplicate it |
 | Paw row + `tallyFor` caption | cat-game.ts:79 | Existing HUD. Becomes the ammo counter. |
 | `transition:persist`, session-only state, nothing stored | cat-game.ts:6–7 | Session-only stakes. No permanent loss is possible. |
-| `aria-hidden`, reduced-motion → sits still | SiteCat.astro header | Hard accessibility floor, see §8 |
+| `aria-hidden`, reduced-motion → sits still | SiteCat.astro header | Hard accessibility floor, see §11 |
 
 **Nothing new is drawn.** No new SVG, no sprite sheet, no audio. The site has 24
 entries still showing `COVER · PENDING`; taking on art debt for an easter egg
@@ -103,10 +104,16 @@ a finite resource.
 | Hold still on a claim | **Scrub** (channel) | The core verb. Holding *still* while being hunted is the whole tension. |
 | Click / tap | **Throw treat** at cursor position | Sends the cat into existing `fetch`. One button, one resource. |
 | `Esc` | Truce (abort, restore) | Pillar 2. Non-negotiable. |
-| Long-press the cat (existing tap) | Start the fight | Reuses the existing tap-to-scamper affordance |
+| The arena toggle (§13) | Start / end the fight | The **only** entry point |
 
 Three verbs. Everything else is emergent from their interaction. **No dash, no
 attack button, no combo** — added complexity that adds no new decision.
+
+*Changed in 0.2:* 0.1 started the fight on a long-press of the cat, reusing the
+existing tap-to-scamper affordance. Removed. An invisible gesture is not an opt-in
+(§13.1), and two entry points would mean two places that have to get consent right.
+The tap keeps its old job — the cat scampers — and starting a fight now takes a
+button that says what it does.
 
 ### The decision, stated plainly
 At any moment: *scrub now and gamble the interrupt, or spend a treat to make the
@@ -217,7 +224,7 @@ the ink wash already does this at `Math.min(250, now - lastTick)`.
 - Two pounces queued → impossible by construction; single state machine.
 - Cat in `fetch` (treat in flight) → **cannot pounce**. This is the treat's whole
   value; if `fetch` can be cancelled, the resource is worthless.
-- Reduced motion → no leap; see §8.
+- Reduced motion → no leap; see §11.
 **Tuning levers** `TELEGRAPH_MS`, `LEAP_MS`, `RECOVER_MS`, `POUNCE_RANGE`, `AGGRESSION`
 **Dependencies** Scrubber, Loadout (bell lengthens telegraph), rubber band (§7.3)
 
@@ -266,9 +273,10 @@ Vertical territory, because the cat already owns the bottom of the page:
 │                        /\_/\                             │
 │ ┌──────────────┐       ( •.• )  ← boss                   │
 │ │ ●●●○○○○ 4    │                              [Esc: truce]│
+│ │ [ arena ▣ on ]│                                         │
 │ └──────────────┘                                          │
 └──────────────────────────────────────────────────────────┘
-   ↑ existing paw widget, reused as ammo
+   ↑ existing paw widget: ammo row + the §13 toggle beneath it
 ```
 
 **Decisions and why:**
@@ -466,11 +474,26 @@ them independently is how this gets unbalanced.
 
 ## 11. Accessibility and exit conditions (hard requirements)
 
-- **`prefers-reduced-motion`** — no invitation is shown at all. The cat sits still
-  today and that behaviour is untouched. A turn-based variant is a *possible*
-  follow-up, not a launch requirement; a half-speed action game is worse than none.
+- **`prefers-reduced-motion`** — **the toggle is shown; the fight is not offered
+  beyond it.** *(Revised in 0.2. The 0.1 rule was "no invitation is shown at
+  all".)* Once there is an explicit opt-in (§13), withholding it stops being
+  protection and becomes a decision made on someone's behalf about what they may
+  consent to. So: the button is visible and operable, the transition degrades to a
+  cross-dissolve (§14.5), and the cat still sits still. The fight *itself* remains
+  gated — pressing the toggle under reduced motion starts nothing until a
+  motion-safe variant exists, and until then the button says so in words rather
+  than being absent. A half-speed action game is still worse than none.
 - **The fight is `aria-hidden`**, as the cat already is. It carries no information
-  and announces nothing. A screen-reader user's page is unchanged.
+  and announces nothing. A screen-reader user's page is unchanged. **One
+  exception: the toggle** (§13) — a control cannot be both hidden and usable, and
+  the one thing in this system that changes the page's behaviour is the one thing
+  that must be announced.
+- **Photosensitivity — WCAG 2.3.1.** A 240px cat could not trigger this; a
+  full-screen curtain can. Hard limits on §14: **at most one luminance reversal
+  per direction**, no flash at or above 3Hz, and no large-area flash — which is
+  why the dark theme floods toward a deepened ground instead of the pale ink
+  colour (§14.4). This is a *no-exceptions* row: if a beat cannot be built inside
+  it, the beat is cut, not the requirement.
 - **Keyboard** — Esc ends it. The fight never traps focus, never adds a focus
   trap, and never claims a focusable element (§4.1).
 - **Claims are transform + filter only.** No layout, no `display`, no
@@ -487,6 +510,11 @@ them independently is how this gets unbalanced.
 
 ## 12. Build order (smallest testable increments)
 
+0. **The toggle, with an instant swap** (§13). No transition, no fade — flip a
+   class, arena on, Esc off. First because nothing below is reachable by a visitor
+   without it, and because it is the only step that must ship *whatever* happens to
+   the rest: a consent control for a feature that doesn't exist yet is a two-line
+   no-op, while a feature that exists without one is a liability.
 1. **Claim + Scrub only.** No cat, no treats. Is scrubbing a page satisfying at
    all? If not, stop here — that is the fun hypothesis failing cheaply.
 2. Add **Pounce** with a fixed telegraph. Tune §10 rows 1–4 until the read feels
@@ -495,7 +523,230 @@ them independently is how this gets unbalanced.
 4. Add **Territory + endings + dialogue**. First full loop.
 5. Add **stances**, then **loadout**. Replayability last — it is worthless before
    the loop is fun.
+6. **The ink transition** (§14), replacing step 0's instant swap.
+
+**On that ordering.** The request named the toggle and the transition together,
+and this splits them to opposite ends of the build. Deliberately: the toggle is a
+*correctness* requirement and the transition is *presentation*, and a curtain over
+a loop that isn't fun yet only makes the un-fun slower to reach. Step 0's instant
+swap is also the permanent fallback path (§14.6), so building it first means the
+degraded route is the one with the most mileage on it rather than the one nobody
+ever exercises.
 
 Ship gate for each step: the existing 20-check ink harness, `npm test`, and the
 contrast gate above must all stay green. The fight lives on the same page as the
 ink wash and the glass pane; it does not get to break them.
+
+---
+
+## 13. The arena toggle
+
+### 13.1 Purpose
+
+**One visible control that turns the arena on and off, and tells the truth about
+which state you are in.** Pillar 2 says the fight is opt-in and reversible in one
+gesture. Until 0.2 the only entry was long-pressing the cat (§3) and the only exit
+was Esc — both invisible. A hidden switch is not an opt-in; it is a trap that
+happens to have a way out.
+
+The player-facing job: *nobody should ever be in this game without having said so,
+and nobody should ever wonder how to stop.*
+
+### 13.2 Placement — and two rejected homes
+
+Attached to the existing paw widget, bottom-left, directly under the ammo row
+(`tallyFor`, `cat-game.ts:79`). The widget is already the cat's own piece of
+furniture, already sits where the cat lives, and already reads as "this belongs to
+the animal, not to the portfolio".
+
+| Rejected | Why not |
+|---|---|
+| Site header / tab bar | It would advertise a game, site-wide, to a recruiter reading a CV. The easter egg stops being an easter egg the moment it is in the nav. |
+| `A11yControls` panel | Filing a game under accessibility settings misfiles it for exactly the people who most need that panel to be short and predictable. Reduced motion is not a game preference. |
+
+### 13.3 Form
+
+A real `<button>` with `aria-pressed`. Not a link, not a `div`, not a keyboard
+handler on the cat — the browser's own control gives focus, `Enter`/`Space`, and
+state announcement for free.
+
+- **The label does not change with state.** `aria-pressed` carries the state; a
+  button that flips *both* its label and its pressed state announces the opposite
+  of what it means ("take the screen back, pressed") and is a well-known
+  antipattern. Candidate copy, to be tested rather than assumed: **"Cat takes the
+  screen"**, with the pressed state drawn as a filled pill.
+- This is chrome, so the §8 dialogue rules (7 words, lower-case, no exclamation
+  marks) **do not apply**. The cat may bluff; the switch may not. It is the one
+  place in the feature that speaks in the site's voice instead of the cat's.
+- Reuses `.tap-safe` (`global.css`) for the 44px coarse-pointer target — it sits
+  near the viewport corner on a phone, which is the worst place to be 20px tall.
+- Visible focus ring, inherited from the site's existing focus style. Not
+  overridden.
+
+### 13.4 State and persistence — deliberately asymmetric
+
+| State | Where it lives | Why |
+|---|---|---|
+| **off** | `localStorage`, durable | Opting out is a considered decision. It must survive a refresh, a route change, and a return visit next month. |
+| **on** | session-only, matching the existing progress model (`cat-game.ts:6–7`) | Nobody should land on a portfolio mid-invasion because they said yes last week. Consent to be ambushed does not keep. |
+
+Neither direction is a preference to be synced or a setting to be found in a
+panel; both are one press away at all times. The asymmetry is the whole design:
+**the escape is sticky and the invitation is not.**
+
+### 13.5 Inputs and outputs
+
+| | |
+|---|---|
+| **Input** | Click / tap / `Enter` / `Space` on the button |
+| **Output, off → on** | Latch, then §14's transition, then the arena is live |
+| **Output, on → off** | Identical to Esc truce: one code path, DOM restored exactly as found, reverse transition |
+| **Success** | The visitor can find the switch without being told, and pressing it does exactly what its label said |
+| **Failure** | Any state where the button's rendering and the arena's actual state disagree — this is the bug class to hunt, not a balance question |
+
+### 13.6 Edge cases
+
+- **Pressed during a transition.** Latch the request and resolve it once the
+  transition settles. Never queue two: a third press collapses into the latch, so
+  a mashed button cannot produce a stack of floods.
+- **Pressed mid-fight.** Exactly Esc (§3). One code path — a second "stop the
+  game" implementation is a second thing that can fail to restore the DOM.
+- **Auto-truce fires** (tab hidden, pointer gone — §11). It flips the button back
+  to **off**, visibly. The alternative — arena silently dead, button still
+  pressed — is the §13.5 failure state.
+- **Route change with the arena on.** The cat already survives via
+  `transition:persist`; the arena must **re-query** the new page's furniture
+  (§4.1), because the old page's claim list now points at detached nodes.
+- **Reduced motion.** Button shown and operable (§11). Pressing it does not start
+  a fight there is no motion-safe variant of — it says so, in words, in the widget.
+  Absent-and-silent was the 0.1 behaviour and it was worse.
+- **No JS.** The button is rendered *by* the cat script, so it cannot appear as a
+  dead control on a page where nothing can respond to it.
+- **Print.** Hidden, along with the rest of the cat.
+
+### 13.7 Tuning
+
+**None.** A consent control has no tunable parameters — there is no version of
+this that is balanced by making it slightly harder to find.
+
+---
+
+## 14. The loading transition
+
+### 14.1 Purpose — a loading screen with nothing to load
+
+Nothing downloads when the arena opens. The curtain is not covering a wait; it is
+marking a **state boundary**. The page does not change *content*, it changes
+*meaning* — the same h1 that was a headline a moment ago is now territory — and a
+cut with no transition reads as a rendering bug rather than a threshold crossed.
+The flood is what lets consent look like an event.
+
+The minimum hold is honest rather than padded. Real work happens inside it: the
+arena DOM query (§4.1), initial claim placement, the composition seed roll, and
+picking the opening line. On a fast machine that work finishes in a few
+milliseconds, and the floor keeps the curtain from flickering — but the floor is
+covering something real, which is the difference between a beat and a fake
+progress bar.
+
+### 14.2 Made of ink, reusing what exists
+
+The curtain is the site's own ink, not a new visual language: `src/lib/ink-field.ts`
+is pure and seeded, so it can take a **second consumer** with no new art and no new
+dependency. §0's "nothing new is drawn" still holds.
+
+| Reused | From | As |
+|---|---|---|
+| `injectStreak`, `reseedField`, `stepInk` | `ink-field.ts` | The flood itself |
+| `fiveTones`, `sampleSmooth`, `coverage` | `ink-field.ts` | Render path, unchanged |
+| `inkAfterDrying` | `ink.ts` | The reveal — the curtain *dries*, it does not fade |
+| `mulberry32` | `ink.ts` | A per-entry seed, so no two floods match |
+
+**Not** `InkWash.astro`. That canvas is `z-index: -1` and hero-scoped by design;
+the curtain is `position: fixed` and on top. A separate short-lived canvas that
+frees itself on settle.
+
+Two hard constraints this reuse imposes:
+
+- **The curtain must not touch the hero's field instance.** 222 tests pin the hero
+  composition to `INK_SEED = 20260802`; a shared mutable field would make the
+  homepage's artwork depend on whether someone opened a game.
+- **The hero wash pauses while the arena is on.** It is scenery, and its 10fps ×
+  12-tick loop is a real frame cost the game needs back. Resume on truce.
+
+### 14.3 Beats — forward (off → on)
+
+| Beat | `[PH]` | What the player sees | What actually happens |
+|---|---|---|---|
+| **Commit** | 0–120ms | Cursor becomes the paw | Latch. Point of no return, made visible before anything moves |
+| **Flood** | 120–800ms | Ink climbs from the bottom edge and takes the screen | `injectStreak` fanned along the bottom — **the cat's own edge**, so the invasion comes from where the animal already lives |
+| **Hold** | ≥250ms floor | Full ink, faint motion | Arena query, claim placement, seed roll, opening line chosen |
+| **Reveal** | 800–1600ms | The ink dries off and the page is *the same page*, now claimed | `inkAfterDrying` over the same field |
+| **Handoff** | 1600ms | Territory bar slides in from the top edge; the cat speaks | Game loop takes over input |
+
+Direction is meaning: ink rises from the cat's edge on the way in, and the
+territory bar arrives from the *opposite* edge (§6) on handoff, so the fiction's
+two poles are established before the first mechanic fires.
+
+### 14.4 Beats — reverse (on → off), and theme
+
+Reverse is `[PH 600ms]`, **no hold**: there is nothing to load on the way out, and
+a slow exit reads as the site not letting you leave. Pillar 2 is a promise about
+how fast Esc feels.
+
+**Dark theme floods toward a deepened ground, not the pale ink colour.** In light
+mode the ink is dark on cream and the flood darkens the screen; naively reusing the
+same alpha in dark mode paints a near-white sheet over a dark page, which is a
+flashbang and a §11 violation. The curtain's target is *further from* the page's
+text colour and *toward* its ground in both themes — one luminance reversal at
+most, per direction.
+
+### 14.5 Reduced motion
+
+A `[PH 120ms]` cross-dissolve, or an instant swap. **Never a half-speed flood** —
+slowing a full-screen wipe makes it worse, not gentler. The Hold's real work still
+happens; it just happens behind a dissolve instead of behind ink.
+
+### 14.6 Failure states — the transition is never load-bearing
+
+| Failure | Behaviour |
+|---|---|
+| No canvas / 2D context | Instant swap. Arena still starts. |
+| `ink-field` fails to load | Instant swap. Arena still starts. |
+| Flood exceeds `[PH 2s]` wall-clock | Abandon the animation, swap, start. A curtain that outstays the game's patience is worse than no curtain. |
+| Esc / toggle during Flood | **Reverse from where it is.** It does not complete first. An interruption that has to wait for the animation is not an interruption. |
+| Tab hidden mid-transition | Settle immediately to the destination state, no animation on return. |
+
+### 14.7 What it must not do
+
+- **No `display: none`, ever.** The reveal has to show the same page in the same
+  place, or the transition becomes a page load and the illusion — *your* page,
+  invaded — dies.
+- **Scroll position preserved in both directions**, to the pixel.
+- **No focus stealing** and no focus trap, in or out. Focus returns to the toggle
+  on exit, because that is where the player's attention already is.
+- **`pointer-events` off on the curtain** during Flood and Reveal, so a click
+  aimed at the page during the transition is swallowed rather than landing on a
+  half-claimed arena.
+
+### 14.8 Tuning
+
+| Var | `[PH]` | Rationale | "Broken" looks like |
+|---|---|---|---|
+| `COMMIT_MS` | 120 | Long enough to register the paw, short enough not to feel like lag | >250: the button feels broken |
+| `FLOOD_MS` | 680 | Must read as deliberate; the eye needs ~0.5s to see a direction | <350: a cut with extra steps. >1200: the visitor waits |
+| `HOLD_FLOOR_MS` | 250 | Covers real work and prevents a flicker on fast hardware | 0: flashes on a fast machine. >600: reads as a slow site |
+| `REVEAL_MS` | 800 | Drying is the slowest beat because it is the one being *read* | <400: the reveal is a cut, and the claims are missed |
+| `REVERSE_MS` | 600 | Exit must feel faster than entry, and be **shorter** than forward total | ≥ forward: Esc feels reluctant |
+| `WALL_MS` | 2000 | Total budget before abandoning to a swap | >3000: nobody waits that long for an easter egg |
+| Curtain fps | 30 | The hero wash runs 10fps × 12 ticks because it runs for *seconds*; the curtain is short-lived and may run hotter | <20: the flood stutters, and a stuttering full-screen wipe reads as a crash |
+
+Coupled, and must be tuned as a set, not row by row: `FLOOD_MS + HOLD_FLOOR_MS +
+REVEAL_MS` must stay under `WALL_MS`, and `REVERSE_MS` must stay under their sum.
+A spreadsheet with those two formulas before any code.
+
+### 14.9 Dependencies
+
+`ink-field.ts` (unchanged — it is already pure), `ink.ts` `inkAfterDrying`,
+the §13 toggle (there is no other entry point), and §6's territory bar for the
+handoff beat. It depends on **no** mechanic in §5, which is why it can be built
+last (§12).
