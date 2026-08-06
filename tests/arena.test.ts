@@ -4,6 +4,9 @@ import {
   PROTECTED,
   PROTECTED_TREE,
   MIN_CLAIM_AREA,
+  MIN_BOARD,
+  MAX_BOARD,
+  boardSlice,
   MAX_TILT,
   INITIAL_CLAIM_FRACTION,
   SCRUB_MS,
@@ -24,6 +27,14 @@ import {
   FETCH_SPEED,
   phaseDuration,
   canPounce,
+  isWon,
+  isLost,
+  LINES,
+  LINE_MS,
+  LINE_GAP_MS,
+  pickLine,
+  lineText,
+  type FightState,
   nextPhase,
   provoked,
   predict,
@@ -134,6 +145,40 @@ describe('dropNested — transforms compound, so only the outermost claims', () 
 
   it('never drops an element for containing itself', () => {
     expect(dropNested(['solo'], contains)).toEqual(['solo']);
+  });
+});
+
+describe('boardSlice — the fight is over the screen (§4)', () => {
+  const v = (n: number, m: number) => [...Array(n).fill(true), ...Array(m).fill(false)];
+
+  it('takes what is on screen when that is enough', () => {
+    expect(boardSlice(v(10, 30))).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  });
+
+  it('borrows from below the fold only when the screen is too thin for a game', () => {
+    // §10: under four claims and the fight is over before it starts.
+    expect(boardSlice(v(3, 20))).toHaveLength(MIN_BOARD);
+    expect(boardSlice(v(3, 20)).slice(0, 3)).toEqual([0, 1, 2]);
+  });
+
+  it('caps the board, because past twenty the page is unreadable', () => {
+    expect(boardSlice(v(40, 0))).toHaveLength(MAX_BOARD);
+    expect(MAX_BOARD).toBeLessThanOrEqual(20);
+  });
+
+  it('keeps document order, so a claim’s tilt belongs to its place on the page', () => {
+    const mixed = [false, true, false, true, true, false, true];
+    const got = boardSlice(mixed, 2, 16);
+    expect([...got].sort((a, b) => a - b)).toEqual(got);
+  });
+
+  it('survives a page with nothing claimable', () => {
+    expect(boardSlice([])).toEqual([]);
+  });
+
+  it('never invents an index', () => {
+    const got = boardSlice(v(5, 5));
+    for (const i of got) expect(i).toBeLessThan(10);
   });
 });
 
@@ -518,6 +563,133 @@ describe('the opening grace', () => {
     // about four free scrubs — half the fight.
     expect(OPENING_GRACE_MS).toBeGreaterThan(SCRUB_MS);
     expect(OPENING_GRACE_MS).toBeLessThan(SCRUB_MS * 3);
+  });
+});
+
+describe('the ending conditions', () => {
+  it('is won when the cat holds nothing', () => {
+    expect(isWon(0, 15)).toBe(true);
+    expect(isWon(1, 15)).toBe(false);
+  });
+
+  it('is lost only when the cat has everything AND you have nothing to throw', () => {
+    // §2 names both conditions. Territory at 100% with a treat in hand is a bad
+    // position, not a loss — you can always dig out while you have ammo, which is what
+    // keeps "spend it or save it" live to the end.
+    expect(isLost(15, 15, 0)).toBe(true);
+    expect(isLost(15, 15, 1)).toBe(false);
+    expect(isLost(14, 15, 0)).toBe(false);
+  });
+
+  it('neither fires on a board with nothing to fight over', () => {
+    expect(isWon(0, 0)).toBe(false);
+    expect(isLost(0, 0, 0)).toBe(false);
+  });
+});
+
+describe('the cat’s writing (§8)', () => {
+  const base: FightState = {
+    territory: 0.55,
+    ammo: 0,
+    spent: 0,
+    freed: 0,
+    interrupts: 0,
+    idleMs: 0,
+    staleMs: 0,
+    collared: false,
+  };
+
+  it('never says more than seven words', () => {
+    for (const l of LINES) {
+      expect(l.text.split(/\s+/).length, l.id).toBeLessThanOrEqual(7);
+    }
+  });
+
+  it('never shouts', () => {
+    for (const l of LINES) expect(l.text, l.id).not.toContain('!');
+  });
+
+  it('stays lower-case — this cat does not use capitals', () => {
+    for (const l of LINES) expect(l.text, l.id).toBe(l.text.toLowerCase());
+  });
+
+  it('has no duplicate ids or repeated lines', () => {
+    expect(new Set(LINES.map((l) => l.id)).size).toBe(LINES.length);
+    expect(new Set(LINES.map((l) => l.text)).size).toBe(LINES.length);
+  });
+
+  it('uses real apostrophes, since it sits in prose on a typographic page', () => {
+    for (const l of LINES) expect(l.text, l.id).not.toContain("'");
+  });
+
+  it('says nothing at all when nothing is happening', () => {
+    expect(pickLine(base)).toBe(null);
+  });
+
+  it('puts endings above everything else', () => {
+    // Territory 0.1 would otherwise fire `rattled-10`.
+    expect(pickLine({ ...base, territory: 0.1, ending: 'win' })).toBe('win-clean');
+    expect(pickLine({ ...base, territory: 1, ammo: 0, ending: 'lose' })).toBe('lose');
+  });
+
+  it('notices the collar on a win, because doing both is the point (§7.1)', () => {
+    expect(pickLine({ ...base, ending: 'win', collared: true, spent: 2 })).toBe('win-both');
+    expect(pickLine({ ...base, ending: 'win', collared: false, spent: 2 })).toBe('win');
+  });
+
+  it('has a different truce line for running away mid-pounce', () => {
+    expect(pickLine({ ...base, ending: 'truce' })).toBe('truce');
+    expect(pickLine({ ...base, ending: 'truce-recover' })).toBe('truce-recover');
+  });
+
+  it('gets rattled as it loses ground, and bluffs while it is ahead', () => {
+    expect(pickLine({ ...base, territory: 0.08 })).toBe('rattled-10');
+    expect(pickLine({ ...base, territory: 0.45 })).toBe('rattled-50');
+    // Ammo in hand and one already thrown: the player is still in the fight, so the cat
+    // is free to gloat. Empty-handed, the kind lines take precedence — see below.
+    expect(pickLine({ ...base, territory: 0.92, ammo: 1, spent: 1 })).toBe('bluff-90');
+  });
+
+  it('is kind rather than smug when the player has no way forward', () => {
+    // The order these two sit in is the characterisation. A bluff-first table had the cat
+    // saying "you are making this loud" to somebody with nothing left to try.
+    expect(pickLine({ ...base, territory: 0.92, ammo: 0 })).toBe('support-none');
+    expect(pickLine({ ...base, territory: 0.8, ammo: 0 })).toBe('support-none');
+  });
+
+  it('teaches the throw, which nothing else in the build does', () => {
+    // §7.4 wants treats explained by the cat asking for one. Fires only when you have
+    // something to throw and have not worked out that you could.
+    expect(pickLine({ ...base, territory: 0.8, ammo: 2, spent: 0 })).toBe('support-bribe');
+    // and not once you have already thrown one
+    expect(pickLine({ ...base, territory: 0.8, ammo: 1, spent: 1 })).not.toBe('support-bribe');
+  });
+
+
+  it('does not say the same thing twice running', () => {
+    const s = { ...base, territory: 0.08 };
+    expect(pickLine(s)).toBe('rattled-10');
+    expect(pickLine(s, 'rattled-10')).not.toBe('rattled-10');
+  });
+
+  it('will repeat an ending, because there is nothing after it', () => {
+    expect(pickLine({ ...base, ending: 'truce' }, 'truce')).toBe('truce');
+  });
+
+  it('resolves every id to words', () => {
+    for (const l of LINES) expect(lineText(l.id)).toBe(l.text);
+    expect(lineText('nope')).toBe('');
+  });
+});
+
+describe('dialogue pacing', () => {
+  it('leaves silence between lines, so the cat is not narrating', () => {
+    expect(LINE_GAP_MS).toBeGreaterThan(600);
+  });
+
+  it('holds a line long enough to read twice', () => {
+    // Seven words at a slow reading pace is ~1.2s.
+    expect(LINE_MS).toBeGreaterThan(2000);
   });
 });
 

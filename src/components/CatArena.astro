@@ -1,6 +1,6 @@
 ---
 /**
- * The arena — build steps 0, 1 and 2 of `docs/cat-boss-gdd.md` §12.
+ * The arena — build steps 0 to 4 of `docs/cat-boss-gdd.md` §12.
  *
  * **Step 0**: wire the toggle in the cat's HUD (rendered by SiteCat.astro) to an
  * instant swap. No transition, no fade — the §14 ink curtain is deliberately the
@@ -13,9 +13,11 @@
  * scrub it judges worth interrupting — telegraph, leap, recover.
  *
  * **Step 3**: Treats. Click to spend one of the treats you found while browsing; the
- * cat abandons everything to go and eat it, and cannot pounce while it does. Still no
- * territory bar, no dialogue, no endings, and one treat type's behaviour for all
- * shapes.
+ * cat abandons everything to go and eat it, and cannot pounce while it does.
+ *
+ * **Step 4**: The loop closes — a 3px territory bar on the top edge, two endings that
+ * mean different things, and a cat that talks. Winning marks its ear for the session.
+ * Still no stances and no loadout: every treat behaves the same whatever its shape.
  *
  * What all of it does to the page, and nothing more: adds a class and one custom
  * property to some existing elements. Claims never affect layout and never hide
@@ -31,6 +33,19 @@
  * Off is the only state a page can load in. Nothing is written to storage.
  */
 ---
+
+{/* Territory (§6): 3px on the top edge, no numbers.
+    The cat pushes up from the bottom of the page, so the top edge is *your* edge, and
+    the filled part is your share. A percentage would invite optimising a thing that is
+    supposed to be felt — and there is nowhere on a portfolio for a scoreboard. */}
+<div id="cat-territory" transition:persist="cat-territory" aria-hidden="true" hidden>
+  <span class="territory-mine"></span>
+</div>
+
+{/* What the cat says (§8). Anchored above the cat and follows it — never centre-screen,
+    which would cover the portfolio, which is the actual product. `aria-hidden` like the
+    rest of the cat: nothing here carries information the player needs. */}
+<div id="cat-ribbon" transition:persist="cat-ribbon" aria-hidden="true" hidden></div>
 
 {/* A thrown treat. Its own element rather than SiteCat's `#cat-treat`: the shapes
     live in a shared <defs> block, so this reuses the art by reference without
@@ -179,6 +194,60 @@
     transform: rotate(-6deg);
   }
 
+  /* ---- territory, on the top edge ---- */
+  #cat-territory {
+    position: fixed;
+    inset: 0 0 auto 0;
+    height: 3px;
+    z-index: 46;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--color-ink) 14%, transparent);
+  }
+  #cat-territory[hidden] {
+    display: none;
+  }
+  .territory-mine {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: var(--color-accent);
+    /* Wide enough to read as movement, short enough that a reclaim feels immediate. The
+       transition is the only thing that makes a 3px bar noticeable at all. */
+    transition: width 0.45s ease-out;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .territory-mine {
+      transition: none;
+    }
+  }
+
+  /* ---- the ribbon ---- */
+  #cat-ribbon {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 43;
+    max-width: 15rem;
+    padding: 0.28rem 0.5rem;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-chip);
+    background: var(--color-ground);
+    color: var(--color-ink);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    line-height: 1.35;
+    text-wrap: pretty;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease-out;
+  }
+  #cat-ribbon[hidden] {
+    display: none;
+  }
+  #cat-ribbon.show {
+    opacity: 0.96;
+  }
+
   /* ---- a thrown treat ----
      Positioned exactly like the cat is: pinned to the bottom-left corner, moved by
      transform only, so one helper places both. */
@@ -261,12 +330,22 @@
     FETCH_REACH,
     bigEnough,
     dropNested,
+    boardSlice,
     pickClaims,
     claimTilt,
     scrubProgress,
     stillEnough,
     arenaCaption,
-    isCleared,
+    territory,
+    isWon,
+    isLost,
+    LINE_MS,
+    LINE_GAP_MS,
+    WIN_BEAT_MS,
+    LOSE_BEAT_MS,
+    pickLine,
+    lineText,
+    type FightState,
     nextPhase,
     canPounce,
     provoked,
@@ -309,6 +388,18 @@
     ammoWas: [] as boolean[],
     /** What the borrowed HUD line should say — see `holdCaption`. */
     caption: '',
+    /** Treats thrown this fight, which the cat has opinions about (§8.4). */
+    spent: 0,
+    /** Consecutive interrupted scrubs, reset by a completed one. */
+    interrupts: 0,
+    /** When territory last changed, for the "nothing is happening" lines. */
+    movedAt: 0,
+    /** The line currently up, and when it went up. */
+    lastLine: '' as string,
+    spokeAt: 0,
+    lineTimer: 0,
+    /** Set once an ending has started, so nothing can end twice. */
+    ending: null as null | 'win' | 'lose',
     /** rAF handle for the loop. */
     raf: 0,
   };
@@ -357,7 +448,16 @@
       const r = node.getBoundingClientRect();
       return bigEnough(r.width, r.height);
     });
-    return dropNested(keep, (outer, inner) => outer.contains(inner));
+    const nested = dropNested(keep, (outer, inner) => outer.contains(inner));
+    // §4: the arena is the viewport plus what it can see. `boardSlice` keeps the fight on
+    // the screen it is named after, and borrows from below the fold only if the screen is
+    // too thin to hold a game.
+    const vh = document.documentElement.clientHeight;
+    const inView = nested.map((n) => {
+      const r = n.getBoundingClientRect();
+      return r.bottom > 0 && r.top < vh;
+    });
+    return boardSlice(inView).map((i) => nested[i]!);
   }
 
   /**
@@ -503,16 +603,15 @@
     // reclaimed
     arena.claimed = arena.claimed.filter((n) => n !== target);
     arena.freed.push(target);
+    arena.interrupts = 0;
+    arena.movedAt = now;
     free(target, true);
     caption(arenaCaption(arena.claimed.length, arena.total));
+    paintTerritory();
     scrub.target = null;
     scrub.since = now;
     hideRing();
-    if (isCleared(arena.claimed.length, arena.total)) {
-      // Step 2 still has no endings, no dialogue and no reward — the board runs out
-      // and the fight ends. Endings are step 4.
-      setTimeout(() => setArena(false), 900);
-    }
+    if (isWon(arena.claimed.length, arena.order.length)) finish('win', now);
     return 0;
   }
 
@@ -522,7 +621,7 @@
 
     // auto-truce: a fight nobody is playing is over (§11)
     if (scrub.seen && now - scrub.seen > IDLE_TRUCE_MS) {
-      setArena(false);
+      endQuietly();
       return;
     }
 
@@ -537,6 +636,8 @@
     stepTreat(now);
     stepBoss(now, dt, stepScrub(now));
     holdCaption();
+    // Nothing talks while an ending is playing: the ending has the last word.
+    if (!arena.ending) stepTalk(now);
   }
 
   /* ---------------------------------------------------------------- *
@@ -666,6 +767,7 @@
       ? { x: hud.left + hud.width / 2, y: hud.top + hud.height / 2 }
       : { x: 20, y: document.documentElement.clientHeight - 20 };
     arena.treat = { x, y, fx: from.x, fy: from.y, at: performance.now(), landed: false };
+    arena.spent++;
     node.classList.remove('eaten');
     node.removeAttribute('hidden');
     placeThrow(node, from.x, from.y);
@@ -702,6 +804,91 @@
     node?.setAttribute('hidden', '');
     node?.classList.remove('eaten');
     arena.treat = null;
+  }
+
+  /* ---------------------------------------------------------------- *
+   * Territory (§6) and dialogue (§8)
+   * ---------------------------------------------------------------- */
+
+  /** Paint the bar. Player's share, so it grows as you win. */
+  function paintTerritory(): void {
+    const bar = el('cat-territory');
+    if (!bar) return;
+    const mine = 1 - territory(arena.claimed.length, arena.order.length);
+    bar.hidden = false;
+    const fill = bar.querySelector<HTMLElement>('.territory-mine');
+    if (fill) fill.style.width = `${(mine * 100).toFixed(1)}%`;
+  }
+
+  function hideTerritory(): void {
+    const bar = el('cat-territory');
+    if (!bar) return;
+    bar.hidden = true;
+    // Attribute off rather than width zeroed: these elements are persisted across
+    // navigation, so a stale inline style would ride along for the rest of the visit.
+    bar.querySelector<HTMLElement>('.territory-mine')?.removeAttribute('style');
+  }
+
+  /**
+   * Say something, for `LINE_MS`, anchored above the cat.
+   *
+   * Not tracked per frame: the ribbon is placed once, where the cat was when it spoke.
+   * A label that follows a leaping cat around is a label nobody can read, and the line
+   * outliving the pounce it belongs to is the point.
+   */
+  function say(id: string, ms = LINE_MS): void {
+    const node = el('cat-ribbon');
+    if (!node) return;
+    arena.lastLine = id;
+    arena.spokeAt = performance.now();
+    node.textContent = lineText(id);
+    node.hidden = false;
+    // measure after the text is in, or the first line of a fight is placed as if empty
+    const cat = catEl()?.getBoundingClientRect();
+    const w = node.offsetWidth;
+    const x = cat ? cat.left + cat.width / 2 - w / 2 : 24;
+    const y = cat ? cat.top - node.offsetHeight - 8 : 24;
+    node.style.transform = `translate(${Math.max(8, Math.min(document.documentElement.clientWidth - w - 8, x)).toFixed(0)}px, ${Math.max(8, y).toFixed(0)}px)`;
+    requestAnimationFrame(() => node.classList.add('show'));
+    clearTimeout(arena.lineTimer);
+    arena.lineTimer = window.setTimeout(() => {
+      node.classList.remove('show');
+      setTimeout(() => {
+        if (!node.classList.contains('show')) node.hidden = true;
+      }, 220);
+    }, ms);
+  }
+
+  function hushRibbon(): void {
+    const node = el('cat-ribbon');
+    clearTimeout(arena.lineTimer);
+    if (!node) return;
+    node.classList.remove('show');
+    node.hidden = true;
+    node.removeAttribute('style');
+    node.textContent = '';
+  }
+
+  /** Gather what the cat is reacting to. */
+  function fightState(now: number, ending?: FightState['ending']): FightState {
+    return {
+      territory: territory(arena.claimed.length, arena.order.length),
+      ammo: ammo().length,
+      spent: arena.spent,
+      freed: arena.freed.length,
+      interrupts: arena.interrupts,
+      idleMs: scrub.seen ? now - scrub.seen : 0,
+      staleMs: now - arena.movedAt,
+      collared: !!catEl()?.classList.contains('lv6'),
+      ending,
+    };
+  }
+
+  /** One frame of deciding whether to speak. */
+  function stepTalk(now: number): void {
+    if (now - arena.spokeAt < LINE_MS + LINE_GAP_MS) return;
+    const id = pickLine(fightState(now), arena.lastLine);
+    if (id) say(id);
   }
 
   function stepBoss(now: number, dt: number, progress: number): void {
@@ -823,16 +1010,84 @@
     scrub.target = null;
     scrub.since = now;
     hideRing();
+    arena.interrupts++;
 
     for (let i = 0; i < RECLAIM_ON_HIT; i++) {
-      const back = arena.freed.pop();
-      if (!back || !back.isConnected) break;
-      // the most recent one, deliberately: taking back the thing you just earned
-      // is legible as cause and effect in a way a random element is not
+      const back = takeGround();
+      if (!back) break;
       claim(back, arena.order.indexOf(back), arena.seed);
       arena.claimed.push(back);
+      arena.total = Math.max(arena.total, arena.claimed.length);
     }
+    arena.movedAt = now;
     caption(arenaCaption(arena.claimed.length, arena.total));
+    paintTerritory();
+    if (isLost(arena.claimed.length, arena.order.length, ammo().length)) finish('lose', now);
+  }
+
+  /**
+   * What a landed pounce takes.
+   *
+   * The most recently freed element first — taking back the thing you just earned is
+   * legible as cause and effect in a way a random element is not. But **a loss has to be
+   * reachable**, and until 0.6 this only ever took from the freed pile: a player who had
+   * freed nothing could not fall below the opening 55%, so territory could never reach
+   * 100% and §2's losing condition could not fire. Failing that, the cat takes the thing
+   * it just landed on, which is the most legible claim available; failing *that*, the
+   * nearest unclaimed thing.
+   */
+  function takeGround(): HTMLElement | null {
+    while (arena.freed.length) {
+      const back = arena.freed.pop();
+      if (back?.isConnected) return back;
+    }
+    const free = arena.order.filter((n) => n.isConnected && !arena.claimed.includes(n));
+    if (!free.length) return null;
+    const under = document.elementFromPoint(boss.bx, boss.by);
+    const landedOn = under instanceof Element ? free.find((n) => n === under || n.contains(under)) : null;
+    if (landedOn) return landedOn;
+    let best = free[0]!;
+    let bestD = Infinity;
+    for (const n of free) {
+      const r = n.getBoundingClientRect();
+      const d = Math.hypot(r.left + r.width / 2 - boss.bx, r.top + r.height / 2 - boss.by);
+      if (d < bestD) {
+        bestD = d;
+        best = n;
+      }
+    }
+    return best;
+  }
+
+  /* ---------------------------------------------------------------- *
+   * Endings (§7, §8.4)
+   * ---------------------------------------------------------------- */
+
+  /**
+   * End the fight with a beat rather than a cut.
+   *
+   * The win beat is §7.4's hook: the cat takes **one** element back and leaves, so the
+   * fight ends on unfinished business instead of a fanfare. It is theatre and not a
+   * state — the page is restored whole a second later, because a byte-identical restore
+   * is pillar 2 and is not negotiable for the sake of a joke.
+   */
+  function finish(ending: 'win' | 'lose', now: number): void {
+    if (arena.ending) return;
+    arena.ending = ending;
+    const line = pickLine(fightState(now, ending), undefined);
+    if (line) say(line, ending === 'win' ? WIN_BEAT_MS : LOSE_BEAT_MS);
+
+    if (ending === 'win') {
+      // the notch, for the rest of the session (§7.1)
+      catEl()?.classList.add('notched');
+      const parting = takeGround();
+      if (parting) {
+        claim(parting, arena.order.indexOf(parting), arena.seed);
+        arena.claimed.push(parting);
+        paintTerritory();
+      }
+    }
+    setTimeout(() => setArena(false), ending === 'win' ? WIN_BEAT_MS : LOSE_BEAT_MS);
   }
 
   /* ---------------------------------------------------------------- *
@@ -855,6 +1110,42 @@
     syncToggle();
   }
 
+  /**
+   * A truce the visitor asked for, which gets its own line (§8.4).
+   *
+   * Said *before* closing, because `say` anchors the ribbon to where the cat is and the
+   * cat goes back to walking the moment the fight ends. The line then outlives the fight
+   * by design: the page is already restored while the cat is still muttering about it,
+   * which is the only place in the build where the ribbon is deliberately louder than
+   * the game.
+   */
+  /**
+   * End it with nothing said.
+   *
+   * The auto-truces, reduce-motion, and navigating away are not the visitor choosing to
+   * stop, so the cat gets no parting shot — a line like "sensible." on a page you
+   * *didn't* leave deliberately would be the cat taking credit for a timer. This is also
+   * the only path that hushes the ribbon, since the deliberate ones are said on the way
+   * out and have to outlive the fight.
+   */
+  function endQuietly(): void {
+    hushRibbon();
+    setArena(false);
+  }
+
+  function truce(): void {
+    if (!arena.on) return;
+    if (arena.ending) {
+      // an ending is already playing; let it have the last word
+      setArena(false);
+      return;
+    }
+    const kind = boss.phase === 'recover' ? 'truce-recover' : 'truce';
+    const line = pickLine(fightState(performance.now(), kind), undefined);
+    if (line) say(line, LINE_MS);
+    setArena(false);
+  }
+
   function open(): void {
     const board = candidates();
     if (!board.length) return; // nothing to fight over; leave the toggle off
@@ -873,8 +1164,15 @@
     caption(arenaCaption(arena.claimed.length, arena.total));
     const now = performance.now();
     arena.openedAt = now;
+    arena.movedAt = now;
+    arena.spokeAt = now;
+    arena.spent = 0;
+    arena.interrupts = 0;
+    arena.lastLine = '';
+    arena.ending = null;
     scrub.seen = now;
     scrub.target = null;
+    paintTerritory();
     arena.ammoWas = [
       ...document.querySelectorAll<HTMLElement>('#cat-score .cat-paw[data-slug]'),
     ].map((p) => p.classList.contains('got'));
@@ -943,8 +1241,10 @@
     scrub.x = scrub.y = -1;
     scrub.vx = scrub.vy = 0;
     clearTreat();
+    hideTerritory();
     releaseCat();
     arena.caption = '';
+    arena.order = [];
     restoreAmmo();
     restoreCaption();
   }
@@ -1019,7 +1319,9 @@
         note.classList.add('cat-arena-note-nudge');
         return;
       }
-      setArena(!arena.on);
+      // The toggle is the same gesture as Esc, so it gets the same parting line.
+      if (arena.on) truce();
+      else setArena(true);
     });
 
     window.addEventListener(
@@ -1028,13 +1330,26 @@
         if (!arena.on) return;
         const now = performance.now();
         const dt = (now - scrub.at) / 1000;
-        // Velocity from one pair of samples, but only over a sane interval: the
-        // first move of a fight, or one after the tab was away, divides by a gap
-        // measured in seconds and reports a cursor doing 4px/s. Ignore those and
-        // keep the last good reading.
+        /*
+         * Velocity from one pair of samples, and only over an interval short enough to
+         * mean anything. A gap measured in whole seconds — the first move of a fight, or
+         * one after the tab was away — says nothing about how fast the cursor is going
+         * now.
+         *
+         * Outside that window the velocity is **zeroed, not kept.** Keeping the last
+         * good reading looked more careful and was a bug with teeth: a cursor creeping a
+         * pixel at a time still refreshes `scrub.at`, so the aim was led by a velocity
+         * sampled from some flick seconds earlier and the cat missed by up to
+         * `PREDICT_CAP` every single time. The harness found it as a fight that could not
+         * be lost — the cat pounced for seventy seconds and never once landed. Not
+         * knowing the speed has to mean assuming there isn't one.
+         */
         if (scrub.at && dt > 0.004 && dt < 0.12) {
           scrub.vx = (e.clientX - scrub.x) / dt;
           scrub.vy = (e.clientY - scrub.y) / dt;
+        } else {
+          scrub.vx = 0;
+          scrub.vy = 0;
         }
         scrub.at = now;
         scrub.x = e.clientX;
@@ -1079,7 +1394,7 @@
     // arena adds no other binding (§11 — the site's own shortcuts stay owned by
     // the pages that define them).
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && arena.on) setArena(false);
+      if (e.key === 'Escape' && arena.on) truce();
     });
 
     // Tab hidden long enough ends it: nobody comes back to a page mid-invasion.
@@ -1089,14 +1404,14 @@
         hiddenAt = Date.now();
         return;
       }
-      if (arena.on && hiddenAt && Date.now() - hiddenAt > HIDDEN_TRUCE_MS) setArena(false);
+      if (arena.on && hiddenAt && Date.now() - hiddenAt > HIDDEN_TRUCE_MS) endQuietly();
     });
 
     // Reduce-motion can be flipped mid-visit from either source (the OS query or
     // the site's own toggle). Turning it on ends a running fight, because there
     // is no still version of this yet.
     const reconsider = () => {
-      if (arena.on && blockedBecause()) setArena(false);
+      if (arena.on && blockedBecause()) endQuietly();
       else syncToggle();
     };
     matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', reconsider);
@@ -1113,7 +1428,7 @@
     // A fight does not survive a page change yet: the old board's elements are
     // gone, and step 1 has nothing worth carrying across. Re-querying the new
     // page (§13.6) waits for the build that has something to carry.
-    if (arena.on) setArena(false);
+    if (arena.on) endQuietly();
     syncToggle();
   });
 </script>

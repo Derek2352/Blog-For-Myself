@@ -59,7 +59,28 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
         stroke-linecap="round"></path>
       <g class="cat-head">
         <path class="cat-ear ear-far" d="M48 9 L49.5 1.5 L54 6.5 Z"></path>
-        <path class="cat-ear ear-near" d="M56.5 6.5 L61 1.5 L62.5 9 Z"></path>
+        {/* The near ear is a group so the notch can ride with it: the arena rotates
+            `.cat-ear` during a pounce's wind-up, and a notch drawn as a sibling would
+            detach from the ear it belongs to. */}
+        <g class="cat-ear ear-near">
+          <path d="M56.5 6.5 L61 1.5 L62.5 9 Z"></path>
+          {/* The notch — the confrontation path's proof, the collar's opposite number
+              (docs/cat-boss-gdd.md §7.1). Earned by winning a fight, session-only, and
+              the one piece of new art the design allows itself.
+
+              Drawn as a *mark* rather than a wedge bitten out of the silhouette. The ear
+              renders about 4×5px, so a missing wedge that small is either invisible or —
+              if filled with the page's ground colour to fake a cut — plainly wrong the
+              moment the cat walks across a photograph. A coloured nick is legible at
+              this size and speaks the language the collar already established. */}
+          <path
+            class="cat-notch"
+            d="M59.6 4.4 L62.3 5.9"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+            stroke-linecap="round"></path>
+        </g>
         <circle cx="55" cy="13" r="7.6"></circle>
         <circle class="cat-eye" cx="57.5" cy="11.5" r="1.15"></circle>
       </g>
@@ -370,6 +391,16 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
     color: var(--color-accent);
   }
   #site-cat.lv6 .cat-collar {
+    display: block;
+  }
+  /* The notch is the same idea down the other path: off until a fight is won, and set
+     by CatArena.astro for the rest of the session. Two ways to change the cat, one
+     each. */
+  .cat-notch {
+    display: none;
+    color: var(--color-accent);
+  }
+  #site-cat.notched .cat-notch {
     display: block;
   }
   .cat-leg,

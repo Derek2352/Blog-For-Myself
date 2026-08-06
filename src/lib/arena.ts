@@ -62,6 +62,46 @@ export const PROTECTED_TREE = 'header, .tabbar, .glass, #site-cat, #cat-hud, #ca
  */
 export const MIN_CLAIM_AREA = 900;
 
+/**
+ * Fewest and most elements a board may contain.
+ *
+ * Added in 0.6, and it is a **correction to the build, not a new idea**: §4 says the
+ * arena is "viewport bounds + queried list of claimable elements", and I built the queried
+ * list against the whole *document*. On the homepage those are nearly the same thing. On
+ * `/timeline/` they are not: it deals 24 claims, past §10's own stated ceiling of 20, and
+ * a fight there ran 124 seconds without finishing. The game is called Whose Screen Is It.
+ *
+ * So the board prefers what is **on screen** when the fight opens, extends downward when
+ * the screen alone cannot hold a game, and is capped because past twenty claims the page
+ * really is unreadable and pillar 2 goes with it.
+ *
+ * Both numbers were tuned by playing both ends. A screen-*only* board deals about 8
+ * candidates at 1280×900, so 55% of it is **four claims and a nine-second fight** — at
+ * §10's own "over before it starts" floor. So the floor here is what a *game* needs
+ * (14 candidates → the 8 opening claims §10 records for the homepage) and the ceiling is
+ * what a *page* can survive. In between, screen first.
+ */
+export const MIN_BOARD = 14;
+export const MAX_BOARD = 20;
+
+/**
+ * Which candidates make up the board, given which of them are on screen.
+ *
+ * Document order in, document order out, so a claim's tilt stays tied to where it sits on
+ * the page rather than to how it was chosen.
+ */
+export function boardSlice(inView: readonly boolean[], min = MIN_BOARD, max = MAX_BOARD): number[] {
+  const seen = inView.map((v, i) => (v ? i : -1)).filter((i) => i >= 0);
+  const rest = inView.map((v, i) => (v ? -1 : i)).filter((i) => i >= 0);
+  const chosen = seen.slice(0, max);
+  // borrow from just past the fold only when the screen alone cannot hold a game
+  for (const i of rest) {
+    if (chosen.length >= min) break;
+    chosen.push(i);
+  }
+  return chosen.sort((a, b) => a - b);
+}
+
 /** Is this rect worth claiming? */
 export function bigEnough(w: number, h: number): boolean {
   return w > 0 && h > 0 && w * h >= MIN_CLAIM_AREA;
@@ -428,6 +468,29 @@ export function isCleared(claimed: number, total: number): boolean {
 }
 
 /**
+ * The fight is over and you took the page back.
+ *
+ * Measured against the **board**, not against the opening claim count: the cat can take
+ * ground it never held (see `RECLAIM_ON_HIT`'s note), so "all of it" has to mean all of
+ * what could ever be claimed.
+ */
+export function isWon(claimed: number, board: number): boolean {
+  return board > 0 && claimed <= 0;
+}
+
+/**
+ * The fight is over and the cat has all of it.
+ *
+ * **Both** conditions, per §2: every claimable thing taken *and* nothing left to throw.
+ * Territory at 100% with a treat still in hand is not a loss, it is a bad position — you
+ * can always dig out while you have ammo, which is what keeps "spend it or save it" a
+ * live question right to the end.
+ */
+export function isLost(claimed: number, board: number, ammo: number): boolean {
+  return board > 0 && claimed >= board && ammo <= 0;
+}
+
+/**
  * The line under the paw row while a fight is on. Replaces the treat tally for
  * the duration and is put back on truce — the HUD is aria-hidden furniture, so
  * it may say either thing, but it must never say nothing.
@@ -437,6 +500,134 @@ export function arenaCaption(claimed: number, total: number): string {
   if (isCleared(claimed, total)) return 'the page is yours';
   const freed = Math.max(0, total - Math.max(0, claimed));
   return `${freed} / ${total} reclaimed`;
+}
+
+/* ------------------------------------------------------------------ *
+ * Dialogue (§8) — the cat is bluffing, not malevolent
+ * ------------------------------------------------------------------ */
+
+/** How long a line stays up. `[PH 2600]` ms — read twice, at seven words. */
+export const LINE_MS = 2600;
+
+/**
+ * `[PH 1200]` ms of silence between lines.
+ *
+ * The failure mode this exists to prevent is a cat that narrates. A gap makes each line
+ * an event; without one, the ribbon becomes a log and the writing stops landing.
+ */
+export const LINE_GAP_MS = 1200;
+
+/** The beat after a win before the page comes back. */
+export const WIN_BEAT_MS = 2200;
+
+/** The beat after a loss. Shorter: nobody wants to sit in it. */
+export const LOSE_BEAT_MS = 1600;
+
+/** What the cat is reacting to, gathered once per frame. */
+export interface FightState {
+  /** Cat's share of the board, 0..1. */
+  territory: number;
+  /** Treats in hand. */
+  ammo: number;
+  /** Treats thrown so far this fight. */
+  spent: number;
+  /** Claims the visitor has taken back this fight. */
+  freed: number;
+  /** Consecutive interrupted scrubs. */
+  interrupts: number;
+  /** ms since the pointer last moved. */
+  idleMs: number;
+  /** ms since territory last changed either way. */
+  staleMs: number;
+  /** Already has the collar from the patient path. */
+  collared: boolean;
+  /** Which ending, if the fight is ending. */
+  ending?: 'win' | 'lose' | 'truce' | 'truce-recover';
+}
+
+/**
+ * Every line the cat can say, in priority order.
+ *
+ * The whole script in one array on purpose: §8's rules (seven words, lower-case, no
+ * exclamation marks) are only enforceable if the writing lives somewhere a test can read
+ * all of it, and the *voice* is only checkable by reading it as a block. Tone is the
+ * spec here — a housecat doing a dragon impression — so a line that reads as cruel is a
+ * bug even if it fires correctly.
+ *
+ * `when` gets the state and returns whether this line is due. Order is priority: endings
+ * first, then losing badly, then winning, then the kind ones.
+ */
+export const LINES: readonly { id: string; text: string; when: (s: FightState) => boolean }[] = [
+  // ---- 8.4 endings
+  { id: 'win-both', text: 'both, then. show-off.', when: (s) => s.ending === 'win' && s.collared },
+  { id: 'win-clean', text: 'you didn’t even bribe me.', when: (s) => s.ending === 'win' && s.spent === 0 },
+  { id: 'win', text: 'keep it. it’s drafty anyway.', when: (s) => s.ending === 'win' },
+  { id: 'lose', text: 'you may read on. quietly.', when: (s) => s.ending === 'lose' },
+  { id: 'truce-recover', text: '…that was cowardly. respect.', when: (s) => s.ending === 'truce-recover' },
+  { id: 'truce', text: 'sensible.', when: (s) => s.ending === 'truce' },
+
+  /*
+   * ---- 8.2 supporting, when the player is losing
+   *
+   * Above the bluffing lines, deliberately, and the tests are what found it: at 80%
+   * territory with an empty-handed player, a bluff-first order had the cat gloating —
+   * "you are making this loud" — at somebody who had nothing left to try. Both categories
+   * describe the *same* state from two sides, so §8.1 and §8.2 can only be told apart by
+   * who is stuck: **being kind beats gloating whenever the player has no way forward.**
+   * Pillar 3 says this cat is bluffing, not malevolent, and priority order is where that
+   * is either true or not.
+   *
+   * §8.2 gates these on "aggression drops to the bored tier", which does not exist until
+   * step 5. The conditions underneath it *are* the bored tier — losing, out of options,
+   * nothing changing — so they fire on those directly.
+   */
+  { id: 'support-none', text: 'i’ll wait. go find a fish.', when: (s) => s.ammo === 0 && s.territory > 0.7 },
+  {
+    // Added in 0.6. §7.4 wants treats explained by the cat asking for one rather than by
+    // a tooltip, and until now nothing taught the throw at all — the crosshair says where
+    // you *can* throw and nothing about why you would. This is that line.
+    id: 'support-bribe',
+    text: 'you could just bribe me.',
+    when: (s) => s.ammo > 0 && s.spent === 0 && s.territory > 0.7,
+  },
+  { id: 'support-last', text: 'spending everything. bold.', when: (s) => s.ammo === 0 && s.spent > 0 && s.freed > 0 },
+  { id: 'support-idle', text: 'you can stop any time.', when: (s) => s.idleMs > 8000 },
+  { id: 'support-stale', text: 'we could both sit down.', when: (s) => s.staleMs > 20000 },
+  { id: 'support-interrupts', text: 'that one was mine. mostly.', when: (s) => s.interrupts >= 3 },
+
+  // ---- 8.3 rattled, while losing
+  { id: 'rattled-10', text: 'fine. fine.', when: (s) => s.territory <= 0.1 },
+  { id: 'rattled-20', text: 'this was my spot first.', when: (s) => s.territory <= 0.2 },
+  { id: 'rattled-35', text: 'i am letting you have it.', when: (s) => s.territory <= 0.35 },
+  { id: 'rattled-50', text: 'that one didn’t count.', when: (s) => s.territory <= 0.5 },
+
+  // ---- 8.1 bluffing, while winning
+  { id: 'bluff-100', text: 'as it was. as it should be.', when: (s) => s.territory >= 1 },
+  { id: 'bluff-90', text: 'i could do this all day.', when: (s) => s.territory >= 0.9 },
+  { id: 'bluff-hit', text: 'mine. still mine.', when: (s) => s.interrupts >= 1 && s.territory > 0.6 },
+  { id: 'bluff-misses', text: 'try holding stiller. or don’t.', when: (s) => s.interrupts >= 2 },
+  { id: 'bluff-75', text: 'you are making this loud.', when: (s) => s.territory >= 0.75 },
+];
+
+/**
+ * The line to say now, or null for silence.
+ *
+ * `last` suppresses an immediate repeat: the same words twice running read as a stuck
+ * ribbon rather than as a cat with a limited vocabulary, and the second-choice line is
+ * always more interesting than the first one again.
+ */
+export function pickLine(s: FightState, last?: string): string | null {
+  const due = LINES.filter((l) => l.when(s));
+  if (!due.length) return null;
+  const fresh = due.find((l) => l.id !== last);
+  // An ending is worth repeating; nothing else is.
+  if (!fresh) return s.ending ? (due[0]?.id ?? null) : null;
+  return fresh.id;
+}
+
+/** The words for an id. */
+export function lineText(id: string): string {
+  return LINES.find((l) => l.id === id)?.text ?? '';
 }
 
 /* ------------------------------------------------------------------ *

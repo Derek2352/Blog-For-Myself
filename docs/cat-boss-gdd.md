@@ -1,6 +1,6 @@
 # GDD — "Whose Screen Is It" (cat boss fight)
 
-**Version** 0.5 · steps 0–3 built, everything else design only
+**Version** 0.6 · steps 0–4 built — the loop closes. Steps 5–6 design only
 **Status** hypothesis. Every number below is `[PH]` (placeholder) until playtested —
 including the ones now running in a browser. Built is not playtested.
 
@@ -13,6 +13,7 @@ including the ones now running in a browser. Built is not playtested.
 | 0.3 | **Built steps 0 and 1** (§12) — the toggle and Claim + Scrub. Three revisions the build forced: **§5.1** — desaturate-and-tilt is invisible on a cream-and-ink page, so a claim is now a wash plus a dashed edge, with the wash contrast-capped at 7%; **§11** — "transform and filter only" restated as the principle it meant (nothing that affects layout or hides content), which admits `outline` and `box-shadow`, plus a new hscroll rule and a coarse-pointer gate; **§13.4** — the durable `localStorage` opt-out is **cut**, because it could not change any observable behaviour. §5.2 and §10 gain what building taught. |
 | 0.4 | **Built step 2** (§12) — the pounce. One design bug and one correction: **§5.3** never said *when* the aim locks, and locking it at the end of the telegraph deletes the telegraph, so it now locks at the start and the prediction leads the whole commitment; **§10's** rationale for `RECOVER_MS` was wrong on its own terms, and what a dodge actually buys is relocation, not banked progress. **§0** corrected: the fight reuses the cat *element*, not SiteCat's state machine. **§7.4's** opening grace drops from 6s to 2.5s for the board that exists. New §10 rows for the numbers the pounce introduced. |
 | 0.5 | **Built step 3** (§12) — treats, and with them the loop's missing half: an A/B on one claim shows a hold the cat would have taken completing once a treat is thrown, so **§12's "verify the safe window is a real decision" is answered**. One deviation: a throw during `recover` is *not* wasted (a treat is an object, not a spell), paired with one-treat-at-a-time so lures cannot be banked. One constraint found: most of a portfolio is a link and a link is not a throwing surface, so the arena now shows a crosshair and links keep their pointer (§6). One bug found by screenshot: SiteCat's `announce()` timer stomped the borrowed HUD line mid-fight. §7.4's "treats explained by the cat asking" is **unbuilt** and now flagged as the weakest seam. |
+| 0.6 | **Built step 4** (§12) — territory, endings, dialogue: the loop has two ends and both were played to completion in the harness. Three corrections. **§4 was right and the build was wrong**: the arena is "viewport bounds + queried list" and I had queried the whole document, which dealt 24 claims on `/timeline/` (past §10's own ceiling) and a fight that ran 124s without finishing — the board now prefers what is on screen, with a floor and a cap (`MIN_BOARD`/`MAX_BOARD`). **A loss was unreachable**: a landed pounce only took back already-freed elements, so territory could never pass the opening 55%; it now takes fresh ground, preferring what it landed on. **§8's priority order was wrong**: bluffing above supporting had the cat gloating at a player with nothing left to try, so being kind now outranks it. Added one line to §8.2 to close §7.4's teaching gap. Deferred, with reasons: §6's separate truce label, and §7.1's "both paths → sits on the cursor". |
 
 ---
 
@@ -204,6 +205,13 @@ already samples true backdrops and computes WCAG ratios.
 - Nested candidates (`figure` containing `.frame`) → **outermost only**. Transforms
   compound, so claiming both tilts the image twice, and scrubbing the inner one
   leaves it visibly still claimed by the outer. Found in the build; `dropNested`.
+- **A landed pounce must be able to take ground the cat never held.** *(Found in 0.6.)*
+  Built so it only took back elements from the freed pile, which reads correctly and made
+  the game unloseable: a player who had freed nothing could not fall below the opening 55%,
+  so territory never reached 100% and §2's losing condition could not fire. It now prefers
+  the most recently freed element, then **the thing it landed on**, then the nearest
+  unclaimed one. Landing on a paragraph and taking that paragraph is the most legible
+  cause and effect available.
 - An element with an inline `style` of its own → hold the attribute verbatim and
   hand it back on release. Undoing a claim property-by-property is not the same as
   restoring the attribute: touching an element's style re-serialises whatever was
@@ -424,8 +432,10 @@ Vertical territory, because the cat already owns the bottom of the page:
   finally has a second job.
 - **No health bar for the cat.** Territory is the only axis. Two bars would imply
   two failure states; there is one.
-- **Truce always visible**, bottom-right, low contrast. Pillar 2 must be legible
-  as an affordance, not a hidden keystroke.
+- ~~**Truce always visible**, bottom-right, low contrast.~~ **Superseded by §13** (0.2)
+  and formally dropped in 0.6: the toggle in the cat's own widget is already the
+  always-visible way out, and a second control in the opposite corner would be a widget
+  for a rule that is already stated. Pillar 2 is satisfied by the switch that started it.
 - **Ribbon follows the cat**, never centre-screen. Centre-screen dialogue would
   cover the portfolio, which is the actual product.
 - **The cursor is the only other UI**, added in 0.5: crosshair while a fight is on,
@@ -446,6 +456,19 @@ Vertical territory, because the cat already owns the bottom of the page:
 - Confrontation path → **notch** (win a fight)
 - Both in one session → the cat sits *on* the cursor when idle. The top state,
   reachable only by playing both ways.
+
+> **Built, 0.6 — the notch, not the top state.**
+>
+> Winning adds `.notched` to the cat for the rest of the session, exactly as the collar
+> uses `lv6`. It is drawn as a **mark on the ear rather than a wedge bitten out of it**: the
+> ear renders about 4×5px, so a missing wedge that small is either invisible or — if filled
+> with the ground colour to fake a cut — plainly wrong the moment the cat walks across a
+> photograph. A coloured nick is legible at that size and speaks the language the collar
+> already established.
+>
+> **"Both paths → sits on the cursor" is deferred.** It is the one reward that changes
+> *ambient browsing* rather than the fight, on a portfolio somebody may be reading, and it
+> is not part of what §12 step 4 asks for. Worth building, worth building deliberately.
 
 ### 7.2 What losing costs
 **Nothing permanent, by design.** Progress is session-only already
@@ -517,6 +540,22 @@ here may carry information the player needs.
 
 Fires when aggression drops to the bored tier. The cat is being kind and will not
 admit it.
+
+> **Built, 0.6, and the priority order needed inverting.** §8.1 and §8.2 describe the *same
+> state from two sides*: at 80% territory the cat is winning and the player is losing, and
+> both tables have a line for it. Ordered bluffing-first, the tests caught the cat saying
+> *"you are making this loud"* to somebody who was out of treats and out of ideas. So
+> **being kind outranks gloating whenever the player has no way forward** — pillar 3 says
+> this cat is bluffing rather than malevolent, and priority order is where that claim is
+> either true or decoration.
+>
+> These triggers were also written against "aggression drops to the bored tier", which does
+> not exist until step 5. The conditions underneath it — empty-handed, stuck, nothing
+> changing — *are* the bored tier, so they fire on those directly.
+>
+> One line added, `you could just bribe me.`, for the gap §7.4 flagged: it fires when you
+> have a treat, have not thrown one, and are losing. Until 0.6 nothing in the build taught
+> the throw at all.
 
 | Trigger | Line |
 |---|---|
@@ -625,6 +664,9 @@ the same as playtested:
 | Claim outline | 2px dashed, 62% accent | Carries the read that the wash can't afford to. Painted, so it costs no layout | 1px at 55%: too quiet to find claims by |
 | `MIN_CLAIM_AREA` | 900px² | A `.rail` line is ~2000px² and reads fine; below this are sprite stubs and empty spans | Too low: claims land on 9px dots and the game looks broken |
 | Board size | 8 claims on the homepage | What the §4.1 query yields at 0.55 after excluding protected furniture and de-nesting | <4: the fight is over before it starts. >20: the page is unreadable, breaking pillar 2 |
+| `MIN_BOARD` / `MAX_BOARD` | 14 / 20 | *Added 0.6.* The board prefers what is on screen (§4), extends below the fold only when the screen cannot hold a game, and is capped at the row above's ceiling. Screen-only deals ~8 candidates at 1280×900 → four claims → a nine-second fight | Uncapped: `/timeline/` deals 24 claims and a fight runs past two minutes. Screen-only: the fight is over before it starts |
+| `LINE_MS` / `LINE_GAP_MS` | 2600 / 1200 | A line up long enough to read twice, and silence long enough that each one is an event | No gap: the cat narrates and the ribbon becomes a log |
+| `WIN_BEAT_MS` / `LOSE_BEAT_MS` | 2200 / 1600 | Long enough for the parting line and §7.4's one re-claim; the loss is shorter because nobody wants to sit in it | >4000: the page feels held hostage after the game is decided |
 
 Added in 0.4, from building the pounce:
 
@@ -725,7 +767,12 @@ them independently is how this gets unbalanced.
    found treat; the cat abandons everything for it and cannot pounce while it eats. The
    safe window is verified as a real decision by an A/B on one claim (§5.4). Shapes
    already differ per treat while behaviour does not, which is the seam step 5 needs.
-4. Add **Territory + endings + dialogue**. First full loop.
+4. ✅ **Territory + endings + dialogue** — *built in 0.6.* A 3px bar on the top edge with
+   no numbers, a win (page cleared → the cat takes one thing back and leaves, and wears a
+   notch for the session) and a loss (every claim taken *and* no treats left → it lets you
+   read on), and a ribbon that speaks §8's script. **Both endings were played to completion
+   in a browser**, which is the only way to know a loop is closed: a loss in ~10s of
+   standing still, a win in ~17s of scripted play.
 5. Add **stances**, then **loadout**. Replayability last — it is worthless before
    the loop is fun.
 6. **The ink transition** (§14), replacing step 0's instant swap.
@@ -741,6 +788,22 @@ ever exercises.
 Ship gate for each step: the existing 20-check ink harness, `npm test`, and the
 contrast gate above must all stay green. The fight lives on the same page as the
 ink wash and the glass pane; it does not get to break them.
+
+**Step 4 ship gate, actual:** 324 unit tests, and a 36-check harness
+(`scratchpad/arena4.mjs`) that **plays both endings to completion** — a loss in ~10s of
+standing still empty-handed, a win in ~17s of scripted play. That is the only way to know a
+loop is closed; asserting that the ending *code* runs would have missed both of the bugs
+this step had. It also checks the bar's geometry and that it carries no numbers, that the
+ribbon obeys §8's rules in the rendered DOM (word count, case, no repeats, silence between
+lines) and sits above the cat rather than over the page, that the notch appears and is
+drawn, and that both endings restore the page byte-for-byte.
+
+Two harness lessons, both about checks that passed for the wrong reason. The ribbon-position
+check read a *hidden* element's rect, got 0,0, and concluded it was not in the middle of the
+page. And the restore check reported "differs" with no detail, which sent me to write two
+separate diagnostic scripts before I made it name the first difference — at which point it
+turned out to be the site's own scroll-reveal classes, since the win fight scrolls and the
+baseline had not.
 
 **Step 3 ship gate, actual:** 298 unit tests, a 30-check browser harness
 (`scratchpad/arena3.mjs`) whose centre is the A/B above, plus every earlier harness still
