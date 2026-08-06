@@ -132,6 +132,56 @@
     border-radius: var(--radius-card);
   }
 
+  /* ---- the hero's glass pane ----
+     Reuses the sticky header's idiom (color-mix + backdrop-filter) rather than
+     inventing a second one, but far more transparent: the header sits over page
+     content it should not obscure, this sits over the ink and wants it to read
+     through.
+
+     Applied to the same element that carries `data-ink-reserve`, so the pane and
+     the ink's tone cap are one rectangle by construction rather than two numbers
+     kept in sync by hand. */
+  .glass {
+    position: relative;
+    border-radius: var(--radius-card);
+    padding: 1.5rem 1.625rem;
+    background: color-mix(in srgb, var(--color-ground) 46%, transparent);
+    -webkit-backdrop-filter: blur(18px) saturate(1.15);
+    backdrop-filter: blur(18px) saturate(1.15);
+    /* A hairline, plus a brighter top edge. The lit edge is what actually sells
+       a pane of glass — without it a translucent fill reads as a flat tint. */
+    border: 1px solid color-mix(in srgb, var(--color-line) 70%, transparent);
+    border-top-color: color-mix(in srgb, #fff 55%, transparent);
+    /* Float: one wide soft shadow for the lift, one tight one for the contact
+       edge, and an inset highlight so the top surface catches light. */
+    box-shadow:
+      0 24px 48px -28px rgb(60 44 28 / 0.28),
+      0 2px 6px -3px rgb(60 44 28 / 0.10),
+      inset 0 1px 0 0 rgb(255 255 255 / 0.35);
+  }
+  html.dark .glass {
+    background: color-mix(in srgb, var(--color-ground) 52%, transparent);
+    border-color: color-mix(in srgb, var(--color-ink) 16%, transparent);
+    border-top-color: color-mix(in srgb, var(--color-ink) 30%, transparent);
+    box-shadow:
+      0 24px 52px -26px rgb(0 0 0 / 0.55),
+      0 2px 6px -3px rgb(0 0 0 / 0.35),
+      inset 0 1px 0 0 rgb(255 255 255 / 0.07);
+  }
+  /* Without backdrop-filter there is no frosting, so the fill has to do the
+     whole job of separating text from ink. */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass { background: color-mix(in srgb, var(--color-ground) 88%, transparent); }
+  }
+  /* The contrast mode forces muted text to full ink and strengthens hairlines.
+     The pane's job there is to get out of the way, not to compete. */
+  html.a11y-contrast .glass {
+    background: var(--color-ground);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+
   /* covers sit in soft frames, like prints resting on a table */
   .frame {
     border: 1px solid var(--color-line);
@@ -605,6 +655,15 @@
   [data-pagefind-ignore],
   [data-video-play] {
     display: none !important;
+  }
+  /* No ink on paper to frost, so the pane is just a box in the way. */
+  .glass {
+    padding: 0 !important;
+    background: none !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
   }
   .reveal, .reveal-2, .reveal-3 { animation: none !important; opacity: 1 !important; }
   /* Scroll-revealed blocks sit at opacity 0 until they enter the viewport — and

@@ -526,6 +526,23 @@
     planPour(true);
   }
 
+  /**
+   * Rebuild the reserve once the hero's reveal animations have finished.
+   *
+   * Guarded on getAnimations, which not every engine has; without it the reserve
+   * simply keeps the mount-time rect, which is what happened before.
+   */
+  function queueSettledReserve(): void {
+    const el = document.querySelector<HTMLElement>('[data-ink-reserve]');
+    if (!el || typeof el.getAnimations !== 'function') return;
+    const running = el.getAnimations().map((a) => a.finished);
+    Promise.all(running)
+      .then(() => {
+        if (canvas && field) buildReserve(field.gw, canvas.getBoundingClientRect());
+      })
+      .catch(() => {});
+  }
+
   /** Bake the mottling and the voids for this seed, once per pour. */
   function buildPaper(gw: number, gh: number): void {
     paper = new Float32Array(gw * gh);
@@ -663,6 +680,18 @@
     el.hidden = false;
 
     readInk();
+    // Re-measure the reserve once the hero's entrance animation has settled.
+    //
+    // `.reveal` runs `translateY(10px)` for 600ms and getBoundingClientRect
+    // includes transforms, so a reserve built while that is in flight caps a
+    // rectangle up to 10px away from where the text actually lands — leaving a
+    // sliver of uncapped ink along one edge. It was there before the glass pane
+    // and the pane made it visible: measured peak alpha over the text went from
+    // 0.161 to 0.200, past the bound that protects reading.
+    //
+    // Deliberately not "wait, then build once": the animation may already be
+    // finished by the time this runs, in which case `finished` resolves at once.
+    queueSettledReserve();
     // Rolled before resize(), because resize() builds the paper from `seed`.
     seed = rollSeed();
     dropCount = DROPS_MIN + Math.floor(mulberry32(seed + 6421)() * (DROPS_MAX - DROPS_MIN + 1));
