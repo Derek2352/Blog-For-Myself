@@ -1,6 +1,6 @@
 # GDD — "Whose Screen Is It" (cat boss fight)
 
-**Version** 0.4 · steps 0–2 built, everything else design only
+**Version** 0.5 · steps 0–3 built, everything else design only
 **Status** hypothesis. Every number below is `[PH]` (placeholder) until playtested —
 including the ones now running in a browser. Built is not playtested.
 
@@ -9,9 +9,10 @@ including the ones now running in a browser. Built is not playtested.
 | Ver | Change |
 |---|---|
 | 0.1 | First draft. Core loop, mechanic specs, dialogue table, replayability. All values `[PH]`. |
-| 0.4 | **Built step 2** (§12) — the pounce. One design bug and one correction: **§5.3** never said *when* the aim locks, and locking it at the end of the telegraph deletes the telegraph, so it now locks at the start and the prediction leads the whole commitment; **§10's** rationale for `RECOVER_MS` was wrong on its own terms, and what a dodge actually buys is relocation, not banked progress. **§0** corrected: the fight reuses the cat *element*, not SiteCat's state machine. **§7.4's** opening grace drops from 6s to 2.5s for the board that exists. New §10 rows for the numbers the pounce introduced. |
-| 0.3 | **Built steps 0 and 1** (§12) — the toggle and Claim + Scrub. Three revisions the build forced: **§5.1** — desaturate-and-tilt is invisible on a cream-and-ink page, so a claim is now a wash plus a dashed edge, with the wash contrast-capped at 7%; **§11** — "transform and filter only" restated as the principle it meant (nothing that affects layout or hides content), which admits `outline` and `box-shadow`, plus a new hscroll rule and a coarse-pointer gate; **§13.4** — the durable `localStorage` opt-out is **cut**, because it could not change any observable behaviour. §5.2 and §10 gain what building taught. |
 | 0.2 | Added §13 arena toggle and §14 loading transition. **Revised §11**: the toggle overturns the reduced-motion decision — an explicit opt-in is a prompt, so hiding the game from those users was paternalistic. Added a photosensitivity requirement the full-screen transition makes load-bearing. **Revised §3**: long-press-to-start removed; the toggle is the only entry point, because an invisible gesture is not an opt-in. **Revised §12**: the toggle becomes step 0 with an instant swap, the transition moves to last. §6 diagram shows the toggle. |
+| 0.3 | **Built steps 0 and 1** (§12) — the toggle and Claim + Scrub. Three revisions the build forced: **§5.1** — desaturate-and-tilt is invisible on a cream-and-ink page, so a claim is now a wash plus a dashed edge, with the wash contrast-capped at 7%; **§11** — "transform and filter only" restated as the principle it meant (nothing that affects layout or hides content), which admits `outline` and `box-shadow`, plus a new hscroll rule and a coarse-pointer gate; **§13.4** — the durable `localStorage` opt-out is **cut**, because it could not change any observable behaviour. §5.2 and §10 gain what building taught. |
+| 0.4 | **Built step 2** (§12) — the pounce. One design bug and one correction: **§5.3** never said *when* the aim locks, and locking it at the end of the telegraph deletes the telegraph, so it now locks at the start and the prediction leads the whole commitment; **§10's** rationale for `RECOVER_MS` was wrong on its own terms, and what a dodge actually buys is relocation, not banked progress. **§0** corrected: the fight reuses the cat *element*, not SiteCat's state machine. **§7.4's** opening grace drops from 6s to 2.5s for the board that exists. New §10 rows for the numbers the pounce introduced. |
+| 0.5 | **Built step 3** (§12) — treats, and with them the loop's missing half: an A/B on one claim shows a hold the cat would have taken completing once a treat is thrown, so **§12's "verify the safe window is a real decision" is answered**. One deviation: a throw during `recover` is *not* wasted (a treat is an object, not a spell), paired with one-treat-at-a-time so lures cannot be banked. One constraint found: most of a portfolio is a link and a link is not a throwing surface, so the arena now shows a crosshair and links keep their pointer (§6). One bug found by screenshot: SiteCat's `announce()` timer stomped the borrowed HUD line mid-fight. §7.4's "treats explained by the cat asking" is **unbuilt** and now flagged as the weakest seam. |
 
 ---
 
@@ -24,13 +25,13 @@ This is **not** a greenfield design. `src/components/SiteCat.astro` (1202 lines)
 |---|---|---|
 | Modes `walk / idle / away / climb / chase / fetch` | SiteCat.astro:504 | *Corrected in 0.4:* what the fight reuses is the **element**, not the state machine. The arena borrows `#site-cat` via a `cat:standdown` event and runs its own four-phase machine on it — SiteCat's modes are a floor-walker's, and the boss needs 2D. |
 | `chase` — cat runs at the cursor when within 34px | :773–804 | *Corrected in 0.4:* not reused. Its 34px trigger is the scale reference for `POUNCE_RANGE`, and that is all. |
-| `fetch` — cat abandons everything for a treat | :691, :746 | The player's defensive tool. Already written. |
+| `fetch` — cat abandons everything for a treat | :691, :746 | *Corrected in 0.5:* the **idea** is reused, the code is not. The arena runs its own `fetch`/`eat` phases on the borrowed element, and throws its own treat element so the page's hidden treat is never disturbed. What is genuinely reused is the art — the shapes in the shared `<defs>`. |
 | `climb` — cat scales a side edge | :930–983 | Boss repositioning / phase transition |
 | One treat per navigable tab, 7 tabs | cat-game.ts:24 | **Ammunition.** Explore the site → arm yourself |
 | `TREATS = fish, yarn, bell, feather, biscuit`, hashed per slug | cat-game.ts:20–28 | **Loadout.** Which tabs you explored decides your kit |
 | 7-rung affection ladder, ratio-derived | cat-game.ts:34–57 | Difficulty input and post-fight consequence |
 | Collar SVG, appears only at completion | SiteCat.astro:46–56 | The *patient* path's reward — the fight must not duplicate it |
-| Paw row + `tallyFor` caption | cat-game.ts:79 | Existing HUD. Becomes the ammo counter. |
+| Paw row + `tallyFor` caption | cat-game.ts:79 | Existing HUD. **Is** the ammo counter as of 0.5 — filled paw = treat in hand, restored verbatim on truce. |
 | `transition:persist`, session-only state, nothing stored | cat-game.ts:6–7 | Session-only stakes. No permanent loss is possible. |
 | `aria-hidden`, reduced-motion → sits still | SiteCat.astro header | Hard accessibility floor, see §11 |
 
@@ -257,6 +258,12 @@ partial. Partial retention would remove the reason to buy a safe window.
 > fleeing and holding elsewhere is. The tension the hypothesis names is real but it
 > currently resolves one way, which is exactly the gap treats exist to fill (§5.4,
 > step 3). If it still isn't fun *after* treats, the hypothesis is wrong.
+>
+> **What step 3 did to it (0.5):** the gap is closed — a thrown treat turns a hold the
+> cat would have taken into one that completes (§5.4's A/B). So the hypothesis now has
+> all three of its parts in place and is finally *askable*: hold under threat, throw to
+> buy a window, choose where. Everything left in §12 is texture on top of that. If it
+> is not fun now, no amount of stances, dialogue or endings will make it so.
 
 ### 5.3 Mechanic: Pounce
 
@@ -338,8 +345,47 @@ the loss coming rather than being surprised by it.
   recover, since the cat is already harmless.
 - Throw onto a claimed element → treat lands, cat fetches, *and* the claim is
   unaffected. No accidental double-duty.
-**Tuning levers** `lureDuration` per type, `THROW_ARC_MS`, treat count (= tabs explored)
-**Dependencies** Loadout, existing `fetch` mode
+**Tuning levers** `LURE_MS` per type, `THROW_ARC_MS`, `FETCH_SPEED`, treat count (= tabs
+explored)
+**Dependencies** Loadout, the boss's own `fetch`/`eat` phases (*not* SiteCat's `fetch`
+— see §0's 0.4 correction)
+
+> **Built, 0.5 — and it answers §12's question, measured.**
+>
+> The A/B the harness runs: same claim, same cursor position, cat next to you. Hold it
+> with nothing thrown → **24 → 24 claims** and a pounce lands. Hold it having thrown one
+> treat across the room → **24 → 23**, and the cat never even winds up. One treat is the
+> difference between a hold that cannot win and one that does, which is the safe window
+> being a real decision rather than a stated intention.
+>
+> **Deviation: a throw during `recover` is not wasted.** This section says wasted, and
+> suggests dimming the cursor to warn. Built the other way, because a treat is an object
+> and not a spell: it lands, it waits, and the cat fetches it when it can. That deletes
+> a special case *and* a piece of warning UI, and turns "badly timed" into "you lost the
+> overlap" instead of "you lost the resource". The rule that keeps it honest — **one
+> treat on the board at a time** — is what stops lures being banked, and a second throw
+> costs nothing rather than being swallowed.
+>
+> **Found while building: most of a portfolio is a link, and a link is not a throwing
+> surface.** §11 promises every link keeps working, so a click on one navigates — which
+> ends the fight. "Click anywhere to throw" was never available; the first version of the
+> harness clicked on cards and silently threw nothing. The fix is an affordance, not a
+> rule change: while a fight is on the page shows a **crosshair**, and links keep
+> `cursor: pointer` from the UA stylesheet for free. Crosshair throws, pointer navigates.
+> Recorded because it is a real constraint on the mechanic — the cat's safest ground is
+> a dense grid of cards, which is emergent and pillar 1 all over.
+>
+> **Cold start has no ammo, by design.** Pillar 5 means the fight is a sink for the
+> existing economy, so a visitor who opens it from a fresh homepage has nothing to throw
+> and the cat simply looks at them. The tab bar is the tutorial. Worth watching in a
+> playtest: it is the one place where "correct" and "obvious" may not be the same thing.
+>
+> **Bug, caught by a screenshot rather than a test.** SiteCat's `announce()` puts the
+> level phrase in the HUD line and sets a 3.2s timer to restore the tally. That timer
+> knows nothing about the fight, so it fired mid-fight and left the caption reading
+> "3 / 7 treats" next to a paw row showing 2 — the row is ammo during a fight, so the
+> two were contradicting each other in the same chip. The arena now re-asserts its line
+> once a frame, which is self-healing against anything else that writes there.
 
 ---
 
@@ -382,6 +428,10 @@ Vertical territory, because the cat already owns the bottom of the page:
   as an affordance, not a hidden keystroke.
 - **Ribbon follows the cat**, never centre-screen. Centre-screen dialogue would
   cover the portfolio, which is the actual product.
+- **The cursor is the only other UI**, added in 0.5: crosshair while a fight is on,
+  and links keep their pointer for free. It is what tells you where a treat can go and
+  where a click will instead take you off the page. A HUD element saying the same thing
+  would be a fourth widget for a rule the cursor already states.
 
 ---
 
@@ -428,8 +478,13 @@ which is in character, funnier, and does the same job as an invisible fudge.
       the 8-claim board the query actually yields, 6s of grace is about four free
       scrubs — half the fight. 2.5s covers the first one, which is what this line
       was after.)*
-- [x] Each mechanic in a safe context: pounce introduced only after one clear
-      scrub; treats explained by the cat *asking* for one, not by a tooltip
+- [ ] Each mechanic in a safe context: pounce introduced only after one clear
+      scrub; treats explained by the cat *asking* for one, not by a tooltip.
+      *(0.5: the pounce half holds — the opening grace guarantees one clean scrub. The
+      treat half is **not built**, because the cat cannot ask for anything until §8's
+      dialogue exists in step 4. Right now the only thing teaching the throw is the
+      crosshair cursor, which says where you *can* throw and nothing about why. This is
+      the weakest seam in the build and the first thing a playtest will find.)*
 - [x] One mechanic found by exploration: nothing says the cat can't pounce during
       `fetch`. Players discover the safe window themselves — the best moment
       available, so it must not be spoiled by UI
@@ -581,6 +636,16 @@ Added in 0.4, from building the pounce:
 | `OPENING_GRACE_MS` | 2500 | Covers the first scrub, per §7.4's "guaranteed first success", on the board that actually exists | 6000 (0.1's number): four free scrubs, half the fight |
 | Landing point | ~84% of the hold | Where a pounce provoked at 0.35 touches down. Late enough to read as deliberate, and short of the 0.9 that would feel like robbery | ≥1.0: the cat can never interrupt anything, so the threat is theatre |
 
+Added in 0.5, from building the treat:
+
+| Var | `[PH]` | Rationale | "Broken" looks like |
+|---|---|---|---|
+| `LURE_MS` | 3000 | Head-down time once the cat arrives. §5.4's success condition is the floor: below `SCRUB_MS` the resource does not do the one thing it exists for. The cat is also out of the fight for the walk over, which is the player's to place | ≤1400: a treat buys nothing and the economy is decoration. >6000: one treat ends the fight |
+| `THROW_ARC_MS` | 320 | Long enough to read as thrown, short enough not to be a cutscene | >600: every throw is a pause |
+| `FETCH_SPEED` | 186px/s | Lifted from SiteCat's own fetch speed, where the comment reads "it can see food". Faster than `STALK_SPEED` 170 on purpose: it hurries for food and takes its time with you | ≤`STALK_SPEED`: the contrast disappears and so does the characterisation |
+| `FETCH_REACH` | 14px | How close it has to get before eating starts | Too large: it eats from across the room |
+| `RECLAIM_ON_HIT` | 1 | A landed pounce takes back the most recent thing you earned — legible as cause and effect where a random element is not | >1: one mistake undoes a minute of play |
+
 Build these as a spreadsheet with formulas before writing the code, per §Balance
 Process — `SCRUB_MS`, `RECOVER_MS` and `lureDuration` are *coupled*, and hardcoding
 them independently is how this gets unbalanced.
@@ -656,7 +721,10 @@ them independently is how this gets unbalanced.
    actually stopped its loop — it re-armed unconditionally, so the only thing that
    ever halted the cat was the reduce-motion check. Harmless until something else
    wanted the element; a single stray frame drops a stalking boss back on the floor.
-3. Add **Treats** as a single type. Verify the safe window is a real decision.
+3. ✅ **Treats, as a single type** — *built in 0.5.* Click a non-link surface to spend a
+   found treat; the cat abandons everything for it and cannot pounce while it eats. The
+   safe window is verified as a real decision by an A/B on one claim (§5.4). Shapes
+   already differ per treat while behaviour does not, which is the seam step 5 needs.
 4. Add **Territory + endings + dialogue**. First full loop.
 5. Add **stances**, then **loadout**. Replayability last — it is worthless before
    the loop is fun.
@@ -673,6 +741,12 @@ ever exercises.
 Ship gate for each step: the existing 20-check ink harness, `npm test`, and the
 contrast gate above must all stay green. The fight lives on the same page as the
 ink wash and the glass pane; it does not get to break them.
+
+**Step 3 ship gate, actual:** 298 unit tests, a 30-check browser harness
+(`scratchpad/arena3.mjs`) whose centre is the A/B above, plus every earlier harness still
+green (58/58, 27/27, ink 20/20, cycle). It earns its ammo the way a visitor does — by
+clicking through tabs, never `page.goto`, because a full document load resets the cat's
+session state and the found set with it.
 
 **Step 2 ship gate, actual:** 292 unit tests, the steps 0–1 harness still 58/58, ink
 20/20, cycle green, build warning-free, plus a 27-check browser harness

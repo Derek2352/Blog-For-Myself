@@ -180,11 +180,14 @@ export function stillEnough(dx: number, dy: number): boolean {
  * ------------------------------------------------------------------ */
 
 /**
- * The boss's whole state machine. Four phases, one at a time, by construction —
- * §5.3's "two pounces queued" edge case is impossible if there is only ever one
- * of these.
+ * The boss's whole state machine. One phase at a time, by construction — §5.3's
+ * "two pounces queued" edge case is impossible if there is only ever one of these.
+ *
+ * `fetch` and `eat` are the treat's doing (§5.4), and they are the only phases the
+ * *player* can put the cat into. Two of them rather than one `lure`, because they
+ * end for different reasons: `fetch` ends on arrival, `eat` ends on a clock.
  */
-export type Phase = 'stalk' | 'telegraph' | 'leap' | 'recover';
+export type Phase = 'stalk' | 'telegraph' | 'leap' | 'recover' | 'fetch' | 'eat';
 
 /** `[PH 420]` ms of wind-up. Human reaction is ~250ms; the rest is read time. */
 export const TELEGRAPH_MS = 420;
@@ -251,11 +254,17 @@ export const OPENING_GRACE_MS = 2500;
 /** How many freed elements a landed pounce takes back. */
 export const RECLAIM_ON_HIT = 1;
 
-/** How long a phase lasts. `stalk` ends on a decision, not a clock. */
+/**
+ * How long a phase lasts.
+ *
+ * `stalk` and `fetch` are both `Infinity` and for the same reason: they end on
+ * something happening (a decision, an arrival), not on a clock running out.
+ */
 export function phaseDuration(phase: Phase): number {
   if (phase === 'telegraph') return TELEGRAPH_MS;
   if (phase === 'leap') return LEAP_MS;
   if (phase === 'recover') return RECOVER_MS;
+  if (phase === 'eat') return LURE_MS;
   return Infinity;
 }
 
@@ -271,12 +280,25 @@ export function nextPhase(phase: Phase, elapsed: number): Phase | null {
   if (phase === 'telegraph') return 'leap';
   if (phase === 'leap') return 'recover';
   if (phase === 'recover') return 'stalk';
+  if (phase === 'eat') return 'stalk';
   return null;
 }
 
 /** Will the cat commit? Close enough, and you are far enough into a scrub. */
 export function provoked(distance: number, progress: number): boolean {
   return distance <= POUNCE_RANGE && progress >= POUNCE_THRESHOLD;
+}
+
+/**
+ * Can the cat start a pounce right now?
+ *
+ * Only from a stalk, which is where the treat's entire value comes from: §5.3 is
+ * explicit that a cat in `fetch` cannot pounce, and if that could be cancelled the
+ * resource would be worthless. Written as one predicate rather than a condition
+ * inside the loop so the guarantee is testable and cannot be quietly widened.
+ */
+export function canPounce(phase: Phase): boolean {
+  return phase === 'stalk';
 }
 
 /** Farthest ahead of the cursor the cat is allowed to aim, in px. */
@@ -358,6 +380,36 @@ export function leapPos(
 export function pounceHit(landX: number, landY: number, curX: number, curY: number): boolean {
   return Math.hypot(landX - curX, landY - curY) <= HIT_RADIUS;
 }
+
+/* ------------------------------------------------------------------ *
+ * Treats — exploration, spent (§5.4)
+ * ------------------------------------------------------------------ */
+
+/**
+ * `[PH 3000]` ms of head-down eating, once the cat reaches the treat.
+ *
+ * §5.4's success condition is the whole justification: *a thrown treat reliably buys
+ * one complete scrub.* Below `SCRUB_MS` the resource does nothing at all, so this is
+ * one of the few numbers here with a hard floor rather than a taste range. The cat is
+ * out of the fight for this **plus** the walk over, which is the player's to place.
+ */
+export const LURE_MS = 3000;
+
+/** `[PH 320]` ms for the treat to arc from the HUD to where you pointed. */
+export const THROW_ARC_MS = 320;
+
+/**
+ * `[PH 186]` px/s going to a treat — noticeably faster than the `STALK_SPEED` 170.
+ *
+ * Lifted from `SiteCat.astro`'s own fetch speed, where the comment reads "it can see
+ * food; a stroll across the room read as a stall". Same animal, same appetite, and
+ * the contrast with stalking is characterisation: it hurries for food and takes its
+ * time with you.
+ */
+export const FETCH_SPEED = 186;
+
+/** How close the cat has to get to the treat to start eating, in px. */
+export const FETCH_REACH = 14;
 
 /* ------------------------------------------------------------------ *
  * Score, and the HUD line

@@ -20,6 +20,10 @@ import {
   AIM_LEAD_MS,
   STALK_SPEED,
   OPENING_GRACE_MS,
+  LURE_MS,
+  FETCH_SPEED,
+  phaseDuration,
+  canPounce,
   nextPhase,
   provoked,
   predict,
@@ -357,6 +361,48 @@ describe('nextPhase — the pounce state machine', () => {
 
   it('leaps fast enough to read as a pounce', () => {
     expect(LEAP_MS).toBeLessThanOrEqual(400);
+  });
+});
+
+describe('the treat’s hold on the cat (§5.4)', () => {
+  it('buys more than one complete scrub, or it buys nothing', () => {
+    // The hard floor in the whole design: below SCRUB_MS the resource does not do
+    // the one thing it exists to do.
+    expect(LURE_MS).toBeGreaterThan(SCRUB_MS);
+  });
+
+  it('ends eating by returning to the stalk', () => {
+    expect(nextPhase('eat', LURE_MS)).toBe('stalk');
+    expect(nextPhase('eat', LURE_MS - 1)).toBe(null);
+    expect(phaseDuration('eat')).toBe(LURE_MS);
+  });
+
+  it('never ends the walk to the treat on a clock', () => {
+    // `fetch` ends on arrival. A timeout would let the cat give up on food it can
+    // see, which is both wrong about cats and a silent way to void the resource.
+    expect(phaseDuration('fetch')).toBe(Infinity);
+    expect(nextPhase('fetch', 60_000)).toBe(null);
+  });
+
+  it('hurries for food and takes its time with you', () => {
+    expect(FETCH_SPEED).toBeGreaterThan(STALK_SPEED);
+  });
+});
+
+describe('canPounce', () => {
+  it('is true only from a stalk', () => {
+    expect(canPounce('stalk')).toBe(true);
+    for (const p of ['telegraph', 'leap', 'recover', 'fetch', 'eat'] as const) {
+      expect(canPounce(p)).toBe(false);
+    }
+  });
+
+  it('is what makes a treat worth throwing', () => {
+    // §5.3: a cat in fetch cannot pounce, and if that could be cancelled the
+    // resource would be worthless. Asserted here rather than trusted to a
+    // condition inside the loop.
+    expect(canPounce('fetch')).toBe(false);
+    expect(canPounce('eat')).toBe(false);
   });
 });
 

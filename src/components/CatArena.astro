@@ -10,22 +10,40 @@
  * it comes back to you.
  *
  * **Step 2**: Pounce. The cat leaves the footer, stalks the cursor, and interrupts a
- * scrub it judges worth interrupting — telegraph, leap, recover. Still no treats, no
- * territory bar, no dialogue, no endings.
+ * scrub it judges worth interrupting — telegraph, leap, recover.
+ *
+ * **Step 3**: Treats. Click to spend one of the treats you found while browsing; the
+ * cat abandons everything to go and eat it, and cannot pounce while it does. Still no
+ * territory bar, no dialogue, no endings, and one treat type's behaviour for all
+ * shapes.
  *
  * What all of it does to the page, and nothing more: adds a class and one custom
  * property to some existing elements. Claims never affect layout and never hide
  * anything (§11), so text stays selectable and every link stays clickable while the
  * cat "holds" the block around it.
  *
- * The consequence of step 2 worth knowing before reading further: **a pounce always
- * beats a scrub it commits to** (it lands at ~84% of the hold), so ground can only be
- * taken where the cat isn't. Keeping it away is the game until treats exist to buy a
- * window where it is — which is step 3, and which is why the loop feels thin here.
+ * The shape of the loop, now that all three exist: **a pounce always beats a scrub it
+ * commits to** (it lands at ~84% of the hold), so ground is taken where the cat isn't
+ * — and a treat is how you *make* somewhere the cat isn't. Ammo comes only from having
+ * browsed the site (pillar 5), so a visitor who opens a fight cold has none, and the
+ * tab bar is the tutorial.
  *
  * Off is the only state a page can load in. Nothing is written to storage.
  */
 ---
+
+{/* A thrown treat. Its own element rather than SiteCat's `#cat-treat`: the shapes
+    live in a shared <defs> block, so this reuses the art by reference without
+    borrowing any of that element's state — no clobbering the treat a page is
+    currently hiding, and no interference with the credit SiteCat owes it.
+
+    `pointer-events: none` for the same reason the other one has it: a decorative
+    treat has no business eating a click meant for a link. */}
+<div id="cat-throw" transition:persist="cat-throw" aria-hidden="true" hidden>
+  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+    <use href="#treat-fish"></use>
+  </svg>
+</div>
 
 {/* The scrub ring: a cursor-sized dial that fills while you hold still. Fixed,
     aria-hidden and pointer-events: none — it must never be the thing under the
@@ -96,6 +114,18 @@
      the page a horizontal scrollbar. */
   :global(html.cat-arena-on) {
     overflow-x: clip;
+    /*
+     * Crosshair = you can put a treat here. It is the whole affordance for §5.4, and
+     * it costs nothing: links and buttons keep `cursor: pointer` from the UA
+     * stylesheet, because a declaration on the element beats an inherited one. So the
+     * cursor draws the one boundary the player needs — **crosshair throws, pointer
+     * navigates** — with no new UI and nothing added to the page.
+     *
+     * It matters more than it looks. A portfolio is mostly links, and a click on one
+     * still navigates (§11 promises the page keeps working), which ends the fight. The
+     * cursor is what turns that from a mystery into a rule.
+     */
+    cursor: crosshair;
   }
 
   /* ---- the cat, while the arena has it (§5.3) ----
@@ -138,6 +168,51 @@
   :global(#site-cat.boss-recover .cat-tail) {
     transform: rotate(12deg);
   }
+  /* head down in something better than you */
+  :global(#site-cat.boss-eat .cat-svg) {
+    transform: scale(1.02, 0.95);
+  }
+  :global(#site-cat.boss-eat .cat-head) {
+    transform: translateY(3.5px);
+  }
+  :global(#site-cat.boss-eat .cat-tail) {
+    transform: rotate(-6deg);
+  }
+
+  /* ---- a thrown treat ----
+     Positioned exactly like the cat is: pinned to the bottom-left corner, moved by
+     transform only, so one helper places both. */
+  #cat-throw {
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    z-index: 41;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    pointer-events: none;
+    color: var(--color-accent);
+    opacity: 0.9;
+  }
+  #cat-throw[hidden] {
+    display: none;
+  }
+  #cat-throw svg {
+    display: block;
+  }
+  /* The cat has its head down on it — a small settle so the treat reads as being
+     eaten rather than as having vanished. */
+  @media (prefers-reduced-motion: no-preference) {
+    #cat-throw.eaten {
+      animation: cat-treat-gone 0.4s ease-in forwards;
+    }
+    @keyframes cat-treat-gone {
+      to {
+        opacity: 0;
+        transform: var(--throw-at) scale(0.4);
+      }
+    }
+  }
 
   #cat-scrub {
     position: fixed;
@@ -168,7 +243,7 @@
 
 <script>
   import { motionReduced } from '@/lib/a11y-prefs';
-  import { tallyFor } from '@/lib/cat-game';
+  import { tallyFor, resolveTreat } from '@/lib/cat-game';
   import {
     CLAIMABLE,
     PROTECTED,
@@ -181,6 +256,9 @@
     OPENING_GRACE_MS,
     RECLAIM_ON_HIT,
     STALK_SPEED,
+    THROW_ARC_MS,
+    FETCH_SPEED,
+    FETCH_REACH,
     bigEnough,
     dropNested,
     pickClaims,
@@ -190,6 +268,7 @@
     arenaCaption,
     isCleared,
     nextPhase,
+    canPounce,
     provoked,
     predict,
     leapPos,
@@ -219,6 +298,17 @@
     seed: 0,
     /** When the fight began, for the opening grace (§7.4). */
     openedAt: 0,
+    /**
+     * The one treat allowed on the board, in flight or waiting to be eaten.
+     *
+     * One at a time is what keeps lures from being banked, now that a badly timed
+     * throw waits to be useful instead of evaporating.
+     */
+    treat: null as null | { x: number; y: number; fx: number; fy: number; at: number; landed: boolean },
+    /** Which paws were filled when the fight opened, so spending is fight-local. */
+    ammoWas: [] as boolean[],
+    /** What the borrowed HUD line should say — see `holdCaption`. */
+    caption: '',
     /** rAF handle for the loop. */
     raf: 0,
   };
@@ -306,8 +396,26 @@
    * ---------------------------------------------------------------- */
 
   function caption(text: string): void {
+    arena.caption = text;
     const line = document.querySelector<HTMLElement>('#cat-score .cat-caption');
-    if (line) line.textContent = text;
+    if (line && line.textContent !== text) line.textContent = text;
+  }
+
+  /**
+   * Hold the line the arena borrowed.
+   *
+   * SiteCat's `announce()` swaps the caption to the level phrase on a find and sets a
+   * 3.2s timer to put the tally back. That timer does not know about the fight, so it
+   * fired mid-fight and left the caption reading "3 / 7 treats" while the paw row
+   * beside it was showing 2 — the row is ammo during a fight, so the two were flatly
+   * contradicting each other. Caught in a screenshot, not by a test.
+   *
+   * Re-asserting once a frame is the cheap fix and it is self-healing: whatever writes
+   * to that line, it goes back to the truth on the next tick.
+   */
+  function holdCaption(): void {
+    if (!arena.caption) return;
+    caption(arena.caption);
   }
 
   /**
@@ -322,6 +430,20 @@
     const paws = [...document.querySelectorAll<HTMLElement>('#cat-score .cat-paw[data-slug]')];
     if (!paws.length) return;
     caption(tallyFor(paws.filter((p) => p.classList.contains('got')).length, paws.length));
+  }
+
+  /**
+   * Give the paw row back exactly as it was found.
+   *
+   * §7.2: losing a fight must never cost you exploration, so treats spent here are
+   * spent *inside* the fight only. Must run before `restoreCaption`, which counts the
+   * filled paws to rebuild the tally — restoring in the other order publishes the
+   * ammo count as if it were the score.
+   */
+  function restoreAmmo(): void {
+    const paws = [...document.querySelectorAll<HTMLElement>('#cat-score .cat-paw[data-slug]')];
+    paws.forEach((paw, i) => paw.classList.toggle('got', arena.ammoWas[i] ?? paw.classList.contains('got')));
+    arena.ammoWas = [];
   }
 
   /* ---------------------------------------------------------------- *
@@ -410,7 +532,11 @@
     const dt = Math.min(0.05, (now - boss.last) / 1000);
     boss.last = now;
 
+    // Treat first: a landing has to be visible to the boss in the same frame, or the
+    // cat spends a frame stalking something it should already have abandoned.
+    stepTreat(now);
     stepBoss(now, dt, stepScrub(now));
+    holdCaption();
   }
 
   /* ---------------------------------------------------------------- *
@@ -464,6 +590,118 @@
     root.classList.toggle('boss-telegraph', phase === 'telegraph');
     root.classList.toggle('boss-leap', phase === 'leap');
     root.classList.toggle('boss-recover', phase === 'recover');
+    root.classList.toggle('boss-eat', phase === 'eat');
+    root.classList.toggle('boss-fetch', phase === 'fetch');
+    /*
+     * `walking` is SiteCat's own class, and its leg and bob keyframes are already
+     * written. The boss was moving with its legs still: the arena parks SiteCat's
+     * loop, and that loop is what used to set this. Reusing it means the two phases
+     * that actually travel animate, and nothing new is drawn.
+     */
+    root.classList.toggle('walking', phase === 'stalk' || phase === 'fetch');
+  }
+
+  /** Turn to face the way it is going. `.face-left` is SiteCat's own class. */
+  function faceToward(root: HTMLElement, dx: number): void {
+    const face = dx < 0 ? -1 : 1;
+    if (face === boss.facing) return;
+    boss.facing = face as 1 | -1;
+    root.classList.toggle('face-left', face === -1);
+  }
+
+  /* ---------------------------------------------------------------- *
+   * Treats (§5.4) — exploration, spent
+   * ---------------------------------------------------------------- */
+
+  const throwEl = () => el('cat-throw');
+
+  /**
+   * Ammunition: the filled paws in the HUD row.
+   *
+   * Pillar 5 — the fight is a *sink* for the treat economy the site already has, not
+   * a new one. So a visitor who has browsed nothing has nothing to throw, and the tab
+   * bar is the tutorial. §5.4 calls that state normal rather than an error: the cat
+   * just looks at you, and silence is the feedback.
+   */
+  function ammo(): HTMLElement[] {
+    return [...document.querySelectorAll<HTMLElement>('#cat-score .cat-paw.got')];
+  }
+
+  /** Put the treat somewhere, in the same coordinates the cat uses. */
+  function placeThrow(node: HTMLElement, x: number, y: number): void {
+    const vh = document.documentElement.clientHeight;
+    const t = `translate(${x.toFixed(1)}px, ${(y - vh).toFixed(1)}px)`;
+    // the custom property lets the "being eaten" keyframe scale *about* this spot
+    // instead of throwing the treat back to the corner to shrink
+    node.style.setProperty('--throw-at', t);
+    node.style.transform = t;
+  }
+
+  /**
+   * Spend one treat at the pointer.
+   *
+   * Three ways this does nothing, all silent and all costing nothing: no ammo, a treat
+   * already on the board, or the arena not running. §5.4 asks for silence on the first
+   * — an error state for touching a game you opted into would be absurd — and the
+   * second is what stops lures being banked now that a badly timed throw is no longer
+   * "wasted" (see the note in the GDD's 0.5 entry).
+   */
+  function throwTreat(x: number, y: number): void {
+    if (!arena.on || arena.treat) return;
+    const paws = ammo();
+    const paw = paws[paws.length - 1];
+    if (!paw) return;
+    const node = throwEl();
+    if (!node) return;
+
+    // The shape is the shape of the treat being spent — the behaviour is one type for
+    // every throw (step 3 is "a single type"), but the row shows what you used, which
+    // is what §9.5's loadout will eventually make matter.
+    node.querySelector('use')?.setAttribute('href', `#treat-${resolveTreat(paw.dataset.slug ?? '')}`);
+    paw.classList.remove('got');
+
+    // thrown from the stash, which is the widget the paws live in
+    const hud = el('cat-hud')?.getBoundingClientRect();
+    const from = hud
+      ? { x: hud.left + hud.width / 2, y: hud.top + hud.height / 2 }
+      : { x: 20, y: document.documentElement.clientHeight - 20 };
+    arena.treat = { x, y, fx: from.x, fy: from.y, at: performance.now(), landed: false };
+    node.classList.remove('eaten');
+    node.removeAttribute('hidden');
+    placeThrow(node, from.x, from.y);
+  }
+
+  /** One frame of a treat in the air. */
+  function stepTreat(now: number): void {
+    const t = arena.treat;
+    const node = throwEl();
+    if (!t || !node || t.landed) return;
+    const k = (now - t.at) / THROW_ARC_MS;
+    if (k >= 1) {
+      t.landed = true;
+      placeThrow(node, t.x, t.y);
+      return;
+    }
+    // reuse the leap's arc: same hop, thrown rather than jumped
+    const p = leapPos(t.fx, t.fy, t.x, t.y, k);
+    placeThrow(node, p.x, p.y);
+  }
+
+  /** The cat has finished with it. */
+  function finishEating(root: HTMLElement, now: number): void {
+    const node = throwEl();
+    node?.setAttribute('hidden', '');
+    node?.classList.remove('eaten');
+    arena.treat = null;
+    bossPhase(root, 'stalk', now);
+  }
+
+  /** Wipe any treat off the board without the cat having eaten it (truce). */
+  function clearTreat(): void {
+    const node = throwEl();
+    node?.setAttribute('hidden', '');
+    node?.classList.remove('eaten');
+    arena.treat = null;
   }
 
   function stepBoss(now: number, dt: number, progress: number): void {
@@ -479,6 +717,8 @@
     } else if (advance === 'recover') {
       bossPhase(root, 'recover', now);
       land(root, now);
+    } else if (advance === 'stalk' && boss.phase === 'eat') {
+      finishEating(root, now);
     } else if (advance) {
       bossPhase(root, advance, now);
     }
@@ -489,9 +729,39 @@
       placeCat(root, p.x, p.y);
       return;
     }
-    // telegraph and recover both hold still — one is a crouch, the other is a cat
-    // that has just faceplanted into a paragraph
+
+    // Going to get it. Faster than stalking, and — the whole value of the resource —
+    // it cannot pounce from here, so this is the window the throw bought.
+    if (boss.phase === 'fetch') {
+      const t = arena.treat;
+      if (!t) {
+        bossPhase(root, 'stalk', now);
+        return;
+      }
+      const tx = t.x - boss.x;
+      const ty = t.y - boss.y;
+      const away = Math.hypot(tx, ty);
+      if (away <= FETCH_REACH) {
+        throwEl()?.classList.add('eaten');
+        bossPhase(root, 'eat', now);
+        return;
+      }
+      const step = Math.min(away, FETCH_SPEED * dt);
+      placeCat(root, boss.x + (tx / away) * step, boss.y + (ty / away) * step);
+      faceToward(root, tx);
+      return;
+    }
+
+    // telegraph, recover and eat all hold still — a crouch, a faceplant, and a cat
+    // with its head down in something better than you
     if (boss.phase !== 'stalk') return;
+
+    // A landed treat outranks the cursor: food first, which is exactly what makes the
+    // throw a decision rather than a distraction.
+    if (arena.treat?.landed) {
+      bossPhase(root, 'fetch', now);
+      return;
+    }
 
     if (!scrub.inside || scrub.x < 0) return; // nothing to stalk
     const dx = scrub.x - boss.x;
@@ -499,6 +769,7 @@
     const dist = Math.hypot(dx, dy);
 
     if (
+      canPounce(boss.phase) &&
       now - arena.openedAt > OPENING_GRACE_MS &&
       provoked(dist, progress) &&
       arena.claimed.length > 0
@@ -530,11 +801,7 @@
     if (dist > 1) {
       const step = Math.min(dist, STALK_SPEED * dt);
       placeCat(root, boss.x + (dx / dist) * step, boss.y + (dy / dist) * step);
-      const face = dx < 0 ? -1 : 1;
-      if (face !== boss.facing) {
-        boss.facing = face as 1 | -1;
-        root.classList.toggle('face-left', face === -1);
-      }
+      faceToward(root, dx);
     }
   }
 
@@ -608,6 +875,9 @@
     arena.openedAt = now;
     scrub.seen = now;
     scrub.target = null;
+    arena.ammoWas = [
+      ...document.querySelectorAll<HTMLElement>('#cat-score .cat-paw[data-slug]'),
+    ].map((p) => p.classList.contains('got'));
     takeCat(now);
     arena.raf = requestAnimationFrame(tick);
   }
@@ -624,6 +894,9 @@
     const root = catEl();
     if (!root) return;
     root.classList.add('boss');
+    // SiteCat's `stop()` parked it as `idle`; a boss is not idle, and leaving the
+    // class on lets its resting animations fight the phase ones.
+    root.classList.remove('idle');
     const r = root.getBoundingClientRect();
     boss.last = now;
     boss.facing = 1;
@@ -635,7 +908,14 @@
   function releaseCat(): void {
     const root = catEl();
     if (root) {
-      root.classList.remove('boss', 'boss-telegraph', 'boss-leap', 'boss-recover');
+      root.classList.remove(
+        'boss',
+        'boss-telegraph',
+        'boss-leap',
+        'boss-recover',
+        'boss-eat',
+        'boss-fetch',
+      );
       document.dispatchEvent(
         new CustomEvent('cat:resume', { detail: { x: boss.x - root.offsetWidth / 2 } }),
       );
@@ -662,7 +942,10 @@
     scrub.target = null;
     scrub.x = scrub.y = -1;
     scrub.vx = scrub.vy = 0;
+    clearTreat();
     releaseCat();
+    arena.caption = '';
+    restoreAmmo();
     restoreCaption();
   }
 
@@ -761,6 +1044,24 @@
       },
       { passive: true },
     );
+
+    /*
+     * Click to throw (§3, §5.4).
+     *
+     * Anything the page uses is left alone: a click inside `PROTECTED` — a link, a
+     * button, a field — does what it always did, because §11 promises the page stays
+     * usable and pillar 2 promises a recruiter can keep reading. So does a click in
+     * the cat's own HUD, which is where the toggle lives. Everything else is a throw.
+     *
+     * Not `preventDefault`ed anywhere: there is nothing to prevent on a paragraph,
+     * and swallowing the event would take text selection with it.
+     */
+    window.addEventListener('click', (e) => {
+      if (!arena.on) return;
+      const t = e.target;
+      if (t instanceof Element && (t.closest(PROTECTED) || t.closest('#cat-hud'))) return;
+      throwTreat(e.clientX, e.clientY);
+    });
 
     // The pointer leaving the window is not the same as the pointer holding still
     // (§5.3). `pointerout` with a null relatedTarget is the one that fires when it
