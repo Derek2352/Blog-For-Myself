@@ -1,6 +1,6 @@
 # GDD — "Whose Screen Is It" (cat boss fight)
 
-**Version** 0.3 · steps 0–1 built, everything else design only
+**Version** 0.4 · steps 0–2 built, everything else design only
 **Status** hypothesis. Every number below is `[PH]` (placeholder) until playtested —
 including the ones now running in a browser. Built is not playtested.
 
@@ -9,6 +9,7 @@ including the ones now running in a browser. Built is not playtested.
 | Ver | Change |
 |---|---|
 | 0.1 | First draft. Core loop, mechanic specs, dialogue table, replayability. All values `[PH]`. |
+| 0.4 | **Built step 2** (§12) — the pounce. One design bug and one correction: **§5.3** never said *when* the aim locks, and locking it at the end of the telegraph deletes the telegraph, so it now locks at the start and the prediction leads the whole commitment; **§10's** rationale for `RECOVER_MS` was wrong on its own terms, and what a dodge actually buys is relocation, not banked progress. **§0** corrected: the fight reuses the cat *element*, not SiteCat's state machine. **§7.4's** opening grace drops from 6s to 2.5s for the board that exists. New §10 rows for the numbers the pounce introduced. |
 | 0.3 | **Built steps 0 and 1** (§12) — the toggle and Claim + Scrub. Three revisions the build forced: **§5.1** — desaturate-and-tilt is invisible on a cream-and-ink page, so a claim is now a wash plus a dashed edge, with the wash contrast-capped at 7%; **§11** — "transform and filter only" restated as the principle it meant (nothing that affects layout or hides content), which admits `outline` and `box-shadow`, plus a new hscroll rule and a coarse-pointer gate; **§13.4** — the durable `localStorage` opt-out is **cut**, because it could not change any observable behaviour. §5.2 and §10 gain what building taught. |
 | 0.2 | Added §13 arena toggle and §14 loading transition. **Revised §11**: the toggle overturns the reduced-motion decision — an explicit opt-in is a prompt, so hiding the game from those users was paternalistic. Added a photosensitivity requirement the full-screen transition makes load-bearing. **Revised §3**: long-press-to-start removed; the toggle is the only entry point, because an invisible gesture is not an opt-in. **Revised §12**: the toggle becomes step 0 with an instant swap, the transition moves to last. §6 diagram shows the toggle. |
 
@@ -21,8 +22,8 @@ This is **not** a greenfield design. `src/components/SiteCat.astro` (1202 lines)
 
 | Existing thing | Where | The fight reuses it as |
 |---|---|---|
-| Modes `walk / idle / away / climb / chase / fetch` | SiteCat.astro:504 | Boss state machine base — `chase` **is** the pursuit mechanic |
-| `chase` — cat runs at the cursor when within 34px | :773–804 | The threat. Already written. |
+| Modes `walk / idle / away / climb / chase / fetch` | SiteCat.astro:504 | *Corrected in 0.4:* what the fight reuses is the **element**, not the state machine. The arena borrows `#site-cat` via a `cat:standdown` event and runs its own four-phase machine on it — SiteCat's modes are a floor-walker's, and the boss needs 2D. |
+| `chase` — cat runs at the cursor when within 34px | :773–804 | *Corrected in 0.4:* not reused. Its 34px trigger is the scale reference for `POUNCE_RANGE`, and that is all. |
 | `fetch` — cat abandons everything for a treat | :691, :746 | The player's defensive tool. Already written. |
 | `climb` — cat scales a side edge | :930–983 | Boss repositioning / phase transition |
 | One treat per navigable tab, 7 tabs | cat-game.ts:24 | **Ammunition.** Explore the site → arm yourself |
@@ -250,6 +251,12 @@ partial. Partial retention would remove the reason to buy a safe window.
 >
 > **The hypothesis itself is still untested.** It is built and it functions; whether
 > it is *fun* is a question a playtest answers, not a harness.
+>
+> **What step 2 did to it (0.4):** a pounce the cat commits to always beats the hold
+> it interrupts (§5.3), so holding still under threat is never the winning move —
+> fleeing and holding elsewhere is. The tension the hypothesis names is real but it
+> currently resolves one way, which is exactly the gap treats exist to fill (§5.4,
+> step 3). If it still isn't fun *after* treats, the hypothesis is wrong.
 
 ### 5.3 Mechanic: Pounce
 
@@ -274,8 +281,42 @@ the ink wash already does this at `Math.min(250, now - lastTick)`.
 - Cat in `fetch` (treat in flight) → **cannot pounce**. This is the treat's whole
   value; if `fetch` can be cancelled, the resource is worthless.
 - Reduced motion → no leap; see §11.
-**Tuning levers** `TELEGRAPH_MS`, `LEAP_MS`, `RECOVER_MS`, `POUNCE_RANGE`, `AGGRESSION`
+**Tuning levers** `TELEGRAPH_MS`, `LEAP_MS`, `RECOVER_MS`, `POUNCE_RANGE`, `STALK_SPEED`,
+`AIM_LEAD_MS`, `AGGRESSION`
 **Dependencies** Scrubber, Loadout (bell lengthens telegraph), rubber band (§7.3)
+
+> **Built, 0.4 — and the first version had no telegraph at all.**
+>
+> This section says the leap goes to "the cursor's *predicted* position", and says
+> nothing about **when the cat stops being able to change its mind.** Built the
+> obvious way — aim at the end of the wind-up, so the prediction is as fresh as
+> possible — and the telegraph quietly ceased to exist: a cat that re-aims until the
+> instant it jumps cannot be dodged during its wind-up, because moving just moves the
+> target. The only real dodge window was the 260ms flight, which is human reaction
+> time with nothing left over.
+>
+> The harness caught it as a 0px miss on a check called *"the cat lands where it
+> aimed, not where you went"*. Same test, opposite meaning: the failure was the
+> mechanic, not the assertion.
+>
+> **The aim locks when the telegraph begins.** The wind-up is then exactly what it
+> looks like — 420ms of "I have decided where you are" — and the prediction has to
+> lead the whole 680ms of commitment, which means a player fleeing in a straight line
+> gets read and cut off while changing direction beats it. That is the difference
+> between a cat and a homing missile, and it is a better mechanic than the one
+> specified.
+>
+> **Consequence worth stating plainly:** provoked at `POUNCE_THRESHOLD` and landing
+> 680ms later, a pounce touches down at ~84% of the hold. So **a pounce always beats
+> a scrub it commits to.** Ground can only be taken where the cat is not, which makes
+> step 2's loop *keep it away, then work in the gap* — and makes treats (step 3) the
+> answer to "I want this block and the cat is standing on it" rather than a
+> nice-to-have. The design predicted this; the build makes it concrete.
+>
+> Also built: the cat cannot be booped while it is a boss (`pointer-events: none` on
+> its body), which is characterisation and also load-bearing — a cat parked on the
+> cursor is what `elementFromPoint` returns, so without it scrubbing became
+> impossible at exactly the moment the game got interesting.
 
 ### 5.4 Mechanic: Throw treat
 
@@ -382,8 +423,11 @@ which is in character, funnier, and does the same job as an invisible fudge.
 
 ### 7.4 Onboarding checklist
 - [x] Core verb (scrub) available within 30s — it is the *first* thing, no unlocks
-- [x] First beat unloseable: the opening `[PH 6s]` has aggression pinned to 0,
-      cat only watches. Guaranteed first success.
+- [x] First beat unloseable: the opening `[PH 2500ms]` has aggression pinned to 0,
+      cat only watches. Guaranteed first success. *(0.1 said 6s. Built at 2.5s: on
+      the 8-claim board the query actually yields, 6s of grace is about four free
+      scrubs — half the fight. 2.5s covers the first one, which is what this line
+      was after.)*
 - [x] Each mechanic in a safe context: pounce introduced only after one clear
       scrub; treats explained by the cat *asking* for one, not by a tooltip
 - [x] One mechanic found by exploration: nothing says the cat can't pounce during
@@ -508,7 +552,7 @@ treat's win-rate contribution exceeds any other's by more than `[PH 10%]`.
 | `SCRUB_MS` | 1400 | Long enough for a pounce to plausibly arrive | <900: pounce irrelevant. >2200: tedium |
 | `TELEGRAPH_MS` | 420 | Human reaction ~250ms + read time | <300: unreactable. >600: trivially dodged |
 | `LEAP_MS` | 260 | Fast enough to feel like a pounce | >400: reads as a stroll |
-| `RECOVER_MS` | 700 | Must exceed `SCRUB_MS/2` so a whiff is a real reward | <500: whiffing costs the cat nothing |
+| `RECOVER_MS` | 700 | ~~Must exceed `SCRUB_MS/2` so a whiff is a real reward~~ — **wrong, corrected in 0.4.** At 700 against a 1400ms scrub it is *exactly* half, so it fails its own stated test; and dodging means moving, which resets the hold anyway, so this number never buys progress. What a dodge buys is **relocation**: the cat lands where you were and walks back. The property that must hold is narrower — a whiff costs the cat more than the attack gained it (`> TELEGRAPH_MS + LEAP_MS`) | <680: pouncing becomes free, so the cat should never stop |
 | `POUNCE_RANGE` | 90px | ~2.5× existing `chase` trigger (34px) | Too large: nowhere is safe |
 | `INITIAL_CLAIM_FRACTION` | 0.55 | Invaded, not unusable | 1.0: page unreadable, breaks pillar 2 |
 | `lureDuration` (fish) | 3.0s | Must exceed `SCRUB_MS` or treats are worthless | <1.4s: resource does nothing |
@@ -526,6 +570,16 @@ the same as playtested:
 | Claim outline | 2px dashed, 62% accent | Carries the read that the wash can't afford to. Painted, so it costs no layout | 1px at 55%: too quiet to find claims by |
 | `MIN_CLAIM_AREA` | 900px² | A `.rail` line is ~2000px² and reads fine; below this are sprite stubs and empty spans | Too low: claims land on 9px dots and the game looks broken |
 | Board size | 8 claims on the homepage | What the §4.1 query yields at 0.55 after excluding protected furniture and de-nesting | <4: the fight is over before it starts. >20: the page is unreadable, breaking pillar 2 |
+
+Added in 0.4, from building the pounce:
+
+| Var | `[PH]` | Rationale | "Broken" looks like |
+|---|---|---|---|
+| `AIM_LEAD_MS` | `TELEGRAPH_MS + LEAP_MS` (680) | The aim locks when the wind-up starts, so the lead has to cover the whole commitment. This is the number that makes the telegraph a warning rather than a delay | Locking at the *end* instead: the telegraph stops being dodgeable and the game is 260ms of reaction time (this is what shipped first) |
+| `STALK_SPEED` | 170px/s | Slower than a hand, deliberately: fleeing must work, since "move the pointer" is one of only three inputs. The site cat walks at 42px/s and would never arrive | >400: nowhere is far enough, and the fight becomes a tie for the mouse. <80: the cat is scenery |
+| `HIT_RADIUS` | 46px | Dodging it means covering 46px inside 680ms — ~68px/s, far under a flick and far over the 6px a hold allows | Too large: dodging needs a sprint. Too small: the cat can never catch anyone |
+| `OPENING_GRACE_MS` | 2500 | Covers the first scrub, per §7.4's "guaranteed first success", on the board that actually exists | 6000 (0.1's number): four free scrubs, half the fight |
+| Landing point | ~84% of the hold | Where a pounce provoked at 0.35 touches down. Late enough to read as deliberate, and short of the 0.9 that would feel like robbery | ≥1.0: the cat can never interrupt anything, so the threat is theatre |
 
 Build these as a spreadsheet with formulas before writing the code, per §Balance
 Process — `SCRUB_MS`, `RECOVER_MS` and `lureDuration` are *coupled*, and hardcoding
@@ -594,8 +648,14 @@ them independently is how this gets unbalanced.
    open**: the mechanic works, and whether it is fun needs a person, not a harness.
    Rules live in `src/lib/arena.ts` (DOM-free, 45 tests); the DOM work is in
    `CatArena.astro`.
-2. Add **Pounce** with a fixed telegraph. Tune §10 rows 1–4 until the read feels
-   fair. This is where the game is won or lost.
+2. ✅ **Pounce with a fixed telegraph** — *built in 0.4.* The cat leaves the footer,
+   stalks the cursor, and interrupts a hold it has decided is worth interrupting.
+   Rows 1–4 of §10 are tuned to the point of being *coherent*; whether the read
+   feels fair still needs a person. Two bugs found here, both recorded: the aim was
+   locked at the wrong end of the telegraph (§5.3), and `SiteCat`'s `stop()` never
+   actually stopped its loop — it re-armed unconditionally, so the only thing that
+   ever halted the cat was the reduce-motion check. Harmless until something else
+   wanted the element; a single stray frame drops a stalking boss back on the floor.
 3. Add **Treats** as a single type. Verify the safe window is a real decision.
 4. Add **Territory + endings + dialogue**. First full loop.
 5. Add **stances**, then **loadout**. Replayability last — it is worthless before
@@ -613,6 +673,15 @@ ever exercises.
 Ship gate for each step: the existing 20-check ink harness, `npm test`, and the
 contrast gate above must all stay green. The fight lives on the same page as the
 ink wash and the glass pane; it does not get to break them.
+
+**Step 2 ship gate, actual:** 292 unit tests, the steps 0–1 harness still 58/58, ink
+20/20, cycle green, build warning-free, plus a 27-check browser harness
+(`scratchpad/arena2.mjs`) built around a `MutationObserver` that timestamps every
+phase change — because every claim in §5.3 is about *time*, and an end-state
+assertion cannot tell a 420ms warning from a 40ms one. It measures the warning, the
+flight, the recovery window, the opening grace, that a hit resets the hold and takes
+ground back, that a dodge takes nothing, that a pointer leaving the window is always
+a whiff, and that the cat never leaves the viewport or widens the page.
 
 **Steps 0–1 ship gate, actual:** 268 unit tests, ink harness 20/20 twice, cycle
 check green, build warning-free, and a 58-check browser harness

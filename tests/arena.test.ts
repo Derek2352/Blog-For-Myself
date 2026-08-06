@@ -10,6 +10,22 @@ import {
   STILL_PX,
   HIDDEN_TRUCE_MS,
   IDLE_TRUCE_MS,
+  TELEGRAPH_MS,
+  LEAP_MS,
+  RECOVER_MS,
+  POUNCE_RANGE,
+  POUNCE_THRESHOLD,
+  HIT_RADIUS,
+  PREDICT_CAP,
+  AIM_LEAD_MS,
+  STALK_SPEED,
+  OPENING_GRACE_MS,
+  nextPhase,
+  provoked,
+  predict,
+  leapArc,
+  leapPos,
+  pounceHit,
   bigEnough,
   dropNested,
   pickClaims,
@@ -300,6 +316,162 @@ describe('arenaCaption', () => {
       expect(s.split(' ').length).toBeLessThanOrEqual(7);
       expect(s).not.toContain('!');
     }
+  });
+});
+
+describe('nextPhase — the pounce state machine', () => {
+  it('runs telegraph → leap → recover → stalk, and stops there', () => {
+    expect(nextPhase('telegraph', TELEGRAPH_MS)).toBe('leap');
+    expect(nextPhase('leap', LEAP_MS)).toBe('recover');
+    expect(nextPhase('recover', RECOVER_MS)).toBe('stalk');
+    expect(nextPhase('stalk', 999_999)).toBe(null); // only a decision ends a stalk
+  });
+
+  it('never begins the leap before the telegraph is over', () => {
+    // §5.3's named failure state: a pounce that lands during its own telegraph is
+    // unreactable. Driving phases by elapsed time rather than accumulated dt makes
+    // it unreachable — including at a frame rate nobody should have.
+    for (const elapsed of [0, 1, 100, TELEGRAPH_MS - 1]) {
+      expect(nextPhase('telegraph', elapsed)).toBe(null);
+    }
+    expect(nextPhase('telegraph', TELEGRAPH_MS - 0.001)).toBe(null);
+  });
+
+  it('advances one phase per call, so a stalled frame cannot skip the leap', () => {
+    expect(nextPhase('telegraph', 60_000)).toBe('leap');
+  });
+
+  it('gives a telegraph long enough to react to and short enough to punish', () => {
+    expect(TELEGRAPH_MS).toBeGreaterThanOrEqual(300); // human reaction ~250ms
+    expect(TELEGRAPH_MS).toBeLessThanOrEqual(600);
+  });
+
+  it('makes a whiff cost the cat more than the attack gained it', () => {
+    // Not `> SCRUB_MS / 2`, which is what §10 claimed and what 700 against a
+    // 1400ms scrub exactly fails. Dodging resets the hold anyway, so the reward
+    // for a dodge is relocation, not banked progress — see the note on RECOVER_MS.
+    // What must hold is that pouncing and missing is worse for the cat than not
+    // pouncing, or the threat is free.
+    expect(RECOVER_MS).toBeGreaterThan(TELEGRAPH_MS + LEAP_MS);
+  });
+
+  it('leaps fast enough to read as a pounce', () => {
+    expect(LEAP_MS).toBeLessThanOrEqual(400);
+  });
+});
+
+describe('provoked', () => {
+  it('waits until you are committed to a scrub', () => {
+    expect(provoked(10, 0)).toBe(false);
+    expect(provoked(10, POUNCE_THRESHOLD - 0.01)).toBe(false);
+    expect(provoked(10, POUNCE_THRESHOLD)).toBe(true);
+  });
+
+  it('has to be close', () => {
+    expect(provoked(POUNCE_RANGE, 1)).toBe(true);
+    expect(provoked(POUNCE_RANGE + 1, 1)).toBe(false);
+  });
+
+  it('reaches further than the site cat’s idle chase, but not everywhere', () => {
+    expect(POUNCE_RANGE).toBeGreaterThan(34); // SiteCat's chase trigger
+    expect(POUNCE_RANGE).toBeLessThan(240); // nowhere safe would break pillar 2
+  });
+});
+
+describe('the aim, and when it locks', () => {
+  it('leads the whole commitment, not just the flight', () => {
+    // Locking at the *end* of the telegraph deleted the telegraph: a cat that
+    // re-aims until it jumps cannot be dodged during its wind-up. Locking at the
+    // start means the lead has to cover wind-up plus flight.
+    expect(AIM_LEAD_MS).toBe(TELEGRAPH_MS + LEAP_MS);
+  });
+
+  it('leaves a dodge window longer than human reaction time', () => {
+    // The window is the telegraph, because the aim is already locked when it starts.
+    expect(TELEGRAPH_MS).toBeGreaterThan(250);
+  });
+
+  it('lands late enough to read as deliberate, early enough not to feel robbed', () => {
+    // Provoked at POUNCE_THRESHOLD, the pounce touches down this far into the hold.
+    const landsAt = POUNCE_THRESHOLD + AIM_LEAD_MS / SCRUB_MS;
+    expect(landsAt).toBeGreaterThan(0.6);
+    expect(landsAt).toBeLessThan(0.9);
+  });
+});
+
+describe('predict', () => {
+  it('leads a moving cursor', () => {
+    const p = predict(100, 100, 200, 0);
+    expect(p.x).toBeGreaterThan(100);
+    expect(p.y).toBeCloseTo(100, 6);
+  });
+
+  it('aims where you are when you are still', () => {
+    expect(predict(100, 100, 0, 0)).toEqual({ x: 100, y: 100 });
+  });
+
+  it('caps the lead, so a flick cannot send the cat across the room', () => {
+    const p = predict(0, 0, 9000, 9000);
+    expect(Math.hypot(p.x, p.y)).toBeLessThanOrEqual(PREDICT_CAP + 1e-9);
+  });
+
+  it('keeps the capped aim pointing the same way', () => {
+    const p = predict(0, 0, 4000, 0);
+    expect(p.y).toBe(0);
+    expect(p.x).toBeGreaterThan(0);
+  });
+});
+
+describe('leapPos and leapArc', () => {
+  it('starts where it jumped from and ends where it aimed', () => {
+    expect(leapPos(10, 200, 300, 120, 0)).toEqual({ x: 10, y: 200 });
+    expect(leapPos(10, 200, 300, 120, 1)).toEqual({ x: 300, y: 120 });
+  });
+
+  it('goes over the top rather than sliding along the floor', () => {
+    const mid = leapPos(0, 100, 200, 100, 0.5);
+    expect(mid.x).toBeCloseTo(100, 6);
+    expect(mid.y).toBeLessThan(100 - 20); // screen coords: up is less
+  });
+
+  it('has no lift at either end, so the landing is not a drop', () => {
+    expect(leapArc(0)).toBeCloseTo(0, 6);
+    expect(leapArc(1)).toBeCloseTo(0, 6);
+    expect(leapArc(0.5)).toBeCloseTo(1, 6);
+  });
+
+  it('clamps outside 0..1 instead of flying off', () => {
+    expect(leapPos(0, 0, 100, 0, 5)).toEqual({ x: 100, y: 0 });
+    expect(leapPos(0, 0, 100, 0, -5)).toEqual({ x: 0, y: 0 });
+    expect(leapArc(2)).toBeCloseTo(0, 6);
+  });
+});
+
+describe('pounceHit', () => {
+  it('lands on a cursor that stayed put', () => {
+    expect(pounceHit(100, 100, 100, 100)).toBe(true);
+    expect(pounceHit(100, 100, 120, 120)).toBe(true); // 28px
+  });
+
+  it('misses a cursor that moved away', () => {
+    expect(pounceHit(100, 100, 100, 100 + HIT_RADIUS + 1)).toBe(false);
+  });
+
+  it('is dodgeable inside a leap — but only if you are moving', () => {
+    // Dodging means covering HIT_RADIUS during LEAP_MS. That is ~177px/s, well
+    // under a normal mouse flick and well over the 6px of drift a hold allows.
+    const needed = (HIT_RADIUS / LEAP_MS) * 1000;
+    expect(needed).toBeGreaterThan((STILL_PX / LEAP_MS) * 1000);
+    expect(needed).toBeLessThan(600);
+  });
+});
+
+describe('the opening grace', () => {
+  it('covers the first scrub and not four of them', () => {
+    // §7.4 asked for 6s. On the 8-claim board the query actually yields, 6s is
+    // about four free scrubs — half the fight.
+    expect(OPENING_GRACE_MS).toBeGreaterThan(SCRUB_MS);
+    expect(OPENING_GRACE_MS).toBeLessThan(SCRUB_MS * 3);
   });
 });
 

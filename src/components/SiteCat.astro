@@ -644,6 +644,8 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
       root.classList.add('idle');
     };
     let running = false;
+    /** True while the arena is driving this element — see `cat:standdown` below. */
+    let standDown = false;
 
     const s: CatState = {
       x: Math.min(140, document.documentElement.clientWidth * 0.2),
@@ -986,6 +988,17 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
 
     let last = performance.now();
     const tick = (now: number) => {
+      /*
+       * `stop()` has to actually stop.
+       *
+       * This loop used to re-arm unconditionally at the bottom, so clearing
+       * `running` did nothing and the only way out was the reduce-motion check
+       * below — which meant `stop()` was half a function, and a frame already in
+       * flight kept writing `transform` after it. Harmless while nothing else
+       * wanted the element; not harmless once the arena borrows the cat, where a
+       * single stray frame drops the boss back onto the floor mid-stalk.
+       */
+      if (!running) return;
       // Stop the moment reduce-motion turns on; the observers below restart the
       // loop if it is turned back off.
       if (motionReduced()) {
@@ -1244,7 +1257,7 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
     window.addEventListener('pointercancel', endTouchPet, { passive: true });
 
     const start = () => {
-      if (running || motionReduced()) return;
+      if (running || motionReduced() || standDown) return;
       running = true;
       last = performance.now();
       requestAnimationFrame(tick);
@@ -1254,6 +1267,34 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
       s.mode = 'idle';
       parkIdle();
     };
+
+    /**
+     * Lend the cat to the arena (`CatArena.astro`), which needs 2D control of this
+     * same element to run it as a boss. Two rAF loops writing one `transform` is a
+     * fight neither wins, so this loop parks completely for the duration.
+     *
+     * `standDown` has to gate `start` as well as stopping the loop: the arena adds
+     * a class to <html>, and the reduce-motion observer below reacts to *any* class
+     * change there by restarting the walk. Without the flag, opening the arena
+     * immediately re-animated the cat out from under it.
+     *
+     * Resuming takes the cat's final position, so it walks on from wherever the
+     * fight left it instead of teleporting back to a floor spot it hasn't occupied
+     * for two minutes.
+     */
+    document.addEventListener('cat:standdown', () => {
+      standDown = true;
+      stop();
+    });
+    document.addEventListener('cat:resume', (e) => {
+      standDown = false;
+      const x = (e as CustomEvent<{ x?: number }>).detail?.x;
+      if (typeof x === 'number') s.x = Math.max(minX(), Math.min(maxX(), x));
+      s.mode = 'walk';
+      s.until = performance.now() + 2000;
+      render();
+      start();
+    });
 
     // React live to reduce-motion changes from either source: the OS media
     // query, and the a11y toggle (which flips .a11y-motion on <html>).

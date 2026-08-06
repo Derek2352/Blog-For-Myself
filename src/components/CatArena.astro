@@ -1,20 +1,27 @@
 ---
 /**
- * The arena — build steps 0 and 1 of `docs/cat-boss-gdd.md` §12.
+ * The arena — build steps 0, 1 and 2 of `docs/cat-boss-gdd.md` §12.
  *
  * **Step 0**: wire the toggle in the cat's HUD (rendered by SiteCat.astro) to an
  * instant swap. No transition, no fade — the §14 ink curtain is deliberately the
  * *last* thing built, and this instant path stays as its permanent fallback.
  *
- * **Step 1**: Claim + Scrub, and nothing else. No cat behaviour, no treats, no
- * territory bar, no dialogue. The question this build exists to answer is the fun
- * hypothesis on its own: *is holding your cursor still to scrub a page back
- * satisfying at all?* If it isn't, that is the design failing for £0.
+ * **Step 1**: Claim + Scrub. Hold the cursor still on a block the cat has taken and
+ * it comes back to you.
  *
- * What it does to the page, and nothing more: adds a class and two custom
- * properties to some existing elements. Claims are `transform` + `filter` only
- * (§11) — no layout, no `display`, no `visibility`, so text stays selectable and
- * every link stays clickable while the cat "holds" the block around it.
+ * **Step 2**: Pounce. The cat leaves the footer, stalks the cursor, and interrupts a
+ * scrub it judges worth interrupting — telegraph, leap, recover. Still no treats, no
+ * territory bar, no dialogue, no endings.
+ *
+ * What all of it does to the page, and nothing more: adds a class and one custom
+ * property to some existing elements. Claims never affect layout and never hide
+ * anything (§11), so text stays selectable and every link stays clickable while the
+ * cat "holds" the block around it.
+ *
+ * The consequence of step 2 worth knowing before reading further: **a pounce always
+ * beats a scrub it commits to** (it lands at ~84% of the hold), so ground can only be
+ * taken where the cat isn't. Keeping it away is the game until treats exist to buy a
+ * window where it is — which is step 3, and which is why the loop feels thin here.
  *
  * Off is the only state a page can load in. Nothing is written to storage.
  */
@@ -91,6 +98,47 @@
     overflow-x: clip;
   }
 
+  /* ---- the cat, while the arena has it (§5.3) ----
+     `SiteCat.astro` owns this element; the arena borrows it via `cat:standdown` and
+     writes only its transform. These rules are the phases, and they are all on the
+     inner `.cat-svg` so they compose with the positioning transform rather than
+     fighting it.
+
+     `pointer-events: none` on the body is load-bearing twice over: a boss is not a
+     pet, so it must not answer a boop mid-fight — and a cat parked on the cursor
+     would otherwise be what `elementFromPoint` returns, which would silently make
+     scrubbing impossible at exactly the moment the game gets interesting. */
+  :global(#site-cat.boss) {
+    z-index: 42;
+  }
+  :global(#site-cat.boss .cat-svg) {
+    pointer-events: none;
+    transform-origin: center bottom;
+    transition: transform 0.12s ease-out;
+  }
+  /* wind-up: gather, ears back, hold. This is the 420ms you get to read. */
+  :global(#site-cat.boss-telegraph .cat-svg) {
+    transform: scale(1.06, 0.82);
+  }
+  :global(#site-cat.boss-telegraph .cat-ear) {
+    transform: rotate(-24deg);
+  }
+  :global(#site-cat.boss-telegraph .cat-tail) {
+    transform: rotate(-18deg);
+  }
+  /* in the air: stretched along the direction of travel */
+  :global(#site-cat.boss-leap .cat-svg) {
+    transform: scale(1.14, 1.06);
+    transition: none;
+  }
+  /* landed on a paragraph, briefly regretting it */
+  :global(#site-cat.boss-recover .cat-svg) {
+    transform: scale(1.04, 0.9) rotate(-4deg);
+  }
+  :global(#site-cat.boss-recover .cat-tail) {
+    transform: rotate(12deg);
+  }
+
   #cat-scrub {
     position: fixed;
     left: 0;
@@ -128,6 +176,11 @@
     INITIAL_CLAIM_FRACTION,
     HIDDEN_TRUCE_MS,
     IDLE_TRUCE_MS,
+    AIM_LEAD_MS,
+    LEAP_MS,
+    OPENING_GRACE_MS,
+    RECLAIM_ON_HIT,
+    STALK_SPEED,
     bigEnough,
     dropNested,
     pickClaims,
@@ -136,6 +189,12 @@
     stillEnough,
     arenaCaption,
     isCleared,
+    nextPhase,
+    provoked,
+    predict,
+    leapPos,
+    pounceHit,
+    type Phase,
   } from '@/lib/arena';
 
   /**
@@ -150,22 +209,42 @@
     on: false,
     /** Elements the cat currently holds, in DOM order. */
     claimed: [] as HTMLElement[],
+    /** Every element it ever held, so a landed pounce has something to take back. */
+    freed: [] as HTMLElement[],
+    /** The board as queried, so a re-claim can find an element's original index. */
+    order: [] as HTMLElement[],
     /** How many it started with, so the HUD line has a denominator. */
     total: 0,
-    /** rAF handle for the scrub loop. */
+    /** This fight's composition seed — re-claims must not re-roll the tilt. */
+    seed: 0,
+    /** When the fight began, for the opening grace (§7.4). */
+    openedAt: 0,
+    /** rAF handle for the loop. */
     raf: 0,
   };
 
-  /** Scrub tracking: where the pointer settled, and when. */
+  /** Scrub tracking: where the pointer settled, when, and how fast it is moving. */
   const scrub = {
     x: -1,
     y: -1,
     /** Where the current hold began. */
     ax: -1,
     ay: -1,
+    /** Pointer velocity, px/s, for the cat to aim ahead of (§5.3). */
+    vx: 0,
+    vy: 0,
+    at: 0,
     since: 0,
     target: null as HTMLElement | null,
     seen: 0,
+    /**
+     * Is the pointer even in the window?
+     *
+     * §5.3: a cursor that leaves mid-leap must be a whiff. Without this the last
+     * known position lingers exactly where the cat aimed, so leaving the window
+     * counted as standing still and being caught — the opposite of the rule.
+     */
+    inside: false,
   };
 
   const el = (id: string) => document.getElementById(id);
@@ -274,6 +353,47 @@
     return node && arena.claimed.includes(node) ? node : null;
   }
 
+  /**
+   * One frame of scrubbing. Returns progress 0..1, which the boss reads to decide
+   * whether you are committed enough to be worth interrupting.
+   */
+  function stepScrub(now: number): number {
+    const target = scrub.inside && scrub.x >= 0 ? claimUnder(scrub.x, scrub.y) : null;
+    if (!target || target !== scrub.target) {
+      // moved onto something else, or off the board: the hold restarts
+      scrub.target = target;
+      scrub.since = now;
+      scrub.ax = scrub.x;
+      scrub.ay = scrub.y;
+      if (!target) hideRing();
+      return 0;
+    }
+    if (!stillEnough(scrub.x - scrub.ax, scrub.y - scrub.ay)) {
+      // drifted: same target, fresh hold, and the anchor follows the pointer
+      scrub.since = now;
+      scrub.ax = scrub.x;
+      scrub.ay = scrub.y;
+    }
+    const progress = scrubProgress(now - scrub.since);
+    showRing(scrub.x, scrub.y, progress);
+    if (progress < 1) return progress;
+
+    // reclaimed
+    arena.claimed = arena.claimed.filter((n) => n !== target);
+    arena.freed.push(target);
+    free(target, true);
+    caption(arenaCaption(arena.claimed.length, arena.total));
+    scrub.target = null;
+    scrub.since = now;
+    hideRing();
+    if (isCleared(arena.claimed.length, arena.total)) {
+      // Step 2 still has no endings, no dialogue and no reward — the board runs out
+      // and the fight ends. Endings are step 4.
+      setTimeout(() => setArena(false), 900);
+    }
+    return 0;
+  }
+
   function tick(now: number): void {
     if (!arena.on) return;
     arena.raf = requestAnimationFrame(tick);
@@ -284,39 +404,168 @@
       return;
     }
 
-    const target = scrub.x < 0 ? null : claimUnder(scrub.x, scrub.y);
-    if (!target || target !== scrub.target) {
-      // moved onto something else, or off the board: the hold restarts
-      scrub.target = target;
-      scrub.since = now;
-      scrub.ax = scrub.x;
-      scrub.ay = scrub.y;
-      if (!target) hideRing();
+    // Clamped, like the ink wash clamps its own: a tab that comes back from the
+    // background hands you a multi-second frame, and an unclamped stalk would
+    // teleport the cat onto the cursor and pounce from nowhere.
+    const dt = Math.min(0.05, (now - boss.last) / 1000);
+    boss.last = now;
+
+    stepBoss(now, dt, stepScrub(now));
+  }
+
+  /* ---------------------------------------------------------------- *
+   * The boss (§5.3) — stalk, telegraph, leap, recover
+   * ---------------------------------------------------------------- */
+
+  /** The cat, in client coordinates, as a thing with one phase at a time. */
+  const boss = {
+    x: 0,
+    y: 0,
+    phase: 'stalk' as Phase,
+    /** When the current phase began. */
+    since: 0,
+    /** Leap endpoints, locked when the telegraph ends. */
+    ax: 0,
+    ay: 0,
+    bx: 0,
+    by: 0,
+    facing: 1 as 1 | -1,
+    last: 0,
+  };
+
+  const catEl = () => el('site-cat');
+
+  /** Half the cat, measured rather than hardcoded — SiteCat owns its own size. */
+  function catHalf(root: HTMLElement): { w: number; h: number } {
+    return { w: root.offsetWidth / 2, h: root.offsetHeight / 2 };
+  }
+
+  /**
+   * Put the cat's centre at a client point.
+   *
+   * `#site-cat` is pinned `left: 0; bottom: 0`, so its untransformed centre sits at
+   * (halfW, viewportH - halfH) and everything is an offset from there. Writing the
+   * transform is the only thing this component does to the element itself.
+   */
+  function placeCat(root: HTMLElement, cx: number, cy: number): void {
+    const { w, h } = catHalf(root);
+    const vw = document.documentElement.clientWidth;
+    const vh = document.documentElement.clientHeight;
+    const x = Math.max(w, Math.min(vw - w, cx));
+    const y = Math.max(h, Math.min(vh - h, cy));
+    boss.x = x;
+    boss.y = y;
+    root.style.transform = `translate(${(x - w).toFixed(1)}px, ${(y - vh + h).toFixed(1)}px)`;
+  }
+
+  function bossPhase(root: HTMLElement, phase: Phase, now: number): void {
+    boss.phase = phase;
+    boss.since = now;
+    root.classList.toggle('boss-telegraph', phase === 'telegraph');
+    root.classList.toggle('boss-leap', phase === 'leap');
+    root.classList.toggle('boss-recover', phase === 'recover');
+  }
+
+  function stepBoss(now: number, dt: number, progress: number): void {
+    const root = catEl();
+    if (!root) return;
+
+    const advance = nextPhase(boss.phase, now - boss.since);
+    if (advance === 'leap') {
+      // The target was locked when the telegraph began (see `aim` below) — nothing
+      // is decided here. That is the whole point: the wind-up is a commitment, so
+      // the 420ms of it is a window you can actually dodge in.
+      bossPhase(root, 'leap', now);
+    } else if (advance === 'recover') {
+      bossPhase(root, 'recover', now);
+      land(root, now);
+    } else if (advance) {
+      bossPhase(root, advance, now);
+    }
+
+    if (boss.phase === 'leap') {
+      const t = (now - boss.since) / LEAP_MS;
+      const p = leapPos(boss.ax, boss.ay, boss.bx, boss.by, t);
+      placeCat(root, p.x, p.y);
       return;
     }
-    if (!stillEnough(scrub.x - scrub.ax, scrub.y - scrub.ay)) {
-      // drifted: same target, fresh hold, and the anchor follows the pointer
-      scrub.since = now;
-      scrub.ax = scrub.x;
-      scrub.ay = scrub.y;
-    }
-    const progress = scrubProgress(now - scrub.since);
-    showRing(scrub.x, scrub.y, progress);
-    if (progress < 1) return;
+    // telegraph and recover both hold still — one is a crouch, the other is a cat
+    // that has just faceplanted into a paragraph
+    if (boss.phase !== 'stalk') return;
 
-    // reclaimed
-    arena.claimed = arena.claimed.filter((n) => n !== target);
-    free(target, true);
-    caption(arenaCaption(arena.claimed.length, arena.total));
+    if (!scrub.inside || scrub.x < 0) return; // nothing to stalk
+    const dx = scrub.x - boss.x;
+    const dy = scrub.y - boss.y;
+    const dist = Math.hypot(dx, dy);
+
+    if (
+      now - arena.openedAt > OPENING_GRACE_MS &&
+      provoked(dist, progress) &&
+      arena.claimed.length > 0
+    ) {
+      /*
+       * Commit. Everything about the pounce is decided here and nothing after.
+       *
+       * Velocity is only meaningful while the pointer is moving: a cursor that
+       * stopped keeps its last sampled reading, because nothing fires to say "still
+       * now", and aiming ahead of it would make the cat miss the one player it is
+       * certainly entitled to hit — the one holding perfectly still.
+       */
+      const moving = now - scrub.at < 90;
+      const aim = predict(
+        scrub.x,
+        scrub.y,
+        moving ? scrub.vx : 0,
+        moving ? scrub.vy : 0,
+        AIM_LEAD_MS,
+      );
+      boss.ax = boss.x;
+      boss.ay = boss.y;
+      boss.bx = aim.x;
+      boss.by = aim.y;
+      bossPhase(root, 'telegraph', now);
+      return;
+    }
+
+    if (dist > 1) {
+      const step = Math.min(dist, STALK_SPEED * dt);
+      placeCat(root, boss.x + (dx / dist) * step, boss.y + (dy / dist) * step);
+      const face = dx < 0 ? -1 : 1;
+      if (face !== boss.facing) {
+        boss.facing = face as 1 | -1;
+        root.classList.toggle('face-left', face === -1);
+      }
+    }
+  }
+
+  /**
+   * Touchdown. Hit or miss is decided against where the cat *aimed*.
+   *
+   * A hit costs you the hold and one element back; §7.2 still applies, so it costs
+   * nothing outside this fight. A miss costs the cat `RECOVER_MS` plus the walk
+   * back from wherever you were standing when it committed — which is the real
+   * reward for dodging, and why the player choosing *where* to flee matters.
+   */
+  function land(root: HTMLElement, now: number): void {
+    placeCat(root, boss.bx, boss.by);
+    const caught = scrub.inside && pounceHit(boss.bx, boss.by, scrub.x, scrub.y);
+    if (!caught) return;
+
+    // the hold is gone, not reduced: partial retention would remove the reason to
+    // ever dodge (§5.2)
     scrub.target = null;
     scrub.since = now;
     hideRing();
-    if (isCleared(arena.claimed.length, arena.total)) {
-      // Step 1 has no endings, no dialogue and no reward — the board simply runs
-      // out, and the fight ends. What it *does* answer is whether getting there
-      // was worth doing, which is the only question this build asks.
-      setTimeout(() => setArena(false), 900);
+
+    for (let i = 0; i < RECLAIM_ON_HIT; i++) {
+      const back = arena.freed.pop();
+      if (!back || !back.isConnected) break;
+      // the most recent one, deliberately: taking back the thing you just earned
+      // is legible as cause and effect in a way a random element is not
+      claim(back, arena.order.indexOf(back), arena.seed);
+      arena.claimed.push(back);
     }
+    caption(arenaCaption(arena.claimed.length, arena.total));
   }
 
   /* ---------------------------------------------------------------- *
@@ -344,15 +593,55 @@
     if (!board.length) return; // nothing to fight over; leave the toggle off
     const seed = (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0;
     const picked = pickClaims(board.length, INITIAL_CLAIM_FRACTION, seed);
+    arena.order = board;
+    arena.seed = seed;
     arena.claimed = picked.map((i) => board[i]!);
+    arena.freed = [];
     arena.total = arena.claimed.length;
-    arena.claimed.forEach((node, i) => claim(node, i, seed));
+    // index by position in the *board*, not in the claimed subset, so a re-claim
+    // after a landed pounce reproduces the tilt the element had the first time
+    arena.claimed.forEach((node) => claim(node, board.indexOf(node), seed));
     arena.on = true;
     document.documentElement.classList.add('cat-arena-on');
     caption(arenaCaption(arena.claimed.length, arena.total));
-    scrub.seen = performance.now();
+    const now = performance.now();
+    arena.openedAt = now;
+    scrub.seen = now;
     scrub.target = null;
+    takeCat(now);
     arena.raf = requestAnimationFrame(tick);
+  }
+
+  /**
+   * Borrow the cat from `SiteCat.astro` and start it wherever it already is.
+   *
+   * Starting from its real position rather than a corner matters: the fight opens
+   * with the cat where the visitor last saw it, so the boss is recognisably the
+   * same animal that was wandering the footer a second ago.
+   */
+  function takeCat(now: number): void {
+    document.dispatchEvent(new CustomEvent('cat:standdown'));
+    const root = catEl();
+    if (!root) return;
+    root.classList.add('boss');
+    const r = root.getBoundingClientRect();
+    boss.last = now;
+    boss.facing = 1;
+    bossPhase(root, 'stalk', now);
+    placeCat(root, r.left + r.width / 2, r.top + r.height / 2);
+  }
+
+  /** Give it back, from where the fight left it, and let it walk on. */
+  function releaseCat(): void {
+    const root = catEl();
+    if (root) {
+      root.classList.remove('boss', 'boss-telegraph', 'boss-leap', 'boss-recover');
+      document.dispatchEvent(
+        new CustomEvent('cat:resume', { detail: { x: boss.x - root.offsetWidth / 2 } }),
+      );
+    } else {
+      document.dispatchEvent(new CustomEvent('cat:resume'));
+    }
   }
 
   /**
@@ -364,12 +653,16 @@
     arena.raf = 0;
     for (const node of arena.claimed) free(node, false);
     arena.claimed = [];
+    arena.freed = [];
+    arena.order = [];
     arena.total = 0;
     arena.on = false;
     document.documentElement.classList.remove('cat-arena-on');
     hideRing();
     scrub.target = null;
     scrub.x = scrub.y = -1;
+    scrub.vx = scrub.vy = 0;
+    releaseCat();
     restoreCaption();
   }
 
@@ -450,12 +743,36 @@
       'pointermove',
       (e) => {
         if (!arena.on) return;
+        const now = performance.now();
+        const dt = (now - scrub.at) / 1000;
+        // Velocity from one pair of samples, but only over a sane interval: the
+        // first move of a fight, or one after the tab was away, divides by a gap
+        // measured in seconds and reports a cursor doing 4px/s. Ignore those and
+        // keep the last good reading.
+        if (scrub.at && dt > 0.004 && dt < 0.12) {
+          scrub.vx = (e.clientX - scrub.x) / dt;
+          scrub.vy = (e.clientY - scrub.y) / dt;
+        }
+        scrub.at = now;
         scrub.x = e.clientX;
         scrub.y = e.clientY;
-        scrub.seen = performance.now();
+        scrub.inside = true;
+        scrub.seen = now;
       },
       { passive: true },
     );
+
+    // The pointer leaving the window is not the same as the pointer holding still
+    // (§5.3). `pointerout` with a null relatedTarget is the one that fires when it
+    // leaves the document rather than merely crossing between elements.
+    document.addEventListener('pointerout', (e) => {
+      if (!(e as PointerEvent).relatedTarget) {
+        scrub.inside = false;
+        scrub.vx = scrub.vy = 0;
+        hideRing();
+      }
+    });
+    document.addEventListener('pointerover', () => (scrub.inside = true));
 
     // Esc, and only Esc: the truce keystroke has to work from anywhere, and the
     // arena adds no other binding (§11 — the site's own shortcuts stay owned by

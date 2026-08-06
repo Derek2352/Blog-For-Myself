@@ -176,6 +176,190 @@ export function stillEnough(dx: number, dy: number): boolean {
 }
 
 /* ------------------------------------------------------------------ *
+ * Pounce — the threat that makes holding still a decision (§5.3)
+ * ------------------------------------------------------------------ */
+
+/**
+ * The boss's whole state machine. Four phases, one at a time, by construction —
+ * §5.3's "two pounces queued" edge case is impossible if there is only ever one
+ * of these.
+ */
+export type Phase = 'stalk' | 'telegraph' | 'leap' | 'recover';
+
+/** `[PH 420]` ms of wind-up. Human reaction is ~250ms; the rest is read time. */
+export const TELEGRAPH_MS = 420;
+
+/** `[PH 260]` ms in the air. Longer than ~400 and it reads as a stroll. */
+export const LEAP_MS = 260;
+
+/**
+ * `[PH 700]` ms helpless after landing — the player's free window.
+ *
+ * §10 justified this as "must exceed `SCRUB_MS/2` so a whiff is a real reward",
+ * and at 700 against a 1400ms scrub it is *exactly* half, which buys half a scrub
+ * and completes nothing. Working through it, the rationale was aiming at the wrong
+ * thing anyway:
+ *
+ * - Dodging means moving, and moving resets the hold (`stillEnough`). So a dodge
+ *   never banks progress, whatever this number is.
+ * - What a dodge actually buys is **relocation**. The cat lands where you *were*
+ *   and has to walk back at `STALK_SPEED`, so the free window is this plus travel
+ *   — and how much travel is the player's decision, which is the interesting part.
+ *
+ * So the property worth holding is narrower: a whiff must cost the cat more than
+ * the attack gained it (`> TELEGRAPH_MS + LEAP_MS`). That is what the test asserts,
+ * and it is why raising the telegraph without raising this would quietly make
+ * pouncing free.
+ */
+export const RECOVER_MS = 700;
+
+/** `[PH 90]` px. ~2.5× the existing `chase` trigger (34px) in `SiteCat.astro`. */
+export const POUNCE_RANGE = 90;
+
+/**
+ * `[PH 0.35]` — how far into a scrub the cat waits before committing.
+ *
+ * The point is that it looks like it is *reading* you: interrupting a scrub that
+ * had barely started would feel arbitrary, and interrupting one at 0.9 feels like
+ * being robbed. Anything above this is fair game, and the cat prefers later.
+ */
+export const POUNCE_THRESHOLD = 0.35;
+
+/** How close the landing has to be to the cursor to count as a hit, in px. */
+export const HIT_RADIUS = 46;
+
+/**
+ * `[PH 170]` px/s while stalking.
+ *
+ * Deliberately slower than a hand: fleeing has to work, because "move the pointer"
+ * is one of only three inputs (§3). The cost of fleeing is that you cannot scrub
+ * while you do it, which is the whole tension — not that the cat can be outrun.
+ * The site cat walks at 42px/s; a boss at 42px/s never arrives.
+ */
+export const STALK_SPEED = 170;
+
+/**
+ * `[PH 2500]` ms of grace at the start, aggression pinned to nothing.
+ *
+ * §7.4 asked for 6s and this is 2.5s, deliberately: 0.1 assumed a much larger
+ * board, and on the 8-claim board the query actually yields, 6s of grace covers
+ * about four scrubs — half the fight, unloseable. 2.5s covers the first one,
+ * which is what "guaranteed first success" was after.
+ */
+export const OPENING_GRACE_MS = 2500;
+
+/** How many freed elements a landed pounce takes back. */
+export const RECLAIM_ON_HIT = 1;
+
+/** How long a phase lasts. `stalk` ends on a decision, not a clock. */
+export function phaseDuration(phase: Phase): number {
+  if (phase === 'telegraph') return TELEGRAPH_MS;
+  if (phase === 'leap') return LEAP_MS;
+  if (phase === 'recover') return RECOVER_MS;
+  return Infinity;
+}
+
+/**
+ * What this phase becomes once `elapsed` has passed, or null to stay put.
+ *
+ * Driven by elapsed *time*, never by an accumulated `dt`, which is what makes
+ * §5.3's failure state unreachable: a leap cannot begin before the telegraph is
+ * over no matter how badly the frame rate collapses.
+ */
+export function nextPhase(phase: Phase, elapsed: number): Phase | null {
+  if (elapsed < phaseDuration(phase)) return null;
+  if (phase === 'telegraph') return 'leap';
+  if (phase === 'leap') return 'recover';
+  if (phase === 'recover') return 'stalk';
+  return null;
+}
+
+/** Will the cat commit? Close enough, and you are far enough into a scrub. */
+export function provoked(distance: number, progress: number): boolean {
+  return distance <= POUNCE_RANGE && progress >= POUNCE_THRESHOLD;
+}
+
+/** Farthest ahead of the cursor the cat is allowed to aim, in px. */
+export const PREDICT_CAP = 120;
+
+/**
+ * How far ahead the cat aims — and, more importantly, *when it stops being able to
+ * change its mind*: the aim is locked when the telegraph **begins**.
+ *
+ * Built it the other way first, locking at the end of the telegraph, and that
+ * quietly deleted the telegraph. A cat that re-aims until the instant it jumps
+ * cannot be dodged during its wind-up: moving just moves the target. The only real
+ * dodge window was the 260ms flight, which is human reaction time with nothing to
+ * spare — and §5.3's "long enough to dodge if you're watching" was describing a
+ * window that did not exist.
+ *
+ * Locked at the start, the telegraph is what it looks like: 420ms of "I have decided
+ * where you are". Which also makes the prediction lead the whole wind-up plus the
+ * flight, so a player fleeing in a straight line gets read and cut off, and changing
+ * direction beats it. That is the difference between a cat and a homing missile.
+ */
+export const AIM_LEAD_MS = TELEGRAPH_MS + LEAP_MS;
+
+/**
+ * Where the cat aims: the cursor's *predicted* position at touchdown.
+ *
+ * Capped, because an unbounded lead on a fast flick sends the cat across the
+ * screen to somewhere the cursor was never going, which reads as a bug rather
+ * than as being outsmarted.
+ */
+export function predict(x: number, y: number, vx: number, vy: number, ms = LEAP_MS): { x: number; y: number } {
+  const lx = (vx * ms) / 1000;
+  const ly = (vy * ms) / 1000;
+  const lead = Math.hypot(lx, ly);
+  const k = lead > PREDICT_CAP ? PREDICT_CAP / lead : 1;
+  return { x: x + lx * k, y: y + ly * k };
+}
+
+/**
+ * Height above the straight line, 0..1, at `t` through the leap. A hop.
+ *
+ * A parabola rather than `sin(πt)`, which is the obvious choice and is wrong in a
+ * small way: `Math.sin(Math.PI)` is 1.2e-16, not 0, so a leap never quite landed on
+ * its target. `4t(1-t)` is exactly 0 at both ends and exactly 1 in the middle, and
+ * it is a cheaper thing to evaluate every frame.
+ */
+export function leapArc(t: number): number {
+  const c = t < 0 ? 0 : t > 1 ? 1 : t;
+  return 4 * c * (1 - c);
+}
+
+/** How high the hop goes, in px. */
+export const LEAP_HEIGHT = 42;
+
+/** Where the cat is, `t` of the way through a leap from `a` to `b`. */
+export function leapPos(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  t: number,
+): { x: number; y: number } {
+  const c = t < 0 ? 0 : t > 1 ? 1 : t;
+  return {
+    x: ax + (bx - ax) * c,
+    // screen coordinates, so "up" is a subtraction
+    y: ay + (by - ay) * c - leapArc(c) * LEAP_HEIGHT,
+  };
+}
+
+/**
+ * Did it land on you?
+ *
+ * Measured against where the cat *aimed*, not where it ended up following you:
+ * §5.3 is explicit that the cat lands where it committed and whiffs if you moved.
+ * A dodge has to be the player's read, and a cat that adjusts mid-air is a dice
+ * roll with extra steps.
+ */
+export function pounceHit(landX: number, landY: number, curX: number, curY: number): boolean {
+  return Math.hypot(landX - curX, landY - curY) <= HIT_RADIUS;
+}
+
+/* ------------------------------------------------------------------ *
  * Score, and the HUD line
  * ------------------------------------------------------------------ */
 
