@@ -648,13 +648,21 @@
   dialog,
   #site-cat,
   #cat-treat,
-  #cat-score,
+  #cat-hud,
+  #cat-scrub,
   .reading-progress,
   .to-top,
   .ink-wash,
   [data-pagefind-ignore],
   [data-video-play] {
     display: none !important;
+  }
+  /* Somebody could print mid-fight. Paper has no cat on it, so a claim is just a
+     dashed box round a paragraph and a tint that costs ink. */
+  .cat-claimed {
+    outline: none !important;
+    box-shadow: none !important;
+    transform: none !important;
   }
   /* No ink on paper to frost, so the pane is just a box in the way. */
   .glass {

@@ -1,13 +1,15 @@
 # GDD — "Whose Screen Is It" (cat boss fight)
 
-**Version** 0.2 · design only, nothing implemented
-**Status** hypothesis. Every number below is `[PH]` (placeholder) until playtested.
+**Version** 0.3 · steps 0–1 built, everything else design only
+**Status** hypothesis. Every number below is `[PH]` (placeholder) until playtested —
+including the ones now running in a browser. Built is not playtested.
 
 ## Changelog
 
 | Ver | Change |
 |---|---|
 | 0.1 | First draft. Core loop, mechanic specs, dialogue table, replayability. All values `[PH]`. |
+| 0.3 | **Built steps 0 and 1** (§12) — the toggle and Claim + Scrub. Three revisions the build forced: **§5.1** — desaturate-and-tilt is invisible on a cream-and-ink page, so a claim is now a wash plus a dashed edge, with the wash contrast-capped at 7%; **§11** — "transform and filter only" restated as the principle it meant (nothing that affects layout or hides content), which admits `outline` and `box-shadow`, plus a new hscroll rule and a coarse-pointer gate; **§13.4** — the durable `localStorage` opt-out is **cut**, because it could not change any observable behaviour. §5.2 and §10 gain what building taught. |
 | 0.2 | Added §13 arena toggle and §14 loading transition. **Revised §11**: the toggle overturns the reduced-motion decision — an explicit opt-in is a prompt, so hiding the game from those users was paternalistic. Added a photosensitivity requirement the full-screen transition makes load-bearing. **Revised §3**: long-press-to-start removed; the toggle is the only entry point, because an invisible gesture is not an opt-in. **Revised §12**: the toggle becomes step 0 with an instant swap, the transition moves to last. §6 diagram shows the toggle. |
 
 ---
@@ -161,10 +163,32 @@ Excluded from claiming: `body > header`, the tab bar, anything focusable, and
 **Purpose** Make "the cat took my screen" literal and visible.
 **Player fantasy** Something is wrong with my page and I can fix it.
 **Input** Fight start (initial pattern), and cat re-claims on a successful pounce.
-**Output** Element gets `data-cat-claimed`; CSS desaturates it, tilts it `[PH 0.6deg]`,
-and stamps a paw watermark. **Transform and filter only** — never `display`,
-`visibility` or layout, so nothing reflows and nothing is hidden from a
-screen-reader.
+**Output** Element gets `.cat-claimed`; CSS washes it, outlines it, and tilts it
+`[PH 0.5deg]`. **Nothing that affects layout or hides content** — never `display`,
+`visibility`, never a property that reflows, so nothing moves and nothing is hidden
+from a screen-reader.
+
+> **Built, 0.3 — and the look is not what this section specified.** 0.1 asked for
+> *desaturated, tilted, paw watermark*. Two of the three do nothing on this site:
+> the page is cream and near-black, so `saturate(0.35)` is invisible on it, and 0.5°
+> of tilt is a rounding error. Screenshots of the first build show a page you cannot
+> tell is invaded — which fails the fun hypothesis for a reason that has nothing to
+> do with the mechanic, because there is nothing to scrub *toward*.
+>
+> What reads on a monochrome page is a **wash and an edge**: an inset `box-shadow`
+> tint over the block (it paints above the background and below the text, so the
+> words do not get harder to read) plus a 2px dashed `outline`. The wash landed at
+> **7%**, not the 12% it read best at: 12% put `.rail` — small, mono,
+> `--color-muted` — at 4.15:1 against its own tinted background, under AA. The edge
+> does the shouting and the wash murmurs. The tilt stays as a garnish.
+>
+> The paw watermark is **not built**. A dot is not a paw, and a real one wants a
+> shape this build has no business drawing before the mechanic has earned it.
+>
+> Also worth recording: `outline` and `box-shadow` were not on 0.1's allow-list, and
+> they are fine — outlines and shadows are painted, never laid out, which is the
+> guarantee "transform and filter only" was reaching for. The rule was written as a
+> mechanism when it meant a principle; §11 now states the principle.
 **Success condition** Page reads as invaded but every word is still selectable.
 **Failure state** If a claim ever makes text fail AA contrast, the claim CSS is
 wrong. Gate: reuse the measurement harness from `scratchpad/glass.mjs` — it
@@ -175,9 +199,18 @@ already samples true backdrops and computes WCAG ratios.
 - Zero claimable elements (a sparse page) → refuse the fight, cat yawns. Better
   than an empty arena.
 - Element larger than viewport → clamp the scrub target to the visible rect.
-**Tuning levers** `CLAIM_TILT`, `CLAIM_DESAT`, `INITIAL_CLAIM_FRACTION`, `RECLAIM_COUNT`
+- Nested candidates (`figure` containing `.frame`) → **outermost only**. Transforms
+  compound, so claiming both tilts the image twice, and scrubbing the inner one
+  leaves it visibly still claimed by the outer. Found in the build; `dropNested`.
+- An element with an inline `style` of its own → hold the attribute verbatim and
+  hand it back on release. Undoing a claim property-by-property is not the same as
+  restoring the attribute: touching an element's style re-serialises whatever was
+  already inline, so it can come back visually identical and no longer be the page
+  as found.
+**Tuning levers** `MAX_TILT`, the wash percentage, `INITIAL_CLAIM_FRACTION`,
+`MIN_CLAIM_AREA`, `RECLAIM_COUNT`
 **Dependencies** Arena query, TerritoryMeter, InkWash (must not fight the ink wash
-visually — claims are cool-grey, the ink is warm)
+visually — the claim wash borrows `--color-accent`, which the ink never uses)
 
 ### 5.2 Mechanic: Scrub (the core verb)
 
@@ -198,9 +231,25 @@ partial. Partial retention would remove the reason to buy a safe window.
   would let a player clear the board by flicking.
 - Pointer leaves the window → pause, don't reset (they may be reaching for a
   treat click). Resets on `blur` after `[PH 2s]`.
-- Touch: no hover, so "hold still" is a press-and-hold. Same timer.
-**Tuning levers** `SCRUB_MS`, `SCRUB_RADIUS`, `STILL_TOLERANCE`, `INTERRUPT_PENALTY`
+- Touch: **not offered.** 0.1 said "no hover, so hold-still is a press-and-hold,
+  same timer", which sounds equivalent and isn't: a press-and-hold has no *aim*, so
+  the tension of keeping a cursor somewhere while something walks at it has nothing
+  left in it. Worse, a finger covers the thing it is holding. The build gates the
+  toggle behind `(hover: hover) and (pointer: fine)` and says so in the widget —
+  the same "not yet, and here's why" treatment reduced motion gets, rather than a
+  button that starts a game you cannot play.
+**Tuning levers** `SCRUB_MS`, `STILL_PX`, `INTERRUPT_PENALTY`
 **Dependencies** CatBoss.pounce, Claim
+
+> **Built, 0.3.** Hold-still-to-reclaim works, with a 40px ring at the cursor
+> filling as the hold completes. Two notes from building it: the still-tolerance
+> must be a *distance* (`hypot`), because per-axis tolerance lets a diagonal drift
+> through at 1.4×; and the hold anchor has to follow the pointer on a reset, or a
+> slow drift keeps failing against a stale origin and the mechanic feels broken
+> rather than demanding.
+>
+> **The hypothesis itself is still untested.** It is built and it functions; whether
+> it is *fun* is a question a playtest answers, not a harness.
 
 ### 5.3 Mechanic: Pounce
 
@@ -466,6 +515,18 @@ treat's win-rate contribution exceeds any other's by more than `[PH 10%]`.
 | `AGGRESSION` (bored) | 0.6 | Visible mercy without becoming a walkover | <0.4: cat stops being a threat |
 | Fight length | 90–180s | One coffee. Longer and it competes with the portfolio | >4min: nobody finishes |
 
+Added in 0.3, from building steps 0 and 1. Still `[PH]` — built and measured is not
+the same as playtested:
+
+| Var | `[PH]` | Rationale | "Broken" looks like |
+|---|---|---|---|
+| `STILL_PX` | 6 | A hand on a trackpad is never perfectly still, and a mouse jitters a pixel or two. Must be a *distance*, not per-axis, or a diagonal drift passes at 1.4× | 0: the mechanic reads as broken rather than demanding. >12: drifting across a block still clears it |
+| `MAX_TILT` | 0.5° | A nudge, not a glitch — and the ceiling is structural: a rotated full-width block is wider than the page | >2°: horizontal scrollbar on a phone |
+| Claim wash | 7% accent | The most that keeps `.rail` (mono, `--color-muted`) over AA on its own tinted background. 12% read better and measured 4.15:1 | 0%: invisible on a monochrome page. >10%: fails the §11 contrast gate |
+| Claim outline | 2px dashed, 62% accent | Carries the read that the wash can't afford to. Painted, so it costs no layout | 1px at 55%: too quiet to find claims by |
+| `MIN_CLAIM_AREA` | 900px² | A `.rail` line is ~2000px² and reads fine; below this are sprite stubs and empty spans | Too low: claims land on 9px dots and the game looks broken |
+| Board size | 8 claims on the homepage | What the §4.1 query yields at 0.55 after excluding protected furniture and de-nesting | <4: the fight is over before it starts. >20: the page is unreadable, breaking pillar 2 |
+
 Build these as a spreadsheet with formulas before writing the code, per §Balance
 Process — `SCRUB_MS`, `RECOVER_MS` and `lureDuration` are *coupled*, and hardcoding
 them independently is how this gets unbalanced.
@@ -496,8 +557,20 @@ them independently is how this gets unbalanced.
   it, the beat is cut, not the requirement.
 - **Keyboard** — Esc ends it. The fight never traps focus, never adds a focus
   trap, and never claims a focusable element (§4.1).
-- **Claims are transform + filter only.** No layout, no `display`, no
-  `visibility`. Text stays selectable and copyable throughout.
+- **A claim may not affect layout or hide anything.** *(Restated in 0.3. The 0.1
+  rule said "transform and filter only", which named a mechanism when it meant a
+  principle — and the mechanism turned out to be invisible on this page, see §5.1.)*
+  `transform`, `filter`, `outline` and `box-shadow` all qualify: they are painted,
+  never laid out. `display`, `visibility`, and anything that reflows do not. Text
+  stays selectable and copyable throughout, and the tab order never changes.
+- **The page's own scroll extent is not the game's to change.** A rotated
+  full-width block is wider than the page, so claims are tilt-capped *and* the root
+  is `overflow-x: clip` while a fight runs (`clip`, not `hidden`, so no scroll
+  container appears and the sticky header still works). An easter egg does not get
+  to hand a phone a horizontal scrollbar.
+- **`(hover: hover) and (pointer: fine)`** — the core verb is holding a cursor
+  still on a thing, so on a touch screen the toggle says "needs a mouse or
+  trackpad" instead of starting something unplayable (§5.2).
 - **Contrast gate** — no claimed element may push text below WCAG AA. Verify with
   the existing backdrop-sampling harness, not by eye; sampling the composite
   gives false passes (it reads the glyphs — that mistake already cost a round on
@@ -510,13 +583,17 @@ them independently is how this gets unbalanced.
 
 ## 12. Build order (smallest testable increments)
 
-0. **The toggle, with an instant swap** (§13). No transition, no fade — flip a
-   class, arena on, Esc off. First because nothing below is reachable by a visitor
-   without it, and because it is the only step that must ship *whatever* happens to
-   the rest: a consent control for a feature that doesn't exist yet is a two-line
-   no-op, while a feature that exists without one is a liability.
-1. **Claim + Scrub only.** No cat, no treats. Is scrubbing a page satisfying at
-   all? If not, stop here — that is the fun hypothesis failing cheaply.
+0. ✅ **The toggle, with an instant swap** (§13) — *built in 0.3.* No transition, no
+   fade: flip a class, arena on, Esc off. First because nothing below is reachable
+   by a visitor without it, and because it is the only step that must ship
+   *whatever* happens to the rest: a consent control for a feature that doesn't
+   exist yet is a two-line no-op, while a feature that exists without one is a
+   liability. `src/components/CatArena.astro`, button in `SiteCat.astro`'s HUD.
+1. ✅ **Claim + Scrub only** — *built in 0.3.* No cat, no treats, no territory bar,
+   no dialogue. Is scrubbing a page satisfying at all? **That question is still
+   open**: the mechanic works, and whether it is fun needs a person, not a harness.
+   Rules live in `src/lib/arena.ts` (DOM-free, 45 tests); the DOM work is in
+   `CatArena.astro`.
 2. Add **Pounce** with a fixed telegraph. Tune §10 rows 1–4 until the read feels
    fair. This is where the game is won or lost.
 3. Add **Treats** as a single type. Verify the safe window is a real decision.
@@ -536,6 +613,19 @@ ever exercises.
 Ship gate for each step: the existing 20-check ink harness, `npm test`, and the
 contrast gate above must all stay green. The fight lives on the same page as the
 ink wash and the glass pane; it does not get to break them.
+
+**Steps 0–1 ship gate, actual:** 268 unit tests, ink harness 20/20 twice, cycle
+check green, build warning-free, and a 58-check browser harness
+(`scratchpad/arena.mjs`) covering the toggle's semantics, the claim exclusions, both
+themes' contrast, hscroll at three widths, the reduced-motion and touch paths, the
+auto-truce, and — the one that matters most — a byte-for-byte DOM snapshot before and
+after six fights, since a claim is a change to somebody else's element.
+
+One thing the harness could not catch, worth writing down: a stale comment left the
+`outline` declarations outside a CSS comment for one build, and the contrast check
+*modelled* the wash rather than reading the rendered pixels, so it passed a build
+whose claims had no visible edge at all. The screenshot caught it. A measurement that
+models the CSS cannot notice the CSS being dropped.
 
 ---
 
@@ -583,16 +673,25 @@ state announcement for free.
 - Visible focus ring, inherited from the site's existing focus style. Not
   overridden.
 
-### 13.4 State and persistence — deliberately asymmetric
+### 13.4 State and persistence — nothing is stored
+
+*Revised in 0.3. 0.2 specified a durable `localStorage` "off" beside a session-only
+"on". Building it showed the stored entry could not change any observable
+behaviour.*
 
 | State | Where it lives | Why |
 |---|---|---|
-| **off** | `localStorage`, durable | Opting out is a considered decision. It must survive a refresh, a route change, and a return visit next month. |
-| **on** | session-only, matching the existing progress model (`cat-game.ts:6–7`) | Nobody should land on a portfolio mid-invasion because they said yes last week. Consent to be ambushed does not keep. |
+| **on** | in memory, session only, matching the existing progress model (`cat-game.ts:6–7`) | Nobody should land on a portfolio mid-invasion because they said yes last week. Consent to be ambushed does not keep. |
+| **off** | nowhere — it is the state every page load already starts in | *Because* "on" is session-only, off is the default after a refresh, a return visit, or a shared link. A stored "off" could only ever agree with the default. |
+
+The asymmetry 0.2 was reaching for is real and survives: **the escape is sticky and
+the invitation is not.** What was wrong was the mechanism. A flag that can only ever
+confirm the default is not a safeguard, it is reassuring dead code — and cutting it
+means the cat's game writes nothing, anywhere, which is a stronger promise than the
+one it replaces.
 
 Neither direction is a preference to be synced or a setting to be found in a
-panel; both are one press away at all times. The asymmetry is the whole design:
-**the escape is sticky and the invitation is not.**
+panel; both are one press away at all times.
 
 ### 13.5 Inputs and outputs
 
@@ -620,6 +719,10 @@ panel; both are one press away at all times. The asymmetry is the whole design:
 - **Reduced motion.** Button shown and operable (§11). Pressing it does not start
   a fight there is no motion-safe variant of — it says so, in words, in the widget.
   Absent-and-silent was the 0.1 behaviour and it was worse.
+- **A pointer that cannot hold still on a thing** (touch, §5.2). Same treatment as
+  reduced motion, different sentence: shown, `aria-disabled`, and the reason in the
+  widget. Both are "not yet", and neither is "not for you". Implemented as one code
+  path returning *why*, so a third reason cannot arrive and get its own handling.
 - **No JS.** The button is rendered *by* the cat script, so it cannot appear as a
   dead control on a page where nothing can respond to it.
 - **Print.** Hidden, along with the rest of the cat.

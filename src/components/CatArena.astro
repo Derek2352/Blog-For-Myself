@@ -1,0 +1,501 @@
+---
+/**
+ * The arena — build steps 0 and 1 of `docs/cat-boss-gdd.md` §12.
+ *
+ * **Step 0**: wire the toggle in the cat's HUD (rendered by SiteCat.astro) to an
+ * instant swap. No transition, no fade — the §14 ink curtain is deliberately the
+ * *last* thing built, and this instant path stays as its permanent fallback.
+ *
+ * **Step 1**: Claim + Scrub, and nothing else. No cat behaviour, no treats, no
+ * territory bar, no dialogue. The question this build exists to answer is the fun
+ * hypothesis on its own: *is holding your cursor still to scrub a page back
+ * satisfying at all?* If it isn't, that is the design failing for £0.
+ *
+ * What it does to the page, and nothing more: adds a class and two custom
+ * properties to some existing elements. Claims are `transform` + `filter` only
+ * (§11) — no layout, no `display`, no `visibility`, so text stays selectable and
+ * every link stays clickable while the cat "holds" the block around it.
+ *
+ * Off is the only state a page can load in. Nothing is written to storage.
+ */
+---
+
+{/* The scrub ring: a cursor-sized dial that fills while you hold still. Fixed,
+    aria-hidden and pointer-events: none — it must never be the thing under the
+    cursor, or it would eat the hover it is reporting on. */}
+<div id="cat-scrub" transition:persist="cat-scrub" aria-hidden="true" hidden>
+  <svg viewBox="0 0 40 40" width="40" height="40">
+    <circle class="scrub-track" cx="20" cy="20" r="17" fill="none" stroke-width="2.5"></circle>
+    <circle
+      class="scrub-fill"
+      cx="20"
+      cy="20"
+      r="17"
+      fill="none"
+      stroke-width="2.5"
+      stroke-linecap="round"
+      transform="rotate(-90 20 20)"></circle>
+  </svg>
+</div>
+
+<style>
+  /* ---- a claimed element ----
+     §5.1 asked for "desaturated, tilted, paw watermark". Built and looked at, and
+     the first two do nothing here: this page is cream and near-black, so
+     `saturate(0.35)` is invisible on it, and 0.5° of tilt is a rounding error. A
+     claim you cannot see is not a claim — there is nothing to scrub *toward*, which
+     is the fun hypothesis failing for a reason that has nothing to do with the
+     mechanic. What reads on a monochrome page is a wash and an edge:
+
+     - `box-shadow: inset` paints a flat tint over the element's whole box, above
+       its background and **below its text**, so the block is visibly taken without
+       the words getting harder to read.
+     - `outline` draws the boundary, and — the reason it is allowed here at all —
+       outlines are painted, never laid out. Same guarantee §11 wanted from
+       "transform and filter only": nothing moves, nothing is hidden.
+
+     The wash is 7%, not the 12% it read best at: 12% put `.rail` — small, mono,
+     `--color-muted` — at 4.15:1 against its own tinted background, under AA's 4.5,
+     and §11 makes that a gate rather than a trade. So the edge does the shouting
+     and the wash only murmurs. The tilt stays as a garnish, capped in `arena.ts`. */
+  :global(.cat-claimed) {
+    transform: rotate(var(--claim-tilt, 0deg)) scale(0.994);
+    box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--color-accent) 7%, transparent);
+    outline: 2px dashed color-mix(in srgb, var(--color-accent) 62%, transparent);
+    outline-offset: 3px;
+    /* the pointer is the tool, so a claim says it is a target */
+    cursor: crosshair;
+  }
+  /* The moment it comes back to you: the wash drains out rather than blinking off.
+     Kept off under reduced motion like everything else, though the arena itself
+     does not open there yet. */
+  @media (prefers-reduced-motion: no-preference) {
+    :global(.cat-freed) {
+      animation: cat-freed 0.42s ease-out;
+    }
+    @keyframes cat-freed {
+      from {
+        box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--color-accent) 26%, transparent);
+      }
+      to {
+        box-shadow: inset 0 0 0 100vmax transparent;
+      }
+    }
+  }
+
+  /* While a fight is on, the root clips horizontally. Belt and braces beside
+     MAX_TILT: `clip` (not `hidden`) creates no scroll container, so the sticky
+     header and every anchor jump still work. An easter egg does not get to give
+     the page a horizontal scrollbar. */
+  :global(html.cat-arena-on) {
+    overflow-x: clip;
+  }
+
+  #cat-scrub {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 41;
+    width: 40px;
+    height: 40px;
+    margin: -20px 0 0 -20px;
+    pointer-events: none;
+    color: var(--color-accent);
+    will-change: transform;
+  }
+  #cat-scrub svg {
+    display: block;
+    overflow: visible;
+  }
+  .scrub-track {
+    stroke: color-mix(in srgb, var(--color-ink) 22%, transparent);
+  }
+  .scrub-fill {
+    stroke: currentColor;
+    /* 2πr for r=17, set here so the script only ever writes the offset */
+    stroke-dasharray: 106.81;
+    stroke-dashoffset: 106.81;
+  }
+</style>
+
+<script>
+  import { motionReduced } from '@/lib/a11y-prefs';
+  import { tallyFor } from '@/lib/cat-game';
+  import {
+    CLAIMABLE,
+    PROTECTED,
+    PROTECTED_TREE,
+    INITIAL_CLAIM_FRACTION,
+    HIDDEN_TRUCE_MS,
+    IDLE_TRUCE_MS,
+    bigEnough,
+    dropNested,
+    pickClaims,
+    claimTilt,
+    scrubProgress,
+    stillEnough,
+    arenaCaption,
+    isCleared,
+  } from '@/lib/arena';
+
+  /**
+   * Live state, module scope, session only.
+   *
+   * `on` is never read from anywhere but here, which is the asymmetry §13.4 was
+   * reaching for: a page can only ever *load* with the arena off, so a visitor
+   * can never arrive mid-invasion — not after a refresh, not on a return visit,
+   * not from a shared link.
+   */
+  const arena = {
+    on: false,
+    /** Elements the cat currently holds, in DOM order. */
+    claimed: [] as HTMLElement[],
+    /** How many it started with, so the HUD line has a denominator. */
+    total: 0,
+    /** rAF handle for the scrub loop. */
+    raf: 0,
+  };
+
+  /** Scrub tracking: where the pointer settled, and when. */
+  const scrub = {
+    x: -1,
+    y: -1,
+    /** Where the current hold began. */
+    ax: -1,
+    ay: -1,
+    since: 0,
+    target: null as HTMLElement | null,
+    seen: 0,
+  };
+
+  const el = (id: string) => document.getElementById(id);
+
+  /* ---------------------------------------------------------------- *
+   * Building the board (§4.1)
+   * ---------------------------------------------------------------- */
+
+  /**
+   * Everything on this page the cat could take.
+   *
+   * Queried, filtered, then de-nested — in that order, because `dropNested` is
+   * O(n²) and the filters cut the list by about two thirds first.
+   */
+  function candidates(): HTMLElement[] {
+    const all = [...document.querySelectorAll<HTMLElement>(CLAIMABLE)];
+    const keep = all.filter((node) => {
+      if (node.matches(PROTECTED)) return false; // self only — see arena.ts
+      if (node.closest(PROTECTED_TREE)) return false; // subtree
+      const r = node.getBoundingClientRect();
+      return bigEnough(r.width, r.height);
+    });
+    return dropNested(keep, (outer, inner) => outer.contains(inner));
+  }
+
+  /**
+   * The `style` attribute each claimed element arrived with, verbatim.
+   *
+   * Undoing a claim property-by-property is not the same as putting the attribute
+   * back: touching an element's style through the CSSOM re-serialises whatever was
+   * already inline, so an element that came in with
+   * `style="background-image:var(--lqip)"` can come out spelled differently and be
+   * *visually* identical while no longer being the page as found. Pillar 2 says the
+   * DOM is restored exactly, so hold the string and hand it back.
+   */
+  const wasStyled = new WeakMap<HTMLElement, string | null>();
+
+  /** Paint a claim on. One custom property; the rest of the look is the class. */
+  function claim(node: HTMLElement, index: number, seed: number): void {
+    wasStyled.set(node, node.getAttribute('style'));
+    node.style.setProperty('--claim-tilt', `${claimTilt(index, seed).toFixed(3)}deg`);
+    node.classList.add('cat-claimed');
+  }
+
+  /** Take one back, leaving the element exactly as it was found. */
+  function free(node: HTMLElement, celebrate: boolean): void {
+    node.classList.remove('cat-claimed');
+    const before = wasStyled.get(node) ?? null;
+    if (before === null) node.removeAttribute('style');
+    else node.setAttribute('style', before);
+    wasStyled.delete(node);
+    if (!celebrate) return;
+    node.classList.add('cat-freed');
+    setTimeout(() => node.classList.remove('cat-freed'), 480);
+  }
+
+  /* ---------------------------------------------------------------- *
+   * The HUD line — borrowed, then given back
+   * ---------------------------------------------------------------- */
+
+  function caption(text: string): void {
+    const line = document.querySelector<HTMLElement>('#cat-score .cat-caption');
+    if (line) line.textContent = text;
+  }
+
+  /**
+   * Put the treat tally back exactly as the cat had it.
+   *
+   * Recomputed rather than remembered: SiteCat owns that state and may well have
+   * changed it while the fight was on (arriving on a new tab credits a treat), so
+   * a string cached at the start would be stale. The paw row is the source of
+   * truth for both numbers, which is the same trick `readTabs` uses.
+   */
+  function restoreCaption(): void {
+    const paws = [...document.querySelectorAll<HTMLElement>('#cat-score .cat-paw[data-slug]')];
+    if (!paws.length) return;
+    caption(tallyFor(paws.filter((p) => p.classList.contains('got')).length, paws.length));
+  }
+
+  /* ---------------------------------------------------------------- *
+   * Scrub loop
+   * ---------------------------------------------------------------- */
+
+  const ring = () => el('cat-scrub');
+
+  function showRing(x: number, y: number, progress: number): void {
+    const r = ring();
+    if (!r) return;
+    r.hidden = false;
+    r.style.transform = `translate(${x}px, ${y}px)`;
+    const fill = r.querySelector<SVGCircleElement>('.scrub-fill');
+    // 106.81 = 2πr, matching the dasharray in the stylesheet
+    fill?.style.setProperty('stroke-dashoffset', String(106.81 * (1 - progress)));
+  }
+
+  function hideRing(): void {
+    const r = ring();
+    if (r) r.hidden = true;
+  }
+
+  /** The claimed element under the pointer, if any. */
+  function claimUnder(x: number, y: number): HTMLElement | null {
+    const hit = document.elementFromPoint(x, y);
+    if (!(hit instanceof Element)) return null;
+    const node = hit.closest<HTMLElement>('.cat-claimed');
+    return node && arena.claimed.includes(node) ? node : null;
+  }
+
+  function tick(now: number): void {
+    if (!arena.on) return;
+    arena.raf = requestAnimationFrame(tick);
+
+    // auto-truce: a fight nobody is playing is over (§11)
+    if (scrub.seen && now - scrub.seen > IDLE_TRUCE_MS) {
+      setArena(false);
+      return;
+    }
+
+    const target = scrub.x < 0 ? null : claimUnder(scrub.x, scrub.y);
+    if (!target || target !== scrub.target) {
+      // moved onto something else, or off the board: the hold restarts
+      scrub.target = target;
+      scrub.since = now;
+      scrub.ax = scrub.x;
+      scrub.ay = scrub.y;
+      if (!target) hideRing();
+      return;
+    }
+    if (!stillEnough(scrub.x - scrub.ax, scrub.y - scrub.ay)) {
+      // drifted: same target, fresh hold, and the anchor follows the pointer
+      scrub.since = now;
+      scrub.ax = scrub.x;
+      scrub.ay = scrub.y;
+    }
+    const progress = scrubProgress(now - scrub.since);
+    showRing(scrub.x, scrub.y, progress);
+    if (progress < 1) return;
+
+    // reclaimed
+    arena.claimed = arena.claimed.filter((n) => n !== target);
+    free(target, true);
+    caption(arenaCaption(arena.claimed.length, arena.total));
+    scrub.target = null;
+    scrub.since = now;
+    hideRing();
+    if (isCleared(arena.claimed.length, arena.total)) {
+      // Step 1 has no endings, no dialogue and no reward — the board simply runs
+      // out, and the fight ends. What it *does* answer is whether getting there
+      // was worth doing, which is the only question this build asks.
+      setTimeout(() => setArena(false), 900);
+    }
+  }
+
+  /* ---------------------------------------------------------------- *
+   * On / off — one code path, so the DOM can only be restored one way
+   * ---------------------------------------------------------------- */
+
+  /**
+   * The only way in or out. Esc, the toggle, a cleared board and both auto-truces
+   * all come through here, so there is exactly one implementation of "restore the
+   * page" — a second one is a second thing that can leave a claim behind.
+   *
+   * Idempotent by the first line. §13.6's latch (a press arriving *during* the
+   * transition) belongs with the transition, which is step 6; an instant swap has
+   * no window to land in.
+   */
+  function setArena(on: boolean): void {
+    if (on === arena.on) return;
+    if (on) open();
+    else close();
+    syncToggle();
+  }
+
+  function open(): void {
+    const board = candidates();
+    if (!board.length) return; // nothing to fight over; leave the toggle off
+    const seed = (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0;
+    const picked = pickClaims(board.length, INITIAL_CLAIM_FRACTION, seed);
+    arena.claimed = picked.map((i) => board[i]!);
+    arena.total = arena.claimed.length;
+    arena.claimed.forEach((node, i) => claim(node, i, seed));
+    arena.on = true;
+    document.documentElement.classList.add('cat-arena-on');
+    caption(arenaCaption(arena.claimed.length, arena.total));
+    scrub.seen = performance.now();
+    scrub.target = null;
+    arena.raf = requestAnimationFrame(tick);
+  }
+
+  /**
+   * End it, with the DOM exactly as found. Pillar 2 — and the reason Esc, the
+   * toggle, a cleared board and the auto-truce all come through here.
+   */
+  function close(): void {
+    cancelAnimationFrame(arena.raf);
+    arena.raf = 0;
+    for (const node of arena.claimed) free(node, false);
+    arena.claimed = [];
+    arena.total = 0;
+    arena.on = false;
+    document.documentElement.classList.remove('cat-arena-on');
+    hideRing();
+    scrub.target = null;
+    scrub.x = scrub.y = -1;
+    restoreCaption();
+  }
+
+  /* ---------------------------------------------------------------- *
+   * The toggle (§13)
+   * ---------------------------------------------------------------- */
+
+  const toggle = () => el('cat-arena-toggle') as HTMLButtonElement | null;
+
+  /**
+   * Why the arena can't open right now, or null if it can.
+   *
+   * Both answers are "not yet", not "not for you", and both are stated in the
+   * widget rather than by an absent button — §11's reversal, applied to the
+   * second case as well as the first.
+   */
+  function blockedBecause(): string | null {
+    if (motionReduced()) return 'Not while motion is reduced — there is no still version of this yet.';
+    // The core verb is *holding a cursor still on a thing*. A touch screen has no
+    // hover to hold, so on a phone this would be a button that starts a game you
+    // cannot play. Saying so beats hiding it and beats faking it.
+    if (!matchMedia('(hover: hover) and (pointer: fine)').matches) {
+      return 'Needs a mouse or trackpad — the touch version isn’t designed yet.';
+    }
+    return null;
+  }
+
+  /**
+   * Make the button agree with reality — every time either changes.
+   *
+   * The failure state §13.5 names is a button whose rendering and the arena's
+   * actual state disagree, which is why this is called from `setArena` rather
+   * than from the click handler: an auto-truce or a cleared board flips the
+   * button back on its own, visibly, instead of leaving it pressed over a dead
+   * arena.
+   */
+  function syncToggle(): void {
+    const btn = toggle();
+    if (!btn) return;
+    btn.setAttribute('aria-pressed', arena.on ? 'true' : 'false');
+    const why = blockedBecause();
+    btn.setAttribute('aria-disabled', why ? 'true' : 'false');
+    const note = el('cat-arena-note');
+    if (note) {
+      if (why) note.textContent = why;
+      note.hidden = !why;
+    }
+    // Describe the button only while there is a reason to; a description that is
+    // always attached but usually irrelevant is noise on every focus.
+    if (why) btn.setAttribute('aria-describedby', 'cat-arena-note');
+    else btn.removeAttribute('aria-describedby');
+  }
+
+  function init(): void {
+    const btn = toggle();
+    if (!btn || btn.dataset.init) return;
+    btn.dataset.init = '1';
+
+    // Revealing the toggle here is what stops it being a dead control: if this
+    // component is ever dropped from the layout, the button never appears.
+    btn.closest<HTMLElement>('.cat-arena-chip')?.removeAttribute('hidden');
+
+    btn.addEventListener('click', () => {
+      if (blockedBecause()) {
+        // `aria-disabled`, not `disabled`, so the press is ours to answer: the
+        // note is already showing, so flash it rather than doing nothing at all.
+        const note = el('cat-arena-note');
+        if (!note) return;
+        note.classList.remove('cat-arena-note-nudge');
+        void note.offsetWidth; // reflow, or re-adding the class re-runs nothing
+        note.classList.add('cat-arena-note-nudge');
+        return;
+      }
+      setArena(!arena.on);
+    });
+
+    window.addEventListener(
+      'pointermove',
+      (e) => {
+        if (!arena.on) return;
+        scrub.x = e.clientX;
+        scrub.y = e.clientY;
+        scrub.seen = performance.now();
+      },
+      { passive: true },
+    );
+
+    // Esc, and only Esc: the truce keystroke has to work from anywhere, and the
+    // arena adds no other binding (§11 — the site's own shortcuts stay owned by
+    // the pages that define them).
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && arena.on) setArena(false);
+    });
+
+    // Tab hidden long enough ends it: nobody comes back to a page mid-invasion.
+    let hiddenAt = 0;
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        hiddenAt = Date.now();
+        return;
+      }
+      if (arena.on && hiddenAt && Date.now() - hiddenAt > HIDDEN_TRUCE_MS) setArena(false);
+    });
+
+    // Reduce-motion can be flipped mid-visit from either source (the OS query or
+    // the site's own toggle). Turning it on ends a running fight, because there
+    // is no still version of this yet.
+    const reconsider = () => {
+      if (arena.on && blockedBecause()) setArena(false);
+      else syncToggle();
+    };
+    matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', reconsider);
+    new MutationObserver(reconsider).observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+
+    syncToggle();
+  }
+
+  document.addEventListener('astro:page-load', () => {
+    init();
+    // A fight does not survive a page change yet: the old board's elements are
+    // gone, and step 1 has nothing worth carrying across. Re-querying the new
+    // page (§13.6) waits for the build that has something to carry.
+    if (arena.on) setArena(false);
+    syncToggle();
+  });
+</script>

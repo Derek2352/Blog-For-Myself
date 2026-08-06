@@ -12,6 +12,7 @@ import { ClientRouter } from 'astro:transitions';
 import Header from '@/components/Header.astro';
 import Footer from '@/components/Footer.astro';
 import SiteCat from '@/components/SiteCat.astro';
+import CatArena from '@/components/CatArena.astro';
 import WelcomeNote from '@/components/WelcomeNote.astro';
 import { site } from '@/data/site';
 import { isDraftPreviewBuild } from '@/lib/content';
@@ -192,6 +193,9 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     </main>
     <Footer />
     <SiteCat />
+    {/* Wires the toggle SiteCat renders. Drop this line and the toggle never
+        appears at all — which is the point: no dead controls. */}
+    <CatArena />
     <WelcomeNote />
 
     <script>

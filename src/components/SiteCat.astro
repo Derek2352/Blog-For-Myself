@@ -6,8 +6,11 @@
  * a side edge, and scampers if you tap it. It persists across client-side
  * page transitions, so it's one cat for the whole visit.
  *
- * Decorative only: aria-hidden, pointer-events limited to its own body,
- * and under prefers-reduced-motion it simply sits still in the bottom-left corner.
+ * Decorative, with one deliberate exception: aria-hidden, pointer-events limited
+ * to its own body, and under prefers-reduced-motion it simply sits still in the
+ * bottom-left corner. The exception is the arena toggle in the HUD below — a real
+ * control cannot be aria-hidden and usable at the same time, so it is exposed
+ * while everything around it stays hidden (see docs/cat-boss-gdd.md §13).
  * To retire the cat, remove <SiteCat /> from Base.astro.
  */
 import { getNavCategories } from '@/lib/content';
@@ -82,11 +85,40 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
     would be furniture nobody could explain. The row is now explained — the line
     under it always reads "n / N treats" — so it shows from the first page load
     instead, as an invitation. A visitor who never sees the row can't play. */}
-<div id="cat-score" transition:persist="cat-score" aria-hidden="true" data-empty>
-  <div class="cat-paws">
-    {tabs.map((slug) => <span class="cat-paw" data-slug={slug}></span>)}
+<div id="cat-hud" transition:persist="cat-hud">
+  <div id="cat-score" aria-hidden="true" data-empty>
+    <div class="cat-paws">
+      {tabs.map((slug) => <span class="cat-paw" data-slug={slug}></span>)}
+    </div>
+    <p class="cat-caption rail"></p>
   </div>
-  <p class="cat-caption rail"></p>
+
+  {/* The arena toggle — the one part of the cat that is *not* aria-hidden.
+      docs/cat-boss-gdd.md §13: a hidden switch is not an opt-in, it's a trap
+      that happens to have a way out. It sits here rather than in the site header
+      (which would advertise a game, site-wide, to someone reading a CV) or in the
+      accessibility popover (a game is not a reading preference).
+
+      Rendered hidden and revealed by CatArena.astro, so it can never appear as a
+      dead control on a page where nothing is listening. The label never changes:
+      `aria-pressed` carries the state, and a button that flips both announces the
+      opposite of what it means. */}
+  <div class="cat-arena-chip" hidden>
+    <button
+      id="cat-arena-toggle"
+      class="cat-arena-btn tap-safe"
+      type="button"
+      aria-pressed="false"
+    >
+      <span class="cat-arena-pip" aria-hidden="true"></span>
+      <span>Cat takes the screen</span>
+    </button>
+    {/* Filled in by CatArena.astro, which is the only thing that knows *why* the
+        arena can't open — reduced motion, or a pointer that can't hold still on a
+        thing. Rendered empty rather than with a guess, so the widget can never
+        show a reason that isn't the real one. */}
+    <p id="cat-arena-note" class="cat-arena-note rail" hidden></p>
+  </div>
 </div>
 
 {/* Treat shapes, defined once and referenced by <use>. */}
@@ -182,16 +214,30 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
     display: block;
   }
 
-  /* ---- progress: a row of paws, low and quiet ---- */
-  #cat-score {
+  /* ---- the HUD: the paw row, and the arena toggle under it ----
+     One positioned container for both, so the toggle sits *under the ammo row*
+     (§13.2) by stacking rather than by guessing the score chip's height from a
+     hand-tuned `bottom`. The chip used to position itself; that made the two a
+     pair of fixed elements whose spacing broke the moment either changed. */
+  #cat-hud {
     position: fixed;
     left: 1rem;
     /* clear of the cat's own 30px band, and far from the back-to-top corner */
     bottom: 2.75rem;
     z-index: 39;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+    /* nothing here intercepts a click except the toggle, which takes its own
+       pointer-events back below */
     pointer-events: none;
-    opacity: 0;
     max-width: calc(100vw - 2rem);
+  }
+
+  /* ---- progress: a row of paws, low and quiet ---- */
+  #cat-score {
+    opacity: 0;
     /* On a phone the viewport is full of text, so a permanent overlay in the
        corner sat on top of paragraphs. Give it the same paper it would have on
        the desktop's empty margin: a small chip that reads as furniture rather
@@ -233,6 +279,80 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
   }
   #cat-score.announce .cat-caption {
     color: var(--color-accent);
+  }
+
+  /* ---- the arena toggle (§13.3) ----
+     Chrome, not the cat: it speaks in the site's voice, in sentence case, where
+     the cat's own ribbon is lower-case and never more than seven words. */
+  .cat-arena-btn {
+    pointer-events: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font: inherit;
+    font-size: 0.72rem;
+    line-height: 1.2;
+    letter-spacing: 0.01em;
+    color: var(--color-muted);
+    background: var(--color-ground);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-chip);
+    padding: 0.32rem 0.55rem;
+    cursor: pointer;
+  }
+  .cat-arena-btn:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+  }
+  /* Pressed reads as filled. The label stays put — see the markup. */
+  .cat-arena-btn[aria-pressed='true'] {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: var(--color-accent-ink);
+  }
+  .cat-arena-pip {
+    width: 8px;
+    height: 8px;
+    flex: none;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+  }
+  .cat-arena-btn[aria-pressed='true'] .cat-arena-pip {
+    background: currentColor;
+  }
+  /* `aria-disabled`, not `disabled`: a disabled button drops out of the tab
+     order, which would hide the reason it can't be used from the one visitor
+     most likely to want it. */
+  .cat-arena-btn[aria-disabled='true'] {
+    opacity: 0.6;
+    cursor: default;
+  }
+  .cat-arena-btn[aria-disabled='true']:hover {
+    border-color: var(--color-line);
+    color: var(--color-muted);
+  }
+  .cat-arena-note {
+    margin-top: 0.3rem;
+    max-width: 15rem;
+    color: var(--color-muted);
+    text-wrap: pretty;
+  }
+  /* Pressing a button that can't act should not be silence. The note is already
+     on screen, so answer by drawing the eye to it. Motion-gated, obviously: one
+     of the two reasons it is showing at all is that motion is unwelcome. */
+  @media (prefers-reduced-motion: no-preference) {
+    .cat-arena-note-nudge {
+      animation: cat-note-nudge 0.5s ease-out;
+    }
+    @keyframes cat-note-nudge {
+      0%,
+      100% {
+        color: var(--color-muted);
+      }
+      30% {
+        color: var(--color-accent);
+      }
+    }
   }
   .cat-hearts {
     position: absolute;
