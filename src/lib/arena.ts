@@ -39,7 +39,26 @@ export const CLAIMABLE =
  * exactly where it was.
  */
 export const PROTECTED =
-  'a, button, input, select, textarea, summary, [tabindex], [contenteditable]';
+  'a, button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"]), [contenteditable]';
+
+/**
+ * Never *intercepted*, which is a different question from never claimed.
+ *
+ * A click belongs to the page when it lands on something the page does something with. It
+ * belongs to the fight otherwise (§5.4).
+ *
+ * Conflating this with `PROTECTED` was a real bug, found in 0.7 and invisible until then:
+ * `Base.astro` renders `<main id="main" tabindex="-1">` as the skip-link target, `[tabindex]`
+ * matched it, and so **every click anywhere in the page content silently refused to throw** —
+ * while the crosshair cursor promised the opposite. The whole content area looked throwable
+ * and only the thin strips outside `main` were. Worse, the step-3 harness hid it: it scanned
+ * for a legal point, found one of those strips, and reported the mechanic working.
+ *
+ * `tabindex="-1"` is the difference. It means "focusable by script, not by tab", which is
+ * exactly what a skip target is and exactly what neither rule should care about.
+ */
+export const INTERACTIVE =
+  'a[href], button, input, select, textarea, summary, label, [contenteditable]';
 
 /**
  * Never claimable **anywhere inside**. Exclusion always wins here, and the
@@ -315,8 +334,8 @@ export function phaseDuration(phase: Phase): number {
  * §5.3's failure state unreachable: a leap cannot begin before the telegraph is
  * over no matter how badly the frame rate collapses.
  */
-export function nextPhase(phase: Phase, elapsed: number): Phase | null {
-  if (elapsed < phaseDuration(phase)) return null;
+export function nextPhase(phase: Phase, elapsed: number, scale = 1): Phase | null {
+  if (elapsed < phaseDuration(phase) * scale) return null;
   if (phase === 'telegraph') return 'leap';
   if (phase === 'leap') return 'recover';
   if (phase === 'recover') return 'stalk';
@@ -324,9 +343,14 @@ export function nextPhase(phase: Phase, elapsed: number): Phase | null {
   return null;
 }
 
-/** Will the cat commit? Close enough, and you are far enough into a scrub. */
-export function provoked(distance: number, progress: number): boolean {
-  return distance <= POUNCE_RANGE && progress >= POUNCE_THRESHOLD;
+/**
+ * Will the cat commit? Close enough, and you are far enough into a scrub.
+ *
+ * `patience` is a stance's addition to the threshold (§9.3) — Sleepy waits until you have
+ * nearly finished before it can be bothered.
+ */
+export function provoked(distance: number, progress: number, patience = 0): boolean {
+  return distance <= POUNCE_RANGE && progress >= POUNCE_THRESHOLD + patience;
 }
 
 /**
@@ -419,6 +443,131 @@ export function leapPos(
  */
 export function pounceHit(landX: number, landY: number, curX: number, curY: number): boolean {
   return Math.hypot(landX - curX, landY - curY) <= HIT_RADIUS;
+}
+
+/* ------------------------------------------------------------------ *
+ * Stances (§9.3) — same verbs, different counter-play
+ * ------------------------------------------------------------------ */
+
+export type Stance = 'ambush' | 'siege' | 'trickster' | 'sleepy';
+
+/**
+ * How a stance bends the fight. Multipliers on the numbers above, never new numbers:
+ * §9.3's promise is *same verbs, different counter-play*, and a stance that introduced a
+ * mechanic would be a different game rather than a different opponent.
+ *
+ * `pin` is the one exception, and it is what makes Siege a stance rather than a difficulty
+ * setting: the cat refuses to leave the floor, so it barely threatens you and the board
+ * fights back instead.
+ */
+export interface StanceSpec {
+  /** Multiplier on `TELEGRAPH_MS` — under 1 is harder to dodge. */
+  telegraph: number;
+  /** Multiplier on `RECOVER_MS` — over 1 makes a whiff a bigger gift. */
+  recover: number;
+  /** Multiplier on `STALK_SPEED`. */
+  stalk: number;
+  /** Added to `POUNCE_THRESHOLD`: how committed you must be before it bothers. */
+  patience: number;
+  /** Chance a telegraph is a feint (§9.3's Trickster). */
+  feint: number;
+  /** Stays on the floor, moving in x only. */
+  pin: boolean;
+  /** Claims regrow this often, ms. 0 = never. */
+  regrowMs: number;
+}
+
+export const STANCES: Record<Stance, StanceSpec> = {
+  /** Short wind-up, long regret. Counter: scrub beside it and punish the whiff. */
+  ambush: { telegraph: 0.78, recover: 1.45, stalk: 1, patience: 0, feint: 0, pin: false, regrowMs: 0 },
+  /**
+   * Never leaves the bottom edge, and the page grows back. Counter: clear top-down and
+   * accept the churn — the cat is barely a threat up there, which is the trade.
+   */
+  siege: { telegraph: 1, recover: 1, stalk: 1.15, patience: 0, feint: 0, pin: true, regrowMs: 9000 },
+  /**
+   * Fakes a third of its wind-ups. Counter: learn the tell (there is one — see §9.3).
+   *
+   * `recover` is 1.2 and not 1.0 because of an invariant, not a feel: a whiff has to cost
+   * the cat more than the attack gained it, and a slightly longer telegraph (1.1) plus the
+   * leap already came to 722ms against a 700ms recovery. A trickster whose failed pounces
+   * were *free* would have no reason ever to stop pouncing. Caught by the test, which is
+   * the only reason that inequality is stated as one.
+   */
+  trickster: { telegraph: 1.1, recover: 1.2, stalk: 1, patience: 0, feint: 0.3, pin: false, regrowMs: 0 },
+  /**
+   * Barely fights. A gift, and rare enough to be a story rather than a let-down.
+   *
+   * `recover` had to rise with the telegraph to keep the whiff invariant: a long wind-up is
+   * only generous if missing still costs the cat more than trying. Otherwise the sleepiest
+   * stance would be the one that pounces most often, which is nobody's idea of sleepy.
+   */
+  sleepy: { telegraph: 1.6, recover: 1.55, stalk: 0.55, patience: 0.35, feint: 0, pin: false, regrowMs: 0 },
+};
+
+/**
+ * How often Sleepy turns up. `[PH 0.08]`.
+ *
+ * Rare on purpose: a joke fight is a good memory and a bad expectation. Common enough to
+ * be told about, not common enough to be what the game *is*.
+ */
+export const SLEEPY_CHANCE = 0.08;
+
+/** This fight's stance, deterministic from its seed so a board can be replayed. */
+export function pickStance(seed: number): Stance {
+  const rand = mulberry32(seed >>> 0);
+  if (rand() < SLEEPY_CHANCE) return 'sleepy';
+  const rest: Stance[] = ['ambush', 'siege', 'trickster'];
+  return rest[Math.floor(rand() * rest.length)] ?? 'ambush';
+}
+
+/* ------------------------------------------------------------------ *
+ * Loadout (§9.5) — which pages you read decides your kit
+ * ------------------------------------------------------------------ */
+
+/**
+ * What a treat does, by type.
+ *
+ * `immuneMs` splits from `lureMs` for the biscuit, which §9.5 describes as "shortest
+ * interrupt immunity but cat stays put longest" — two different clocks, and reading them as
+ * one is why that line looks self-contradictory. So: **immune** is how long it cannot
+ * pounce, **lure** is how long it stays at the treat, and after immunity ends it is anchored
+ * where it sits. That anchor is one mechanism serving two treats, since it is also what
+ * the feather's "plays with it where it lands" means.
+ */
+export interface TreatSpec {
+  /** Total time the cat is occupied at the treat. */
+  lureMs: number;
+  /** Of which this much cannot be interrupted by a pounce. */
+  immuneMs: number;
+  /** After eating, it will not stray this far from the spot, for `anchorMs`. */
+  anchorPx: number;
+  anchorMs: number;
+  /** Multiplier on the next telegraph only (the bell startles it). */
+  telegraphMul: number;
+  /** Multiplier on stalk speed, and for how long (yarn tangles its feet). */
+  slowMul: number;
+  slowMs: number;
+}
+
+const PLAIN = { anchorPx: 0, anchorMs: 0, telegraphMul: 1, slowMul: 1, slowMs: 0 };
+
+export const TREAT_SPECS: Record<string, TreatSpec> = {
+  /** The baseline: nothing clever, the longest clean window. */
+  fish: { ...PLAIN, lureMs: 3000, immuneMs: 3000 },
+  /** Short, but the cat is rattled: its next wind-up is twice as easy to read. */
+  bell: { ...PLAIN, lureMs: 1800, immuneMs: 1800, telegraphMul: 2 },
+  /** Tangles its feet, so it comes back slowly — the window outlasts the lure. */
+  yarn: { ...PLAIN, lureMs: 2200, immuneMs: 2200, slowMul: 0.5, slowMs: 4000 },
+  /** It plays with this where it lands: a no-go zone you place. */
+  feather: { ...PLAIN, lureMs: 2600, immuneMs: 2600, anchorPx: 150, anchorMs: 5000 },
+  /** Slow to eat: it can pounce again sooner, but it is stuck there far longer. */
+  biscuit: { lureMs: 4000, immuneMs: 1600, anchorPx: 90, anchorMs: 2400, telegraphMul: 1, slowMul: 1, slowMs: 0 },
+};
+
+/** The spec for a treat, falling back to the plain one for anything unknown. */
+export function treatSpec(kind: string): TreatSpec {
+  return TREAT_SPECS[kind] ?? TREAT_SPECS.fish!;
 }
 
 /* ------------------------------------------------------------------ *

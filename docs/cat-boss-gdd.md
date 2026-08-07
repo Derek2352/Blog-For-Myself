@@ -1,6 +1,6 @@
 # GDD — "Whose Screen Is It" (cat boss fight)
 
-**Version** 0.6 · steps 0–4 built — the loop closes. Steps 5–6 design only
+**Version** 0.7 · steps 0–5 built. Only §14's ink curtain (step 6) is unbuilt
 **Status** hypothesis. Every number below is `[PH]` (placeholder) until playtested —
 including the ones now running in a browser. Built is not playtested.
 
@@ -14,6 +14,7 @@ including the ones now running in a browser. Built is not playtested.
 | 0.4 | **Built step 2** (§12) — the pounce. One design bug and one correction: **§5.3** never said *when* the aim locks, and locking it at the end of the telegraph deletes the telegraph, so it now locks at the start and the prediction leads the whole commitment; **§10's** rationale for `RECOVER_MS` was wrong on its own terms, and what a dodge actually buys is relocation, not banked progress. **§0** corrected: the fight reuses the cat *element*, not SiteCat's state machine. **§7.4's** opening grace drops from 6s to 2.5s for the board that exists. New §10 rows for the numbers the pounce introduced. |
 | 0.5 | **Built step 3** (§12) — treats, and with them the loop's missing half: an A/B on one claim shows a hold the cat would have taken completing once a treat is thrown, so **§12's "verify the safe window is a real decision" is answered**. One deviation: a throw during `recover` is *not* wasted (a treat is an object, not a spell), paired with one-treat-at-a-time so lures cannot be banked. One constraint found: most of a portfolio is a link and a link is not a throwing surface, so the arena now shows a crosshair and links keep their pointer (§6). One bug found by screenshot: SiteCat's `announce()` timer stomped the borrowed HUD line mid-fight. §7.4's "treats explained by the cat asking" is **unbuilt** and now flagged as the weakest seam. |
 | 0.6 | **Built step 4** (§12) — territory, endings, dialogue: the loop has two ends and both were played to completion in the harness. Three corrections. **§4 was right and the build was wrong**: the arena is "viewport bounds + queried list" and I had queried the whole document, which dealt 24 claims on `/timeline/` (past §10's own ceiling) and a fight that ran 124s without finishing — the board now prefers what is on screen, with a floor and a cap (`MIN_BOARD`/`MAX_BOARD`). **A loss was unreachable**: a landed pounce only took back already-freed elements, so territory could never pass the opening 55%; it now takes fresh ground, preferring what it landed on. **§8's priority order was wrong**: bluffing above supporting had the cat gloating at a player with nothing left to try, so being kind now outranks it. Added one line to §8.2 to close §7.4's teaching gap. Deferred, with reasons: §6's separate truce label, and §7.1's "both paths → sits on the cursor". |
+| 0.7 | **Built step 5** (§12) — stances and loadout. §9.5's biscuit line ("shortest interrupt immunity but cat stays put longest") turns out to be **two clocks, not a contradiction**, and the anchor that implements it serves the feather too. Two stance numbers were set by a test rather than by taste: a whiff must cost the cat more than the attack gained it, which forced trickster's recovery to 1.2× and sleepy's to 1.55×. One real bug, found by a harness that could not find anywhere to click: `PROTECTED` matched `<main tabindex="-1">` and the click handler used it, so **no click inside the page content ever threw a treat while the crosshair said it would** — a lying affordance, now split into `PROTECTED` (never claim) and `INTERACTIVE` (never intercept). One balance finding recorded below: **no stance's pounce can take the page from a stationary player.** §9.4's handicap ladder is still unbuilt. |
 
 ---
 
@@ -614,7 +615,37 @@ Same verbs, different counter-play. This is where the fight gets legs.
 | **Trickster** | Fakes telegraphs `[PH 30%]` of the time | Learn the tell; feather treats to force commitment |
 | **Sleepy** (rare) | Barely fights; a joke fight | Nothing. It's a gift. |
 
+> **Built, 0.7.** Rolled per fight from the board's own seed, so a fight is reproducible.
+> Every stance is multipliers on the numbers §5 already had, plus two switches (siege's floor
+> pin and its regrow clock) — a stance with its own mechanic would be a different game rather
+> than a different opponent, and the test asserts the shape of the table to keep it that way.
+>
+> **Two numbers were set by an invariant, not by taste.** A whiff has to cost the cat more
+> than the attack gained it (`RECOVER × recover > TELEGRAPH × telegraph + LEAP`), or a stance
+> has no reason ever to stop pouncing. Trickster's longer wind-up broke it at recover 1.0, and
+> sleepy's broke it badly — so 1.2× and 1.55×. The sleepiest cat would otherwise have been the
+> one that pounced most often.
+>
+> **The finding worth keeping: no stance's pounce can take the page from a stationary player.**
+> A landed pounce resets your hold, but the cat must then recover before it can commit again —
+> 700ms baseline, longer for every stance because of the invariant above. By the time it is
+> ready your hold has already completed, so after the first hit the player wins every
+> subsequent exchange. Ambush is the *worst* at this, since its 1.45× recovery is precisely the
+> "punish the whiff" counter this section promises. What can take a page is **siege's
+> regrowing board**, which does not care what you are doing.
+>
+> That is not obviously wrong — a player who holds still is playing the counter correctly — but
+> it means the pounce is pressure, not a win condition, and §7.3's unbuilt rubber band is where
+> a losing player would otherwise be squeezed. Worth a playtest before deciding it is a feature.
+>
+> Trickster has a second-order cost nobody designed: a bluff spends the cat's time and takes
+> nothing, so against a still player it *loses* ground faster than it gains. Stances differ in
+> how much of their aggression converts, not only in how they feel.
+
 ### 9.4 Handicap ladder
+**Unbuilt as of 0.7**, and the only piece of §9 that is. It needs an ending that asks a
+question, and every ending currently restores the page and gets out of the way.
+
 On a win the cat offers a rematch at `treats - 1`. Self-selected difficulty
 ratchet, no menus, and it converts the win into a decision rather than an
 endpoint. Bottoms out at zero treats — a pure-skill fight for whoever wants it.
@@ -631,6 +662,17 @@ no authoring cost:
 | yarn | Tangles: cat's next return walk is slowed | `[PH 2.2s]` |
 | feather | Cat plays with it *where it lands* — a movable no-go zone | `[PH 2.6s]` |
 | biscuit | Slow to eat: shortest interrupt immunity but cat stays put longest | `[PH 4.0s]` |
+
+> **Built, 0.7 — and the biscuit's line resolved into two clocks.** "Shortest interrupt
+> immunity but cat stays put longest" reads as a contradiction only while `lureDuration` is one
+> number. It is two: **immunity** (how long it cannot pounce) and **occupancy** (how long it
+> stays at the treat). The biscuit's immunity ends first and an **anchor** holds it in place for
+> the rest — and that anchor is the same mechanism as the feather's "plays with it where it
+> lands", so two treats share one piece of machinery rather than each getting a special case.
+>
+> Built with the shapes already differing (that shipped in 0.5) and now the behaviour too. The
+> balance risk this section names is a test: for every treat there must be another that beats
+> it on some axis, so none is strictly best and nobody has a reason to tab-hunt.
 
 Two players who explored different halves of the site bring different tools to
 the same board. **Design risk:** if one treat is strictly best, players will
@@ -677,6 +719,18 @@ Added in 0.4, from building the pounce:
 | `HIT_RADIUS` | 46px | Dodging it means covering 46px inside 680ms — ~68px/s, far under a flick and far over the 6px a hold allows | Too large: dodging needs a sprint. Too small: the cat can never catch anyone |
 | `OPENING_GRACE_MS` | 2500 | Covers the first scrub, per §7.4's "guaranteed first success", on the board that actually exists | 6000 (0.1's number): four free scrubs, half the fight |
 | Landing point | ~84% of the hold | Where a pounce provoked at 0.35 touches down. Late enough to read as deliberate, and short of the 0.9 that would feel like robbery | ≥1.0: the cat can never interrupt anything, so the threat is theatre |
+
+Added in 0.7, from building stances and the loadout:
+
+| Var | `[PH]` | Rationale | "Broken" looks like |
+|---|---|---|---|
+| `SLEEPY_CHANCE` | 0.08 | A joke fight is a good memory and a bad expectation: common enough to be told about, not common enough to be what the game is | >0.2: the game's mode is "nothing happens" |
+| Stance `telegraph` | 0.78–1.6 | Ambush is hard to read, sleepy is a stroll. Floored so no stance drops the wind-up under human reaction time | <300ms absolute: unreactable, so the stance turns the game off rather than changing it |
+| Stance `recover` | 1.0–1.55 | Set by the whiff invariant, not by feel — see §9.3 | Below the invariant: pouncing is free and the cat should never stop |
+| `feint` (trickster) | 0.3 | A tell you can learn needs to be the exception | ≥0.5: a coin toss, and there is nothing to learn |
+| `regrowMs` (siege) | 9000 | The only pressure that does not care what the player is doing, and the only reliable way to lose | <5000: unwinnable churn. >15000: the stance has no teeth at all |
+| Treat `immuneMs` | 1600–3000 | Every treat must cover one full scrub or it is not a resource | <`SCRUB_MS`: the treat buys nothing |
+| Treat `lureMs` | 1800–4000 | Occupancy, which is a different clock from immunity — see §9.5 | All equal: the loadout is five skins on one treat |
 
 Added in 0.5, from building the treat:
 
@@ -773,8 +827,10 @@ them independently is how this gets unbalanced.
    read on), and a ribbon that speaks §8's script. **Both endings were played to completion
    in a browser**, which is the only way to know a loop is closed: a loss in ~10s of
    standing still, a win in ~17s of scripted play.
-5. Add **stances**, then **loadout**. Replayability last — it is worthless before
-   the loop is fun.
+5. ✅ **Stances, then loadout** — *built in 0.7.* The cat rolls one of four opponents per
+   fight from the board's own seed, and the five treat shapes stop being interchangeable.
+   Replayability last, as planned: it is worthless before the loop is fun, and it is the first
+   step whose value a harness genuinely cannot judge.
 6. **The ink transition** (§14), replacing step 0's instant swap.
 
 **On that ordering.** The request named the toggle and the transition together,
@@ -788,6 +844,29 @@ ever exercises.
 Ship gate for each step: the existing 20-check ink harness, `npm test`, and the
 contrast gate above must all stay green. The fight lives on the same page as the
 ink wash and the glass pane; it does not get to break them.
+
+**Step 5 ship gate, actual:** 343 unit tests and a 21-check harness
+(`scratchpad/arena5.mjs`), plus every earlier harness — but the interesting number is that
+**four of the five browser harnesses had to change**, and not because anything regressed.
+Stances made "the cat will pounce" conditional: a siege cat cannot leave the floor, a sleepy
+one will not commit until a hold has already finished, and a trickster bluffs a third of its
+wind-ups. Checks written against the baseline opponent waited forever for a landing that was
+never coming. Each of them now pins the stance it needs and says why — which is the honest
+shape of testing a game with variance in it, and a decent argument that the variance is real.
+
+Three of those changes were harnesses that had been passing for the wrong reason: one waited
+on `phases.some(recover)` and so matched a pounce from *earlier* in the recording, one snapshot
+was taken 200ms after a toggle that step 4 gave a 2.2-second ending beat, and one re-rolled the
+fight — and therefore the stance — in the middle of measuring a stance.
+
+**The lying affordance.** `Base.astro` renders `<main id="main" tabindex="-1">` as its
+skip-link target. `PROTECTED` contained `[tabindex]`, the click handler used `PROTECTED`, and
+so every click inside the page content silently refused to throw a treat — while the crosshair
+cursor promised it would. Only the thin strips outside `main` worked. Three harnesses agreed
+throwing was fine, because each scanned for a legal point first and quietly found one of those
+strips. The fix is two selectors for two questions (`PROTECTED` for what may never be claimed,
+`INTERACTIVE` for what a click belongs to) and one new check that does not scan at all: click
+the middle of the content, insist a treat appears.
 
 **Step 4 ship gate, actual:** 324 unit tests, and a 36-check harness
 (`scratchpad/arena4.mjs`) that **plays both endings to completion** — a loss in ~10s of

@@ -3,6 +3,7 @@ import {
   CLAIMABLE,
   PROTECTED,
   PROTECTED_TREE,
+  INTERACTIVE,
   MIN_CLAIM_AREA,
   MIN_BOARD,
   MAX_BOARD,
@@ -29,6 +30,10 @@ import {
   canPounce,
   isWon,
   isLost,
+  STANCES,
+  pickStance,
+  TREAT_SPECS,
+  treatSpec,
   LINES,
   LINE_MS,
   LINE_GAP_MS,
@@ -51,6 +56,7 @@ import {
   isCleared,
   arenaCaption,
 } from '@/lib/arena';
+import { TREATS } from '@/lib/cat-game';
 
 /**
  * The board is queried from page furniture, so these tests stand in for the
@@ -70,9 +76,11 @@ describe('the board — queried, never authored', () => {
   });
 
   it('never claims anything focusable — the fight must not eat the tab order', () => {
-    for (const sel of ['a', 'button', 'input', 'select', 'textarea', '[tabindex]']) {
+    for (const sel of ['a', 'button', 'input', 'select', 'textarea']) {
       expect(PROTECTED.split(/,\s*/)).toContain(sel);
     }
+    // ...but "in the tab order" is the actual test, which is why this one is qualified.
+    expect(PROTECTED.split(/,\s*/)).toContain('[tabindex]:not([tabindex="-1"])');
   });
 
   it('protects the hero pane, and everything inside it', () => {
@@ -90,6 +98,26 @@ describe('the board — queried, never authored', () => {
     expect(CLAIMABLE).toContain('.rail');
     expect(PROTECTED_TREE).toContain('#cat-hud');
     expect(PROTECTED_TREE).toContain('#site-cat');
+  });
+
+  it('does not treat a skip-link target as focusable furniture', () => {
+    // `Base.astro` renders `<main id="main" tabindex="-1">`. A bare `[tabindex]` matches it,
+    // and `tabindex="-1"` means "focusable by script, not by tab" — so it is neither in the
+    // tab order this rule protects nor something a click belongs to.
+    expect(PROTECTED).toContain('[tabindex]:not([tabindex="-1"])');
+    expect(PROTECTED.split(/,\s*/)).not.toContain('[tabindex]');
+  });
+
+  it('separates "never claim this" from "never intercept this click"', () => {
+    /*
+     * The bug this pins down: the click handler used PROTECTED, PROTECTED matched
+     * `<main tabindex="-1">`, and so no click anywhere in the page content ever threw a
+     * treat — while the crosshair cursor said it would. Two questions, two lists.
+     */
+    expect(INTERACTIVE).toContain('a[href]');
+    expect(INTERACTIVE).not.toContain('tabindex');
+    expect(INTERACTIVE).toContain('label'); // clicking a label focuses its control
+    expect(INTERACTIVE).not.toBe(PROTECTED);
   });
 
   it('keeps the two lists apart — self-only for focusables, subtree for furniture', () => {
@@ -151,19 +179,27 @@ describe('dropNested — transforms compound, so only the outermost claims', () 
 describe('boardSlice — the fight is over the screen (§4)', () => {
   const v = (n: number, m: number) => [...Array(n).fill(true), ...Array(m).fill(false)];
 
+  // Explicit bounds, so these say what the function does rather than drifting every time
+  // the tuning moves. The constants get their own check below.
   it('takes what is on screen when that is enough', () => {
-    expect(boardSlice(v(10, 30))).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(boardSlice(v(10, 30), 4, 20)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
   });
 
   it('borrows from below the fold only when the screen is too thin for a game', () => {
-    // §10: under four claims and the fight is over before it starts.
-    expect(boardSlice(v(3, 20))).toHaveLength(MIN_BOARD);
-    expect(boardSlice(v(3, 20)).slice(0, 3)).toEqual([0, 1, 2]);
+    expect(boardSlice(v(3, 20), 8, 20)).toHaveLength(8);
+    expect(boardSlice(v(3, 20), 8, 20).slice(0, 3)).toEqual([0, 1, 2]);
   });
 
   it('caps the board, because past twenty the page is unreadable', () => {
-    expect(boardSlice(v(40, 0))).toHaveLength(MAX_BOARD);
+    expect(boardSlice(v(40, 0), 8, 12)).toHaveLength(12);
+  });
+
+  it('is tuned inside the design’s own bounds', () => {
+    // §10: under four claims the fight is over before it starts; over twenty the page is
+    // unreadable. The board is 55% claimed, so the floor has to leave 4+ claims.
+    expect(MIN_BOARD * INITIAL_CLAIM_FRACTION).toBeGreaterThanOrEqual(4);
     expect(MAX_BOARD).toBeLessThanOrEqual(20);
+    expect(MIN_BOARD).toBeLessThanOrEqual(MAX_BOARD);
   });
 
   it('keeps document order, so a claim’s tilt belongs to its place on the page', () => {
@@ -563,6 +599,126 @@ describe('the opening grace', () => {
     // about four free scrubs — half the fight.
     expect(OPENING_GRACE_MS).toBeGreaterThan(SCRUB_MS);
     expect(OPENING_GRACE_MS).toBeLessThan(SCRUB_MS * 3);
+  });
+});
+
+describe('stances (§9.3)', () => {
+  const all = Object.keys(STANCES) as (keyof typeof STANCES)[];
+
+  it('is deterministic per fight, so a board can be replayed', () => {
+    expect(pickStance(9182)).toBe(pickStance(9182));
+  });
+
+  it('deals every stance across enough fights', () => {
+    const seen = new Set(Array.from({ length: 400 }, (_, i) => pickStance(i * 7919 + 3)));
+    expect(seen.size).toBe(all.length);
+  });
+
+  it('keeps the joke fight rare — a gift, not an expectation', () => {
+    const n = 3000;
+    const sleepy = Array.from({ length: n }, (_, i) => pickStance(i * 2654435761)).filter(
+      (s) => s === 'sleepy',
+    ).length;
+    expect(sleepy / n).toBeLessThan(0.2);
+  });
+
+  it('never makes a telegraph unreactable, whatever the stance', () => {
+    // The one hard floor: §5.3's telegraph must stay long enough to dodge, or a stance
+    // turns the game off rather than changing it.
+    for (const s of all) {
+      expect(TELEGRAPH_MS * STANCES[s].telegraph, s).toBeGreaterThan(300);
+    }
+  });
+
+  it('never makes a whiff free for the cat', () => {
+    for (const s of all) {
+      const spec = STANCES[s];
+      expect(RECOVER_MS * spec.recover, s).toBeGreaterThan(TELEGRAPH_MS * spec.telegraph + LEAP_MS);
+    }
+  });
+
+  it('changes the numbers, never the verbs', () => {
+    // Every stance is expressible as multipliers plus two behavioural switches. A stance
+    // with its own mechanic would be a different game, not a different opponent.
+    for (const s of all) {
+      expect(Object.keys(STANCES[s]).sort()).toEqual(
+        ['feint', 'patience', 'pin', 'recover', 'regrowMs', 'stalk', 'telegraph'].sort(),
+      );
+    }
+  });
+
+  it('gives exactly one stance a regrowing board and one a floor it will not leave', () => {
+    expect(all.filter((s) => STANCES[s].regrowMs > 0)).toEqual(['siege']);
+    expect(all.filter((s) => STANCES[s].pin)).toEqual(['siege']);
+  });
+
+  it('only the trickster feints, and not most of the time', () => {
+    expect(all.filter((s) => STANCES[s].feint > 0)).toEqual(['trickster']);
+    expect(STANCES.trickster.feint).toBeLessThan(0.5);
+  });
+
+  it('scales phase durations rather than replacing them', () => {
+    expect(nextPhase('telegraph', TELEGRAPH_MS, 1.6)).toBe(null);
+    expect(nextPhase('telegraph', TELEGRAPH_MS * 1.6, 1.6)).toBe('leap');
+  });
+
+  it('lets a patient stance ignore a scrub it would otherwise interrupt', () => {
+    expect(provoked(20, POUNCE_THRESHOLD)).toBe(true);
+    expect(provoked(20, POUNCE_THRESHOLD, STANCES.sleepy.patience)).toBe(false);
+    expect(provoked(20, 0.95, STANCES.sleepy.patience)).toBe(true);
+  });
+});
+
+describe('loadout (§9.5)', () => {
+  const kinds = Object.keys(TREAT_SPECS);
+
+  it('covers every treat the site can hide', () => {
+    for (const t of TREATS) expect(kinds).toContain(t);
+  });
+
+  it('every treat buys at least one full scrub of immunity', () => {
+    // §5.4's floor. A treat that cannot cover one hold is not a resource.
+    for (const t of kinds) expect(treatSpec(t).immuneMs, t).toBeGreaterThanOrEqual(SCRUB_MS);
+  });
+
+  it('no treat is strictly best — the stated balance risk, as a test', () => {
+    // §9.5: "if one treat is strictly best, players will tab-hunt for it and the site's
+    // exploration incentive inverts". So for each treat there must be another that beats
+    // it on some axis.
+    const axes = (s: ReturnType<typeof treatSpec>) => [
+      s.lureMs,
+      s.immuneMs,
+      s.anchorPx * s.anchorMs,
+      s.telegraphMul,
+      1 / s.slowMul,
+      s.slowMs,
+    ];
+    for (const a of kinds) {
+      const beaten = kinds.some((b) => {
+        if (b === a) return false;
+        const A = axes(treatSpec(a));
+        const B = axes(treatSpec(b));
+        return B.some((v, i) => v > A[i]!);
+      });
+      expect(beaten, `${a} is dominated by nothing`).toBe(true);
+    }
+  });
+
+  it('the biscuit’s two clocks are what §9.5 actually describes', () => {
+    // "shortest interrupt immunity but cat stays put longest" only makes sense as two
+    // numbers: it can pounce again sooner, and it is stuck there far longer.
+    const b = treatSpec('biscuit');
+    expect(b.immuneMs).toBeLessThan(b.lureMs);
+    expect(b.lureMs).toBe(Math.max(...kinds.map((k) => treatSpec(k).lureMs)));
+    expect(b.immuneMs).toBe(Math.min(...kinds.map((k) => treatSpec(k).immuneMs)));
+  });
+
+  it('only the feather and the biscuit anchor it in place', () => {
+    expect(kinds.filter((k) => treatSpec(k).anchorMs > 0).sort()).toEqual(['biscuit', 'feather']);
+  });
+
+  it('falls back to the plain treat for anything unknown', () => {
+    expect(treatSpec('sardine')).toEqual(treatSpec('fish'));
   });
 });
 

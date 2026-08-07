@@ -1,6 +1,6 @@
 ---
 /**
- * The arena — build steps 0 to 4 of `docs/cat-boss-gdd.md` §12.
+ * The arena — build steps 0 to 5 of `docs/cat-boss-gdd.md` §12.
  *
  * **Step 0**: wire the toggle in the cat's HUD (rendered by SiteCat.astro) to an
  * instant swap. No transition, no fade — the §14 ink curtain is deliberately the
@@ -17,7 +17,10 @@
  *
  * **Step 4**: The loop closes — a 3px territory bar on the top edge, two endings that
  * mean different things, and a cat that talks. Winning marks its ear for the session.
- * Still no stances and no loadout: every treat behaves the same whatever its shape.
+ *
+ * **Step 5**: Replayability. The cat picks a **stance** per fight (§9.3) — same verbs,
+ * different opponent — and treats stop being interchangeable: which pages you read decides
+ * what your five shapes actually *do* (§9.5).
  *
  * What all of it does to the page, and nothing more: adds a class and one custom
  * property to some existing elements. Claims never affect layout and never hide
@@ -171,6 +174,19 @@
   :global(#site-cat.boss-telegraph .cat-tail) {
     transform: rotate(-18deg);
   }
+  /* The tell (§9.3). A real wind-up drops low and flattens its ears; a bluff gathers
+     upright and keeps them half up. It is a small difference on purpose — §9.3 says the
+     tell can be *learned*, which means it has to be missable the first few times. */
+  :global(#site-cat.boss-feint .cat-svg) {
+    transform: scale(1.02, 0.94);
+  }
+  :global(#site-cat.boss-feint .cat-ear) {
+    transform: rotate(-9deg);
+  }
+  :global(#site-cat.boss-feint .cat-tail) {
+    transform: rotate(-4deg);
+  }
+
   /* in the air: stretched along the direction of travel */
   :global(#site-cat.boss-leap .cat-svg) {
     transform: scale(1.14, 1.06);
@@ -317,6 +333,7 @@
     CLAIMABLE,
     PROTECTED,
     PROTECTED_TREE,
+    INTERACTIVE,
     INITIAL_CLAIM_FRACTION,
     HIDDEN_TRUCE_MS,
     IDLE_TRUCE_MS,
@@ -326,12 +343,17 @@
     RECLAIM_ON_HIT,
     STALK_SPEED,
     THROW_ARC_MS,
+    LURE_MS,
     FETCH_SPEED,
     FETCH_REACH,
     bigEnough,
     dropNested,
     boardSlice,
     pickClaims,
+    STANCES,
+    pickStance,
+    treatSpec,
+    type Stance,
     claimTilt,
     scrubProgress,
     stillEnough,
@@ -383,7 +405,16 @@
      * One at a time is what keeps lures from being banked, now that a badly timed
      * throw waits to be useful instead of evaporating.
      */
-    treat: null as null | { x: number; y: number; fx: number; fy: number; at: number; landed: boolean },
+    treat: null as null | {
+      x: number;
+      y: number;
+      fx: number;
+      fy: number;
+      at: number;
+      landed: boolean;
+      /** Which shape, and so which effects — §9.5's loadout. */
+      kind: string;
+    },
     /** Which paws were filled when the fight opened, so spending is fight-local. */
     ammoWas: [] as boolean[],
     /** What the borrowed HUD line should say — see `holdCaption`. */
@@ -658,6 +689,25 @@
     by: 0,
     facing: 1 as 1 | -1,
     last: 0,
+    /** This fight's stance (§9.3) — same verbs, different opponent. */
+    stance: 'ambush' as Stance,
+    /** True when the current wind-up is a bluff (trickster). */
+    feint: false,
+    /** A bell makes the *next* telegraph readable; consumed when it fires. */
+    telegraphMul: 1,
+    /** Yarn tangles its feet: slowed until this timestamp. */
+    slowUntil: 0,
+    slowMul: 1,
+    /** Feather and biscuit pin it near a spot: it will not stray past this. */
+    anchorX: 0,
+    anchorY: 0,
+    anchorPx: 0,
+    anchorUntil: 0,
+    /** Siege regrows the board on this clock. */
+    regrowAt: 0,
+    /** How long the cat cannot pounce while at a treat, from the treat's spec. */
+    immuneMs: 0,
+    lureMs: 0,
   };
 
   const catEl = () => el('site-cat');
@@ -693,6 +743,9 @@
     root.classList.toggle('boss-recover', phase === 'recover');
     root.classList.toggle('boss-eat', phase === 'eat');
     root.classList.toggle('boss-fetch', phase === 'fetch');
+    // §9.3 says the trickster's feint can be learned, which means there has to be a tell.
+    // This is it: a bluff gathers without dropping its shoulders.
+    root.classList.toggle('boss-feint', phase === 'telegraph' && boss.feint);
     /*
      * `walking` is SiteCat's own class, and its leg and bob keyframes are already
      * written. The boss was moving with its legs still: the arena parks SiteCat's
@@ -758,7 +811,8 @@
     // The shape is the shape of the treat being spent — the behaviour is one type for
     // every throw (step 3 is "a single type"), but the row shows what you used, which
     // is what §9.5's loadout will eventually make matter.
-    node.querySelector('use')?.setAttribute('href', `#treat-${resolveTreat(paw.dataset.slug ?? '')}`);
+    const kind = resolveTreat(paw.dataset.slug ?? '');
+    node.querySelector('use')?.setAttribute('href', `#treat-${kind}`);
     paw.classList.remove('got');
 
     // thrown from the stash, which is the widget the paws live in
@@ -766,7 +820,7 @@
     const from = hud
       ? { x: hud.left + hud.width / 2, y: hud.top + hud.height / 2 }
       : { x: 20, y: document.documentElement.clientHeight - 20 };
-    arena.treat = { x, y, fx: from.x, fy: from.y, at: performance.now(), landed: false };
+    arena.treat = { x, y, fx: from.x, fy: from.y, at: performance.now(), landed: false, kind };
     arena.spent++;
     node.classList.remove('eaten');
     node.removeAttribute('hidden');
@@ -895,11 +949,31 @@
     const root = catEl();
     if (!root) return;
 
-    const advance = nextPhase(boss.phase, now - boss.since);
+    // Stances bend durations, they do not replace them (§9.3). A bell's doubled telegraph
+    // rides on top of the stance's own multiplier and is spent when the wind-up ends.
+    const spec = STANCES[boss.stance];
+    const scale =
+      boss.phase === 'telegraph'
+        ? spec.telegraph * boss.telegraphMul
+        : boss.phase === 'recover'
+          ? spec.recover
+          : boss.phase === 'eat'
+            ? boss.lureMs / LURE_MS
+            : 1;
+    const advance = nextPhase(boss.phase, now - boss.since, scale);
     if (advance === 'leap') {
       // The target was locked when the telegraph began (see `aim` below) — nothing
       // is decided here. That is the whole point: the wind-up is a commitment, so
       // the 420ms of it is a window you can actually dodge in.
+      boss.telegraphMul = 1; // the bell's gift is spent on the wind-up it read
+      if (boss.feint) {
+        // A trickster's bluff: it gathers, thinks better of it, and goes back to stalking.
+        // No leap, no recovery — the cost of a feint is the time, which is what makes
+        // spending a treat on one feel like being had.
+        boss.feint = false;
+        bossPhase(root, 'stalk', now);
+        return;
+      }
       bossPhase(root, 'leap', now);
     } else if (advance === 'recover') {
       bossPhase(root, 'recover', now);
@@ -929,6 +1003,22 @@
       const ty = t.y - boss.y;
       const away = Math.hypot(tx, ty);
       if (away <= FETCH_REACH) {
+        /*
+         * §9.5, applied at the moment it starts eating. Every effect is a number on the
+         * boss, never a new mechanic: how long it is occupied, how long of that it cannot
+         * pounce, whether it is pinned near the spot afterwards, and two modifiers it
+         * carries away with it.
+         */
+        const spec = treatSpec(t.kind);
+        boss.lureMs = spec.lureMs;
+        boss.immuneMs = spec.immuneMs;
+        boss.anchorX = t.x;
+        boss.anchorY = t.y;
+        boss.anchorPx = spec.anchorPx;
+        boss.anchorUntil = spec.anchorMs ? now + spec.lureMs + spec.anchorMs : 0;
+        boss.telegraphMul = spec.telegraphMul;
+        boss.slowMul = spec.slowMul;
+        boss.slowUntil = spec.slowMs ? now + spec.lureMs + spec.slowMs : 0;
         throwEl()?.classList.add('eaten');
         bossPhase(root, 'eat', now);
         return;
@@ -937,6 +1027,16 @@
       placeCat(root, boss.x + (tx / away) * step, boss.y + (ty / away) * step);
       faceToward(root, tx);
       return;
+    }
+
+    /*
+     * Eating with the immunity already spent (§9.5's biscuit): it is still at the treat, but
+     * it can pounce again. Handled by leaving the `eat` phase early while the anchor keeps
+     * it in place — one mechanism, two treats, and the reason "shortest immunity but stays
+     * put longest" is not the contradiction it reads as.
+     */
+    if (boss.phase === 'eat' && boss.immuneMs < boss.lureMs && now - boss.since >= boss.immuneMs) {
+      finishEating(root, now);
     }
 
     // telegraph, recover and eat all hold still — a crouch, a faceplant, and a cat
@@ -958,7 +1058,7 @@
     if (
       canPounce(boss.phase) &&
       now - arena.openedAt > OPENING_GRACE_MS &&
-      provoked(dist, progress) &&
+      provoked(dist, progress, spec.patience) &&
       arena.claimed.length > 0
     ) {
       /*
@@ -981,14 +1081,47 @@
       boss.ay = boss.y;
       boss.bx = aim.x;
       boss.by = aim.y;
+      boss.feint = Math.random() < spec.feint;
       bossPhase(root, 'telegraph', now);
       return;
     }
 
     if (dist > 1) {
-      const step = Math.min(dist, STALK_SPEED * dt);
-      placeCat(root, boss.x + (dx / dist) * step, boss.y + (dy / dist) * step);
+      const slowed = now < boss.slowUntil ? boss.slowMul : 1;
+      const step = Math.min(dist, STALK_SPEED * spec.stalk * slowed * dt);
+      let nx = boss.x + (dx / dist) * step;
+      let ny = boss.y + (dy / dist) * step;
+      // Anchored by a feather (or the tail of a biscuit): it will come this far and no
+      // further, which is what makes a thrown treat a *place* rather than a delay.
+      if (now < boss.anchorUntil && boss.anchorPx > 0) {
+        const ax = nx - boss.anchorX;
+        const ay = ny - boss.anchorY;
+        const away = Math.hypot(ax, ay);
+        if (away > boss.anchorPx) {
+          nx = boss.anchorX + (ax / away) * boss.anchorPx;
+          ny = boss.anchorY + (ay / away) * boss.anchorPx;
+        }
+      }
+      // Siege never leaves the floor: it moves in x only, so it is barely a threat and the
+      // board has to do its fighting for it.
+      if (spec.pin) ny = boss.y;
+      placeCat(root, nx, ny);
       faceToward(root, dx);
+    }
+
+    // Siege's other half: the page grows back.
+    if (spec.regrowMs > 0 && now > boss.regrowAt && arena.claimed.length < arena.order.length) {
+      boss.regrowAt = now + spec.regrowMs;
+      const back = takeGround();
+      if (back) {
+        claim(back, arena.order.indexOf(back), arena.seed);
+        arena.claimed.push(back);
+        arena.total = Math.max(arena.total, arena.claimed.length);
+        arena.movedAt = now;
+        caption(arenaCaption(arena.claimed.length, arena.total));
+        paintTerritory();
+        if (isLost(arena.claimed.length, arena.order.length, ammo().length)) finish('lose', now);
+      }
     }
   }
 
@@ -1198,6 +1331,17 @@
     const r = root.getBoundingClientRect();
     boss.last = now;
     boss.facing = 1;
+    boss.stance = pickStance(arena.seed);
+    boss.feint = false;
+    boss.telegraphMul = 1;
+    boss.slowUntil = 0;
+    boss.slowMul = 1;
+    boss.anchorUntil = 0;
+    boss.anchorPx = 0;
+    boss.lureMs = LURE_MS;
+    boss.immuneMs = LURE_MS;
+    boss.regrowAt = now + STANCES[pickStance(arena.seed)].regrowMs;
+    root.dataset.stance = boss.stance;
     bossPhase(root, 'stalk', now);
     placeCat(root, r.left + r.width / 2, r.top + r.height / 2);
   }
@@ -1213,7 +1357,9 @@
         'boss-recover',
         'boss-eat',
         'boss-fetch',
+        'boss-feint',
       );
+      delete root.dataset.stance;
       document.dispatchEvent(
         new CustomEvent('cat:resume', { detail: { x: boss.x - root.offsetWidth / 2 } }),
       );
@@ -1363,10 +1509,14 @@
     /*
      * Click to throw (§3, §5.4).
      *
-     * Anything the page uses is left alone: a click inside `PROTECTED` — a link, a
+     * Anything the page uses is left alone: a click on something `INTERACTIVE` — a link, a
      * button, a field — does what it always did, because §11 promises the page stays
      * usable and pillar 2 promises a recruiter can keep reading. So does a click in
      * the cat's own HUD, which is where the toggle lives. Everything else is a throw.
+     *
+     * `INTERACTIVE` and not `PROTECTED`: the latter includes `[tabindex]`, which matches
+     * `<main tabindex="-1">` — so using it here meant no click inside the page content ever
+     * threw anything, while the crosshair said it would. See the note in `arena.ts`.
      *
      * Not `preventDefault`ed anywhere: there is nothing to prevent on a paragraph,
      * and swallowing the event would take text selection with it.
@@ -1374,7 +1524,7 @@
     window.addEventListener('click', (e) => {
       if (!arena.on) return;
       const t = e.target;
-      if (t instanceof Element && (t.closest(PROTECTED) || t.closest('#cat-hud'))) return;
+      if (t instanceof Element && (t.closest(INTERACTIVE) || t.closest('#cat-hud'))) return;
       throwTreat(e.clientX, e.clientY);
     });
 
