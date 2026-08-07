@@ -1,8 +1,8 @@
 # GDD — "Whose Screen Is It" (cat boss fight)
 
-**Version** 0.8 · §12's build order is complete, steps 0–6. What remains is not a
-step but the things each step deferred: §9.4's handicap ladder, §7.3's rubber band,
-§7.1's "both paths → the cat sits on the cursor" — and a playtest
+**Version** 0.9 · steps 0–7 built. §7.3's rubber band closed the loop's last slack
+seam; what remains is §9.4's handicap ladder, §7.1's "both paths → the cat sits on
+the cursor" — and, still, a playtest
 **Status** hypothesis. Every number below is `[PH]` (placeholder) until playtested —
 including the ones now running in a browser. Built is not playtested.
 
@@ -16,6 +16,7 @@ including the ones now running in a browser. Built is not playtested.
 | 0.4 | **Built step 2** (§12) — the pounce. One design bug and one correction: **§5.3** never said *when* the aim locks, and locking it at the end of the telegraph deletes the telegraph, so it now locks at the start and the prediction leads the whole commitment; **§10's** rationale for `RECOVER_MS` was wrong on its own terms, and what a dodge actually buys is relocation, not banked progress. **§0** corrected: the fight reuses the cat *element*, not SiteCat's state machine. **§7.4's** opening grace drops from 6s to 2.5s for the board that exists. New §10 rows for the numbers the pounce introduced. |
 | 0.5 | **Built step 3** (§12) — treats, and with them the loop's missing half: an A/B on one claim shows a hold the cat would have taken completing once a treat is thrown, so **§12's "verify the safe window is a real decision" is answered**. One deviation: a throw during `recover` is *not* wasted (a treat is an object, not a spell), paired with one-treat-at-a-time so lures cannot be banked. One constraint found: most of a portfolio is a link and a link is not a throwing surface, so the arena now shows a crosshair and links keep their pointer (§6). One bug found by screenshot: SiteCat's `announce()` timer stomped the borrowed HUD line mid-fight. §7.4's "treats explained by the cat asking" is **unbuilt** and now flagged as the weakest seam. |
 | 0.6 | **Built step 4** (§12) — territory, endings, dialogue: the loop has two ends and both were played to completion in the harness. Three corrections. **§4 was right and the build was wrong**: the arena is "viewport bounds + queried list" and I had queried the whole document, which dealt 24 claims on `/timeline/` (past §10's own ceiling) and a fight that ran 124s without finishing — the board now prefers what is on screen, with a floor and a cap (`MIN_BOARD`/`MAX_BOARD`). **A loss was unreachable**: a landed pounce only took back already-freed elements, so territory could never pass the opening 55%; it now takes fresh ground, preferring what it landed on. **§8's priority order was wrong**: bluffing above supporting had the cat gloating at a player with nothing left to try, so being kind now outranks it. Added one line to §8.2 to close §7.4's teaching gap. Deferred, with reasons: §6's separate truce label, and §7.1's "both paths → sits on the cursor". |
+| 0.9 | **Built step 7** — §7.3's rubber band, the first of the things earlier steps deferred, and chosen because 0.7's balance finding names it: the cat has no answer to a stationary player once it is behind, so the endgame was free. Three tiers rather than a curve, because a drift cannot be read and an unreadable scaling is the invisible fudge §7.3 exists to replace. **The load-bearing decision is what aggression does *not* touch:** scaling recovery alongside the telegraph is the symmetric-looking choice and it breaks §10's whiff invariant — at 1.4, siege comes up **60ms short** while trickster and sleepy scrape through on 10ms and 35ms, and repairing that means retuning three of four stances to accommodate a §7.3 feature. Clamping the telegraph scale to 1 leaves 140ms at the worst point in the whole space, and is the more faithful reading anyway: a bored cat's tell is that it *does less*, not that it does the same thing slowly. **One number was wrong for a reason worth keeping:** the hysteresis band started at 0.08, which is **1.2 claims** on a real board — narrower than a single trade, so the tier strobed `even→bored→even→bored→even` in the browser. A band has to be measured in the units of the signal it damps; it is now ≥2 claims on `MIN_BOARD`, with a test tying the two together. §8.2's supporting lines now gate on the bored tier instead of proxying it, closing a comment in `arena.ts` that had said "does not exist until step 5" since step 5 shipped. §7.4's treat-teaching bullet is **ticked** — `support-bribe` landed in 0.6 and the checklist was never updated, so the doc had been calling its own weakest seam unbuilt for three versions. Grooming reuses SiteCat's existing `.grooming`, so §0's "nothing new is drawn" still holds. §9.4's handicap ladder and §7.1's top state remain deferred. |
 | 0.8 | **Built step 6** (§12) — the ink curtain, and with it the build is complete through §12. The largest finding is that presentation had a **correctness** consequence §13.5 predicted and §14 never mentioned: a ~1.9s transition creates a window where the visitor's intent and the arena's state disagree, and every branch in the component read the state, so a second press mid-flood opened two boards and stranded the first one's styling on a page that promises to be handed back byte-identical. Intent is now its own thing (§13.5). Three visual corrections, all from measurement rather than looking: **the ink field cannot supply the flood's front** (it is empty above the pours, so what came out was a linear-gradient wipe — a loading bar, which is the one thing §14.1 says this is not); **`coverage` is the wrong curve here** (`COVERAGE_FULL` is 0.055 and 83% of the flood's cells are past it, so the "texture" was a constant); and **alpha carries cover while colour carries texture**, except during the reveal, where the texture has to be ramped back into alpha or `inkAfterDrying` — a threshold — leaves a uniform sheet at full opacity until it vanishes on one frame. Two things §14.3 asked for were wrong at the scale they exist at: a 3px bar cannot slide, and the handoff has to be *aimed* into the reveal rather than fired at the hold. One performance finding: painting per device pixel ran at **13fps**; sizing the canvas in grid cells and letting CSS stretch it — `InkWash.astro`'s own trick — took it to 34fps, faster than this machine's idle baseline for the page. §14.7's "focus returns to the toggle" is **cut**: nothing takes focus, so nothing needs to restore it, and a `.focus()` on exit would have created the problem it was written to solve. |
 | 0.7 | **Built step 5** (§12) — stances and loadout. §9.5's biscuit line ("shortest interrupt immunity but cat stays put longest") turns out to be **two clocks, not a contradiction**, and the anchor that implements it serves the feather too. Two stance numbers were set by a test rather than by taste: a whiff must cost the cat more than the attack gained it, which forced trickster's recovery to 1.2× and sleepy's to 1.55×. One real bug, found by a harness that could not find anywhere to click: `PROTECTED` matched `<main tabindex="-1">` and the click handler used it, so **no click inside the page content ever threw a treat while the crosshair said it would** — a lying affordance, now split into `PROTECTED` (never claim) and `INTERACTIVE` (never intercept). One balance finding recorded below: **no stance's pounce can take the page from a stationary player.** §9.4's handicap ladder is still unbuilt. |
 
@@ -498,6 +499,46 @@ behaviour*, not hidden numbers:
 A losing player sees a cat easing off and reads it as *the cat pitying them* —
 which is in character, funnier, and does the same job as an invisible fudge.
 
+> **Built, 0.9 — step 7.** Three tiers, not a curve: a continuous ramp would be
+> smoother and would be exactly the invisible fudge this section exists to replace,
+> because you cannot read a drift. Each tier has a tell — the bored cat **stops
+> chasing you and washes** (SiteCat's existing `.grooming`, §0's "nothing new is
+> drawn"), ambles rather than stalks, and waits until you have nearly finished
+> before it can be bothered; the desperate cat winds up faster, commits as soon as
+> you have started, hurries, and talks more often.
+>
+> **What aggression scales, and the one thing it must not.** Telegraph (downward
+> only), stalk speed, pounce threshold, talk cadence. **Not recovery** — and that
+> is the load-bearing decision, made against §10's invariant rather than by feel.
+> Scaling recovery by the same factor is the obvious symmetric choice and it breaks
+> "a whiff must cost the cat more than the attack gained it": at 1.4, ambush keeps
+> 231ms of margin, **siege comes up 60ms short**, and trickster and sleepy scrape
+> through on 10ms and 35ms — thin enough to be noise. Repairing that means raising
+> three of four stances' recovery, i.e. retuning §9.3 to accommodate a §7.3
+> feature. Clamping the telegraph scale to 1 costs nothing and leaves 140ms at the
+> worst point in the whole space. It is also the more faithful reading of this
+> table, which names "faster telegraph" for the desperate tier and nothing at all
+> for the bored one: **a bored cat's tell is that it does less, not that it does
+> the same thing slowly.**
+>
+> **The direction of the pressure, stated plainly**, because 0.7's note left it
+> ambiguous ("where a losing player would otherwise be squeezed"). The mercy goes
+> to the player who is behind. The *pressure* goes to the player who is ahead —
+> when the cat is losing it gets desperate, so the endgame 0.7 found was free
+> costs something again.
+>
+> **The hysteresis band had to be measured against the board, not chosen.** First
+> attempt was 0.62/0.70 — 0.08 wide, which on a 15-claim board is **1.2 claims**,
+> narrower than a single trade. The browser harness recorded
+> `even→bored→even→bored→even` across four exchanges. A band has to be wider than
+> the step size of the signal it damps, so it is now at least two claims on the
+> smallest board `boardSlice` deals (0.15, with a test tying it to `MIN_BOARD`).
+> Which is the right answer in fiction too: mercy that evaporates the instant you
+> take one thing back was never mercy.
+>
+> **Deliberately not scaled:** siege's `regrowMs`. It is board-level rather than
+> behaviour, and this section is explicitly about what you can read off the animal.
+
 ### 7.4 Onboarding checklist
 - [x] Core verb (scrub) available within 30s — it is the *first* thing, no unlocks
 - [x] First beat unloseable: the opening `[PH 2500ms]` has aggression pinned to 0,
@@ -505,13 +546,19 @@ which is in character, funnier, and does the same job as an invisible fudge.
       the 8-claim board the query actually yields, 6s of grace is about four free
       scrubs — half the fight. 2.5s covers the first one, which is what this line
       was after.)*
-- [ ] Each mechanic in a safe context: pounce introduced only after one clear
+- [x] Each mechanic in a safe context: pounce introduced only after one clear
       scrub; treats explained by the cat *asking* for one, not by a tooltip.
       *(0.5: the pounce half holds — the opening grace guarantees one clean scrub. The
-      treat half is **not built**, because the cat cannot ask for anything until §8's
-      dialogue exists in step 4. Right now the only thing teaching the throw is the
-      crosshair cursor, which says where you *can* throw and nothing about why. This is
-      the weakest seam in the build and the first thing a playtest will find.)*
+      treat half was **not built**, because the cat cannot ask for anything until §8's
+      dialogue exists in step 4.)*
+      *(**Ticked in 0.9**, and it should have been ticked in 0.6 — `support-bribe`
+      ("you could just bribe me.") landed with the dialogue in step 4 and this line
+      was never updated, so the doc has been calling its own weakest seam unbuilt for
+      three versions. Step 7 gave it the right neighbours: §8.2's other supporting
+      lines now gate on the bored tier, and this one deliberately does not, because it
+      fires while you still have a treat in hand — the one case §7.3 refuses to call
+      bored. Being pitied while you still have options reads as condescension; being
+      asked for a bribe reads as an opening.)*
 - [x] One mechanic found by exploration: nothing says the cat can't pounce during
       `fetch`. Players discover the safe window themselves — the best moment
       available, so it must not be spoiled by UI
@@ -641,6 +688,13 @@ Same verbs, different counter-play. This is where the fight gets legs.
 > it means the pounce is pressure, not a win condition, and §7.3's unbuilt rubber band is where
 > a losing player would otherwise be squeezed. Worth a playtest before deciding it is a feature.
 >
+> **0.9: built, and that last sentence was ambiguous about which way the squeeze runs.** §7.3
+> gives *mercy* to the player who is behind. The pressure goes to the player who is **ahead**:
+> the cat that has been pushed under 20% gets desperate, winds up faster and commits earlier,
+> so the free endgame described above now costs something. Measured at the same constant
+> provocation, the bored cat's commitment rate falls to zero while the desperate cat's rises.
+> Still worth a playtest — what a harness cannot tell me is whether the mercy *reads* as mercy.
+>
 > Trickster has a second-order cost nobody designed: a bluff spends the cat's time and takes
 > nothing, so against a still player it *loses* ground faster than it gains. Stances differ in
 > how much of their aggression converts, not only in how they feel.
@@ -695,7 +749,12 @@ treat's win-rate contribution exceeds any other's by more than `[PH 10%]`.
 | `POUNCE_RANGE` | 90px | ~2.5× existing `chase` trigger (34px) | Too large: nowhere is safe |
 | `INITIAL_CLAIM_FRACTION` | 0.55 | Invaded, not unusable | 1.0: page unreadable, breaks pillar 2 |
 | `lureDuration` (fish) | 3.0s | Must exceed `SCRUB_MS` or treats are worthless | <1.4s: resource does nothing |
-| `AGGRESSION` (bored) | 0.6 | Visible mercy without becoming a walkover | <0.4: cat stops being a threat |
+| `AGGRO_BORED` | 0.6 | Visible mercy without becoming a walkover | <0.4: cat stops being a threat |
+| `AGGRO_DESPERATE` | 1.4 | The endgame has to cost something — 0.7 found the cat has no answer to a still player once it is behind | 1.0: nothing changes when the cat is losing, which is where the fight goes slack |
+| `AGGRO_PATIENCE` | 0.75 | ±0.3 on the pounce threshold across the tier range: enough that a bored cat visibly stops taking the openings an even one took | 0: the tiers differ only in wind-up, and willingness is the readable half |
+| `MAX_THRESHOLD` | 0.9 | Ceiling on stance + mood patience combined. `provoked` caps progress at 1, so 1.0 does not make the pounce rare — it deletes it, which a bored sleepy cat hits exactly | 1.0: the mechanic switches itself off for one stance/tier pair, silently |
+| Hysteresis band | 0.15 | Must be wider than one claim on the smallest board (`MIN_BOARD` 14), or it is a rounding difference rather than damping | 0.08: measured as 1.2 claims on a real board, and the tier strobed on alternate trades |
+| `GROOM_EVERY_MS` | 5200 | ~3× the 1.5s wash, so the beats read as an animal losing interest | <3000: constant washing, which reads as a stuck loop |
 | Fight length | 90–180s | One coffee. Longer and it competes with the portfolio | >4min: nobody finishes |
 
 Added in 0.3, from building steps 0 and 1. Still `[PH]` — built and measured is not
@@ -843,6 +902,14 @@ them independently is how this gets unbalanced.
    visitor's intent and the arena's state disagree, and everything in the component branched
    on the state. See §13.5.
 
+7. ✅ **The rubber band** (§7.3) — *built in 0.9.* Not in the original list: §12 ended at the
+   transition, and what remained were the things individual steps had deferred. This one is
+   first among them because 0.7's balance finding points at it by name — the cat has no
+   answer to a stationary player once it is behind, so the endgame was free. Aggression is
+   the counter-pressure, and it arrives as behaviour you can read rather than as a number:
+   the bored cat stops chasing you and washes, the desperate one winds up faster and crowds
+   you. Rules in `src/lib/arena.ts`, four seams in `CatArena.astro`, no new art.
+
 **On that ordering.** The request named the toggle and the transition together,
 and this splits them to opposite ends of the build. Deliberately: the toggle is a
 *correctness* requirement and the transition is *presentation*, and a curtain over
@@ -895,6 +962,81 @@ be taken off a real page:
   `press()` helper also rewrote the `page.click` *inside* that helper, so it called itself
   forever — and the hung process then sat spinning on the CPU while the next run went by,
   producing three timing failures in a harness that was fine.
+
+**Step 7 ship gate, actual:** 382 unit tests and a 25-check harness
+(`scratchpad/arena7.mjs`), plus every earlier harness, the ink harness, the cycle check and a
+warning-free build.
+
+The measurements that matter, since §7.3 is a claim about *behaviour* and the whole risk is
+asserting a scalar instead. Under a fixed provocation — the cursor parked on a claim and
+jiggled ±8px every 520ms, which holds scrub progress just past `POUNCE_THRESHOLD` forever, so
+the cat is offered the identical opening over and over:
+
+| | Even | Bored | Desperate | Predicted |
+|---|---|---|---|---|
+| Takes a small opening | 0.46/s | **0.00/s** | — | — |
+| Decides, into a hold | **514ms** | — | **97ms** | 490 / 70 |
+| Fastest wind-up | **333ms** | — | **250ms** | 328 / 234 |
+| Grooming beats | 0 | 5 in 21s | 0 | — |
+
+Same player, three different cats, and the two timing rows land within a frame or two of what
+the arithmetic says they should — 514ms across twelve probes spanning 513–515, and 97ms across
+two. That tightness is the point: both are clock-driven, so a spread would mean something was
+wrong. One desperate run recorded wind-ups of 484/251/250, the 484 being a bell-doubled one —
+precisely the confound the "fastest, not mean" choice exists to survive.
+
+Four things went wrong in the measuring, and all four are worth writing down because three of
+them were the harness mis-describing a healthy build:
+
+- **I walked straight back into 0.7's own lesson.** A run that happened to deal **siege**
+  measured 0.00 commitments per second at *every* tier — it has `pin: true` and never leaps —
+  so the comparison was between two zeroes and reported a failure. Stances make "the cat will
+  pounce" conditional; a new harness needs the stance pinned just as the old ones do.
+- **A tier is a set of intervals, not a marker.** Taking the baseline as "open → the last
+  bored marker" put an *earlier* bored stretch inside the even window, and duly reported a
+  grooming beat during even play. Now the statistics are taken over a union of intervals.
+- **Throwing treats poisons a mean.** The climb to the desperate tier has to spend treats, and
+  a bell doubles the next wind-up (§9.5) — so a mean over three telegraphs said the desperate
+  cat was 5ms faster. The statistic aggression is actually about is the *floor*, and the
+  confound only ever lengthens, so the fastest wind-up is both the right measure and immune.
+- **The cursor is an input.** Left parked on a claim while the harness scrolled and counted
+  between actions, it kept accruing progress and fed the cat free pounces: one run reclaimed
+  **twelve** claims and finished on the same eight it started with.
+- **The commitment *rate* cannot show "comes at you more often", and that follows from this
+  step's own central decision.** The cat's cycle is telegraph + leap + **recovery**, and
+  recovery is the part aggression deliberately does not scale — so at ambush the cycle is
+  ~1.6s even against ~1.5s desperate, a 6% difference that two runs resolved the wrong way.
+  What the patience change moves is *how early in your hold it decides*, which has no recovery
+  in it at all, and it measures 514ms into a hold when even against 97ms when desperate. The
+  claim was reworded from "more often" to "sooner", because that is what is true.
+- **Measuring that took three attempts, and each failure was a different thing leaking in.**
+  Parking the cursor somewhere neutral first measured the cat *walking back* (1016ms at both
+  tiers, in multiples of ~508ms). Parking it on the claim and waiting for "near and stalking"
+  never fired, because a still player is already past the threshold by the time the cat
+  arrives, so that window does not exist. What works is a lure on a *non-claim* point nearby:
+  progress cannot accrue, so the cat settles into a stable stalk, and then moving onto the
+  claim starts a hold with the animal already in range.
+- **And the probe changes the thing it measures.** Every landed pounce takes ground back, so
+  six probes at the desperate tier walked the cat up past `DESPERATE_LEAVE` and four of them
+  were really timing an even cat — a clean 514ms hiding among the 97s. Each measurement is now
+  tagged with the tier it was taken in. The rubber band undoing the measurement is, of course,
+  the feature working.
+
+**One consequence of §13.5 worth flagging for anything that reads the toggle.**
+`aria-pressed` now follows *intent*, so it flips the instant the press lands and a transition
+runs afterwards. It is therefore no longer a signal that the fight is over — `arena4.mjs` had
+two loops breaking on it, which now exit while the exit curtain is still up, and the snapshot
+that followed caught `cat-arena-on` still on `<html>`. "The fight has ended" is the claims
+being gone, not the button having conceded.
+
+And one finding that is about the game rather than the harness, arrived at by accident.
+**Holding still, alone, does not win — it stalemates.** A player scrubbing perfectly and never
+spending anything reclaims ground at exactly the rate a landed pounce takes it back, and the
+board sits near its opening ratio indefinitely; the desperate tier only became reachable once
+the harness started throwing treats when the cat closed in. That is §5.4's "the safe window is
+a real decision" arriving from the opposite direction, and it sharpens 0.7's finding: the
+stationary player wins every *exchange* and still cannot win the *fight* without spending the
+resource exploration gave them.
 
 **The lying affordance.** `Base.astro` renders `<main id="main" tabindex="-1">` as its
 skip-link target. `PROTECTED` contained `[tabindex]`, the click handler used `PROTECTED`, and

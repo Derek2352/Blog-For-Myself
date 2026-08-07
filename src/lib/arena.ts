@@ -672,6 +672,164 @@ export const WIN_BEAT_MS = 2200;
 /** The beat after a loss. Shorter: nobody wants to sit in it. */
 export const LOSE_BEAT_MS = 1600;
 
+/* ------------------------------------------------------------------ *
+ * Aggression (§7.3) — difficulty as characterisation
+ * ------------------------------------------------------------------ */
+
+/**
+ * How the cat is taking the fight. Three tiers, not a curve, and that is the design.
+ *
+ * §7.3's whole argument is that the scaling is *expressed as behaviour* rather than
+ * hidden in the numbers: a losing player sees the cat easing off and reads it as the cat
+ * pitying them, which is in character and does the same job as an invisible fudge. A
+ * continuous ramp would be smoother and would be exactly the invisible fudge this exists
+ * to replace — you cannot read a drift. Each tier here has a tell you can see.
+ */
+export type Mood = 'bored' | 'even' | 'desperate';
+
+/**
+ * `[PH 0.6]` — the cat is far ahead and you have nothing left to throw.
+ *
+ * Visible mercy without becoming a walkover. Below about 0.4 the cat stops being a
+ * threat at all, and a boss that has given up is not merciful, it is over.
+ */
+export const AGGRO_BORED = 0.6;
+
+/** Baseline. Everything built through step 6 is this tier. */
+export const AGGRO_EVEN = 1;
+
+/**
+ * `[PH 1.4]` — the cat is losing the page.
+ *
+ * This is the counter-pressure 0.7 found missing. No stance's pounce can take the page
+ * from a stationary player, so once you are ahead every exchange is yours; at this tier
+ * the animal you pushed under 20% winds up faster and commits earlier, and the endgame
+ * costs something again.
+ */
+export const AGGRO_DESPERATE = 1.4;
+
+/*
+ * Tier boundaries, entered and left at different points **on purpose**.
+ *
+ * Territory moves one claim at a time and the board is 14–20 wide, so a single scrub shifts
+ * it by 5–7 points. A boundary at exactly 0.70 flips the cat in and out of bored on
+ * alternate exchanges — the wind-up length, the walking speed and the grooming would all
+ * strobe, and a difficulty that changes every two seconds is not readable as anything.
+ *
+ * The **width** of the band is the part that has to be checked against the board rather than
+ * chosen for looking about right, and the first attempt was not: 0.62/0.70 is 0.08 wide,
+ * which on a 15-claim board is **1.2 claims**. A band narrower than the step size of the
+ * thing it damps is not hysteresis, it is a rounding difference — and the browser harness
+ * duly recorded `even→bored→even→bored→even` across four trades. At least two claims wide on
+ * the *smallest* board is the rule, which `MIN_BOARD` fixes at 0.15; there is a test.
+ *
+ * Two claims is also the right answer in fiction, not just in arithmetic: mercy that
+ * evaporates the instant you take one thing back was never mercy.
+ */
+export const BORED_ENTER = 0.7;
+export const BORED_LEAVE = 0.55;
+export const DESPERATE_ENTER = 0.2;
+export const DESPERATE_LEAVE = 0.35;
+
+/**
+ * Which tier the fight is in, given which one it was in.
+ *
+ * `was` is not an optimisation — it is the hysteresis, and without it this function
+ * cannot be correct. Bored additionally requires an empty hand: a player who is behind
+ * but still holding treats has a move to make, and being pitied while you still have
+ * options reads as condescension rather than mercy.
+ */
+export function mood(s: FightState, was: Mood = 'even'): Mood {
+  const bored = was === 'bored' ? s.territory >= BORED_LEAVE : s.territory >= BORED_ENTER;
+  if (bored && s.ammo === 0) return 'bored';
+  const desperate =
+    was === 'desperate' ? s.territory <= DESPERATE_LEAVE : s.territory <= DESPERATE_ENTER;
+  return desperate ? 'desperate' : 'even';
+}
+
+/** The scalar for a tier. */
+export function aggression(m: Mood): number {
+  if (m === 'bored') return AGGRO_BORED;
+  if (m === 'desperate') return AGGRO_DESPERATE;
+  return AGGRO_EVEN;
+}
+
+/**
+ * What aggression does to the wind-up — **shortens it, and never the reverse.**
+ *
+ * The load-bearing decision of this step, and it is about an invariant rather than about
+ * feel. §10 requires a whiff to cost the cat more than the attack gained it
+ * (`recover > telegraph + LEAP_MS`), and the symmetric choice — scale the recovery by the
+ * same factor as the telegraph — breaks it. Worked through at 1.4: ambush keeps 231ms of
+ * margin, **siege comes up 60ms short**, and trickster and sleepy scrape through on 10ms
+ * and 35ms — thin enough to be noise. Repairing that means raising three of four stances'
+ * recovery, which is retuning §9.3 to accommodate a §7.3 feature.
+ *
+ * Clamping to 1 costs nothing and fixes all of it — the thinnest margin anywhere in the
+ * space becomes siege's 140ms. The telegraph only ever shrinks, so the
+ * invariant only ever gets easier, and a dodge stays rewarded exactly when it matters most
+ * — against a desperate cat. It is also the more faithful reading of §7.3, which names
+ * "faster telegraph" for the desperate tier and says nothing about the bored one. A bored
+ * cat's tell is that it *does less*, not that it does the same thing slowly.
+ */
+export function telegraphScale(a: number): number {
+  return 1 / Math.max(1, a);
+}
+
+/**
+ * The most patient a cat is ever allowed to be.
+ *
+ * `provoked` needs `progress >= POUNCE_THRESHOLD + patience`, and progress is capped at 1
+ * — so a composed threshold of 1.0 does not make the pounce rare, it removes it. A bored
+ * sleepy cat lands there exactly (0.35 base + 0.35 stance + 0.30 mood). Rare is the
+ * design; never is a mechanic switching itself off.
+ */
+export const MAX_THRESHOLD = 0.9;
+
+/** How much of the threshold the mood moves. `[PH 0.75]` — ±0.3 across the tier range. */
+export const AGGRO_PATIENCE = 0.75;
+
+/**
+ * The stance's patience and the mood's, composed and clamped.
+ *
+ * A bored cat waits until you have nearly finished before it can be bothered; a desperate
+ * one commits as soon as you have started.
+ */
+export function patienceFor(stancePatience: number, a: number): number {
+  const want = stancePatience + (1 - a) * AGGRO_PATIENCE;
+  const ceiling = MAX_THRESHOLD - POUNCE_THRESHOLD;
+  return Math.max(-POUNCE_THRESHOLD, Math.min(ceiling, want));
+}
+
+/**
+ * Silence between lines, scaled by mood — desperate is "more taunting" (§7.3).
+ *
+ * The bored end matters as much as the loud one: a cat that has stopped trying and is
+ * grooming itself should also be *quieter*, or the mercy comes with a running commentary.
+ */
+export function talkGap(a: number): number {
+  return LINE_GAP_MS / a;
+}
+
+/**
+ * `[PH 5200]` ms between a bored cat's grooming beats.
+ *
+ * The animation itself runs 1.5s (`cat-groom` in `SiteCat.astro`), so this leaves a clear
+ * gap between them. Much shorter and the cat is *constantly* washing, which reads as a
+ * broken loop rather than as an animal that has lost interest in you.
+ */
+export const GROOM_EVERY_MS = 5200;
+
+/**
+ * `[PH 1500]` ms of washing, during which the cat neither travels nor pounces.
+ *
+ * Mirrors `cat-groom`'s duration in `SiteCat.astro`, and the coupling is loose on purpose:
+ * nothing breaks if the two drift apart, the pause just outlasts the animation or ends a
+ * little early. What must not drift is the *idea* — that this is a pause the player can
+ * see, not a class that gets set while the cat carries on marching at them.
+ */
+export const GROOM_MS = 1500;
+
 /** What the cat is reacting to, gathered once per frame. */
 export interface FightState {
   /** Cat's share of the board, 0..1. */
@@ -690,6 +848,8 @@ export interface FightState {
   staleMs: number;
   /** Already has the collar from the patient path. */
   collared: boolean;
+  /** Which tier the fight is in (§7.3). Carried here so §8.2 can gate on it directly. */
+  mood: Mood;
   /** Which ending, if the fight is ending. */
   ending?: 'win' | 'lose' | 'truce' | 'truce-recover';
 }
@@ -726,20 +886,36 @@ export const LINES: readonly { id: string; text: string; when: (s: FightState) =
    * Pillar 3 says this cat is bluffing, not malevolent, and priority order is where that
    * is either true or not.
    *
-   * §8.2 gates these on "aggression drops to the bored tier", which does not exist until
-   * step 5. The conditions underneath it *are* the bored tier — losing, out of options,
-   * nothing changing — so they fire on those directly.
+   * §8.2 gates these on "aggression drops to the bored tier". Through 0.8 that tier did
+   * not exist — the comment here said "until step 5" and step 5 came and went — so these
+   * fired on the conditions *underneath* it: losing, out of options, nothing changing.
+   * Step 7 built the tier, so the two that are really about it now say so, and the cat's
+   * words and its behaviour change together instead of merely correlating.
+   *
+   * Not all of them moved. `support-bribe` fires while you still have treats, which is
+   * exactly the case `mood` refuses to call bored; the idle and stale lines are about a
+   * fight nobody is playing, which can happen in any tier.
    */
-  { id: 'support-none', text: 'i’ll wait. go find a fish.', when: (s) => s.ammo === 0 && s.territory > 0.7 },
+  /*
+   * The specific one first. Both are bored-tier lines now, and "spent everything and took
+   * ground with it" is a subset of "bored" — so ordered the other way round it would only
+   * ever be reachable through the repeat-suppression path in `pickLine`, which is not a
+   * priority, it is an accident. The generic line is the fallback it sounds like.
+   */
+  { id: 'support-last', text: 'spending everything. bold.', when: (s) => s.mood === 'bored' && s.spent > 0 && s.freed > 0 },
+  { id: 'support-none', text: 'i’ll wait. go find a fish.', when: (s) => s.mood === 'bored' },
   {
     // Added in 0.6. §7.4 wants treats explained by the cat asking for one rather than by
     // a tooltip, and until now nothing taught the throw at all — the crosshair says where
     // you *can* throw and nothing about why you would. This is that line.
+    //
+    // Deliberately *not* a bored-tier line: it fires while you still have treats, which is
+    // the one case `mood` refuses to call bored. Being pitied while you still have options
+    // reads as condescension; being asked for a bribe reads as an opening.
     id: 'support-bribe',
     text: 'you could just bribe me.',
     when: (s) => s.ammo > 0 && s.spent === 0 && s.territory > 0.7,
   },
-  { id: 'support-last', text: 'spending everything. bold.', when: (s) => s.ammo === 0 && s.spent > 0 && s.freed > 0 },
   { id: 'support-idle', text: 'you can stop any time.', when: (s) => s.idleMs > 8000 },
   { id: 'support-stale', text: 'we could both sit down.', when: (s) => s.staleMs > 20000 },
   { id: 'support-interrupts', text: 'that one was mine. mostly.', when: (s) => s.interrupts >= 3 },

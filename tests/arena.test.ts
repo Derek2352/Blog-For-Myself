@@ -40,6 +40,23 @@ import {
   pickLine,
   lineText,
   type FightState,
+  type Mood,
+  mood,
+  aggression,
+  telegraphScale,
+  patienceFor,
+  talkGap,
+  AGGRO_BORED,
+  AGGRO_EVEN,
+  AGGRO_DESPERATE,
+  AGGRO_PATIENCE,
+  MAX_THRESHOLD,
+  BORED_ENTER,
+  BORED_LEAVE,
+  DESPERATE_ENTER,
+  DESPERATE_LEAVE,
+  GROOM_EVERY_MS,
+  GROOM_MS,
   nextPhase,
   provoked,
   predict,
@@ -602,6 +619,184 @@ describe('the opening grace', () => {
   });
 });
 
+describe('aggression (§7.3) — difficulty as characterisation', () => {
+  const all = Object.keys(STANCES) as (keyof typeof STANCES)[];
+  const st = (over: Partial<FightState> = {}): FightState => ({
+    territory: 0.5,
+    ammo: 0,
+    spent: 0,
+    freed: 0,
+    interrupts: 0,
+    idleMs: 0,
+    staleMs: 0,
+    collared: false,
+    mood: 'even',
+    ...over,
+  });
+
+  it('pities a player who is behind and out of options', () => {
+    expect(mood(st({ territory: 0.85, ammo: 0 }))).toBe('bored');
+  });
+
+  it('but not one who still has a treat in hand', () => {
+    // Being pitied while you still have a move reads as condescension, not mercy.
+    expect(mood(st({ territory: 0.85, ammo: 2 }))).toBe('even');
+  });
+
+  it('gets desperate when it is the one losing the page', () => {
+    expect(mood(st({ territory: 0.15 }))).toBe('desperate');
+  });
+
+  it('is even in the middle', () => {
+    expect(mood(st({ territory: 0.5 }))).toBe('even');
+  });
+
+  it('does not flap at a boundary', () => {
+    /*
+     * The check this whole hysteresis exists for. Territory moves one claim at a time and
+     * the board is 14–20 wide, so a fight traded around the bored threshold steps back and
+     * forth across it — and without memory the wind-up length, the walking speed and the
+     * grooming would all strobe on alternate exchanges.
+     */
+    const series = [0.72, 0.66, 0.71, 0.65, 0.69, 0.63, 0.68];
+    let m: Mood = 'even';
+    let changes = 0;
+    for (const territory of series) {
+      const next = mood(st({ territory }), m);
+      if (next !== m) changes++;
+      m = next;
+    }
+    expect(changes).toBe(1);
+    expect(m).toBe('bored');
+  });
+
+  it('does let go once the player is genuinely back in it', () => {
+    // "Genuinely" is the word the band widened to earn: one claim back no longer lifts the
+    // mercy, three do. These sit clear of the boundaries rather than on them.
+    expect(mood(st({ territory: 0.5 }), 'bored')).toBe('even');
+    expect(mood(st({ territory: 0.45 }), 'desperate')).toBe('even');
+    // and still holds on just inside the band
+    expect(mood(st({ territory: 0.6 }), 'bored')).toBe('bored');
+    expect(mood(st({ territory: 0.3 }), 'desperate')).toBe('desperate');
+  });
+
+  it('leaves the boundaries in an order that makes hysteresis mean anything', () => {
+    expect(BORED_LEAVE).toBeLessThan(BORED_ENTER);
+    expect(DESPERATE_LEAVE).toBeGreaterThan(DESPERATE_ENTER);
+    // and the two tiers cannot overlap, or a state would be both
+    expect(DESPERATE_LEAVE).toBeLessThan(BORED_LEAVE);
+  });
+
+  it('makes the band wider than the thing it is damping', () => {
+    /*
+     * The check the first attempt at these numbers failed, and it failed in a browser rather
+     * than here because nothing tied the band to the board. 0.62/0.70 is 0.08 wide, which on
+     * a 15-claim board is 1.2 claims — narrower than one trade, so the tier flipped on
+     * alternate exchanges and the harness recorded `even→bored→even→bored→even`.
+     *
+     * A hysteresis band has to be measured in the units of the signal it smooths. Territory
+     * moves one claim at a time on a board that is never smaller than `MIN_BOARD`.
+     */
+    expect((BORED_ENTER - BORED_LEAVE) * MIN_BOARD).toBeGreaterThanOrEqual(2);
+    expect((DESPERATE_LEAVE - DESPERATE_ENTER) * MIN_BOARD).toBeGreaterThanOrEqual(2);
+  });
+
+  it('does not flap when a single claim trades back and forth', () => {
+    // The concrete version of the rule above, on the smallest board the query ever deals.
+    const claims = [11, 10, 11, 10, 11, 10];
+    let m: Mood = 'even';
+    let changes = 0;
+    for (const c of claims) {
+      const next = mood(st({ territory: c / MIN_BOARD }), m);
+      if (next !== m) changes++;
+      m = next;
+    }
+    expect(changes).toBe(1);
+  });
+
+  it('eases off without becoming a walkover', () => {
+    // §10: below about 0.4 the cat stops being a threat, and a boss that has given up is
+    // not merciful, it is over.
+    expect(AGGRO_BORED).toBeGreaterThan(0.4);
+    expect(AGGRO_BORED).toBeLessThan(AGGRO_EVEN);
+    expect(AGGRO_DESPERATE).toBeGreaterThan(AGGRO_EVEN);
+  });
+
+  it('only ever shortens the wind-up, never stretches it', () => {
+    // The rule the whiff invariant below depends on. A bored cat's tell is that it does
+    // less, not that it does the same thing slowly.
+    for (const a of [0.4, AGGRO_BORED, 0.9, AGGRO_EVEN, 1.2, AGGRO_DESPERATE, 2]) {
+      expect(telegraphScale(a), String(a)).toBeLessThanOrEqual(1);
+    }
+    expect(telegraphScale(AGGRO_BORED)).toBe(1);
+    expect(telegraphScale(AGGRO_DESPERATE)).toBeLessThan(1);
+  });
+
+  it('keeps a whiff costly for every stance at every mood', () => {
+    /*
+     * The check that decided the shape of this feature, written before the code settled.
+     *
+     * §10 requires a whiff to cost the cat more than the attack gained it. Scaling the
+     * *recovery* by aggression as well — the symmetric, obvious-looking choice — fails
+     * here: at 1.4 siege comes up 60ms short, and trickster and sleepy scrape through on
+     * 10ms and 35ms, margins thin enough to be noise. Repairing that means retuning three
+     * of four stances' recovery to accommodate a §7.3 feature. Clamping the telegraph
+     * scale to 1 instead costs nothing and leaves 140ms at the worst point in the space.
+     */
+    for (const s of all) {
+      const spec = STANCES[s];
+      for (const m of ['bored', 'even', 'desperate'] as Mood[]) {
+        const tele = TELEGRAPH_MS * spec.telegraph * telegraphScale(aggression(m));
+        expect(RECOVER_MS * spec.recover, `${s} / ${m}`).toBeGreaterThan(tele + LEAP_MS);
+      }
+    }
+  });
+
+  it('still leaves a reactable telegraph when the cat is desperate', () => {
+    // §5.3's floor does not get to be suspended because the cat is behind.
+    for (const s of all) {
+      const tele = TELEGRAPH_MS * STANCES[s].telegraph * telegraphScale(AGGRO_DESPERATE);
+      expect(tele, s).toBeGreaterThan(230);
+    }
+  });
+
+  it('makes a bored cat wait and a desperate one commit early', () => {
+    expect(patienceFor(0, AGGRO_BORED)).toBeGreaterThan(0);
+    expect(patienceFor(0, AGGRO_DESPERATE)).toBeLessThan(0);
+    expect(patienceFor(0, AGGRO_EVEN)).toBe(0);
+  });
+
+  it('never makes the pounce unreachable, however patient', () => {
+    /*
+     * `provoked` needs progress >= POUNCE_THRESHOLD + patience, and progress caps at 1 —
+     * so a composed threshold of 1.0 does not make the pounce rare, it deletes it. A bored
+     * sleepy cat lands there exactly. Rare is the design; never is a mechanic switching
+     * itself off.
+     */
+    for (const s of all) {
+      for (const m of ['bored', 'even', 'desperate'] as Mood[]) {
+        const threshold = POUNCE_THRESHOLD + patienceFor(STANCES[s].patience, aggression(m));
+        expect(threshold, `${s} / ${m}`).toBeLessThanOrEqual(MAX_THRESHOLD);
+        expect(threshold, `${s} / ${m}`).toBeGreaterThan(0);
+      }
+    }
+    // and the clamp is doing real work, not sitting decorative
+    expect(POUNCE_THRESHOLD + STANCES.sleepy.patience + (1 - AGGRO_BORED) * AGGRO_PATIENCE)
+      .toBeGreaterThan(MAX_THRESHOLD);
+  });
+
+  it('crowds you when desperate and goes quiet when bored', () => {
+    expect(talkGap(AGGRO_DESPERATE)).toBeLessThan(LINE_GAP_MS);
+    expect(talkGap(AGGRO_BORED)).toBeGreaterThan(LINE_GAP_MS);
+    // Still a gap, though: §8's rule is that the cat must not narrate, in any mood.
+    expect(talkGap(AGGRO_DESPERATE)).toBeGreaterThan(600);
+  });
+
+  it('grooms rarely enough to read as boredom rather than a stuck loop', () => {
+    expect(GROOM_EVERY_MS).toBeGreaterThan(GROOM_MS * 2);
+  });
+});
+
 describe('stances (§9.3)', () => {
   const all = Object.keys(STANCES) as (keyof typeof STANCES)[];
 
@@ -753,6 +948,7 @@ describe('the cat’s writing (§8)', () => {
     idleMs: 0,
     staleMs: 0,
     collared: false,
+    mood: 'even',
   };
 
   it('never says more than seven words', () => {
@@ -807,10 +1003,26 @@ describe('the cat’s writing (§8)', () => {
   });
 
   it('is kind rather than smug when the player has no way forward', () => {
-    // The order these two sit in is the characterisation. A bluff-first table had the cat
-    // saying "you are making this loud" to somebody with nothing left to try.
-    expect(pickLine({ ...base, territory: 0.92, ammo: 0 })).toBe('support-none');
-    expect(pickLine({ ...base, territory: 0.8, ammo: 0 })).toBe('support-none');
+    /*
+     * The order these two sit in is the characterisation. A bluff-first table had the cat
+     * saying "you are making this loud" to somebody with nothing left to try.
+     *
+     * The mood is computed rather than written in, and that is the point of doing it this
+     * way: §8.2's lines gate on the tier now, and a test that hands them a hand-written
+     * `mood` could happily assert behaviour for a state the fight can never produce.
+     */
+    const losing = { ...base, territory: 0.92, ammo: 0 };
+    expect(mood(losing)).toBe('bored');
+    expect(pickLine({ ...losing, mood: mood(losing) })).toBe('support-none');
+    const losing2 = { ...base, territory: 0.8, ammo: 0 };
+    expect(pickLine({ ...losing2, mood: mood(losing2) })).toBe('support-none');
+  });
+
+  it('saves the specific kind line for the player who spent everything', () => {
+    // `support-last` is a subset of `support-none`, so it only reads as a priority if it
+    // sits above it. Ordered the other way it was reachable only via repeat-suppression.
+    const spent = { ...base, territory: 0.8, ammo: 0, spent: 3, freed: 2 };
+    expect(pickLine({ ...spent, mood: mood(spent) })).toBe('support-last');
   });
 
   it('teaches the throw, which nothing else in the build does', () => {

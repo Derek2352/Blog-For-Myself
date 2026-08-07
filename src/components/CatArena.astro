@@ -393,6 +393,14 @@
     pickStance,
     treatSpec,
     type Stance,
+    mood as moodFor,
+    aggression,
+    telegraphScale,
+    patienceFor,
+    talkGap,
+    GROOM_EVERY_MS,
+    GROOM_MS,
+    type Mood,
     claimTilt,
     scrubProgress,
     stillEnough,
@@ -401,7 +409,6 @@
     isWon,
     isLost,
     LINE_MS,
-    LINE_GAP_MS,
     WIN_BEAT_MS,
     LOSE_BEAT_MS,
     pickLine,
@@ -721,6 +728,10 @@
     // Treat first: a landing has to be visible to the boss in the same frame, or the
     // cat spends a frame stalking something it should already have abandoned.
     stepTreat(now);
+    // Then the mood, before anything reads it: the tier decides how fast the cat winds
+    // up, how soon it commits, how quickly it walks and how often it speaks, so a
+    // stale one for a frame means four things disagreeing about the same fight.
+    stepMood(now);
     stepBoss(now, dt, stepScrub(now));
     holdCaption();
     // Nothing talks while an ending is playing: the ending has the last word.
@@ -764,6 +775,17 @@
     /** How long the cat cannot pounce while at a treat, from the treat's spec. */
     immuneMs: 0,
     lureMs: 0,
+    /**
+     * How the fight is going, as the cat reads it (§7.3).
+     *
+     * Held rather than recomputed from scratch each frame because `mood` is hysteretic:
+     * which tier you are in depends on which tier you were in, and a boundary with no
+     * memory strobes on alternate exchanges.
+     */
+    mood: 'even' as Mood,
+    /** When the bored cat last washed, and until when it is busy doing so. */
+    groomedAt: 0,
+    groomUntil: 0,
   };
 
   const catEl = () => el('site-cat');
@@ -809,6 +831,20 @@
      * that actually travel animate, and nothing new is drawn.
      */
     root.classList.toggle('walking', phase === 'stalk' || phase === 'fetch');
+  }
+
+  /**
+   * Stop washing, whatever the reason.
+   *
+   * Its own function because it is called from four places — the wash finishing, the mood
+   * lifting mid-wash, handing the cat back, and closing the fight — and because the class
+   * belongs to `SiteCat`. Leaving it set would hand the ambient cat a grooming class it
+   * never asked for; `idleBusiness()` would eventually clear it, but only once the cat
+   * next goes idle, which is not a guarantee worth relying on for somebody else's element.
+   */
+  function endGrooming(root: HTMLElement | null): void {
+    boss.groomUntil = 0;
+    root?.classList.remove('grooming');
   }
 
   /** Turn to face the way it is going. `.face-left` is SiteCat's own class. */
@@ -1018,13 +1054,34 @@
       idleMs: scrub.seen ? now - scrub.seen : 0,
       staleMs: now - arena.movedAt,
       collared: !!catEl()?.classList.contains('lv6'),
+      mood: boss.mood,
       ending,
     };
   }
 
+  /**
+   * Re-read how the fight is going (§7.3).
+   *
+   * Fed its own previous answer, which is the hysteresis rather than a shortcut — see
+   * `mood` in `arena.ts`. Called once a frame, before anything consumes the tier, so the
+   * boss and the ribbon are never a frame apart about what kind of fight this is.
+   */
+  function stepMood(now: number): void {
+    const next = moodFor(fightState(now), boss.mood);
+    if (next === boss.mood) return;
+    boss.mood = next;
+    // Published the same way and for the same reasons as `data-stance`: the tier is a real
+    // piece of fight state, it is worth being able to see from outside the closure, and a
+    // stylesheet may eventually want it. Written only on change — this runs every frame.
+    const root = catEl();
+    if (root) root.dataset.mood = next;
+  }
+
   /** One frame of deciding whether to speak. */
   function stepTalk(now: number): void {
-    if (now - arena.spokeAt < LINE_MS + LINE_GAP_MS) return;
+    // §7.3's "more taunting": the gap between lines is the mood's, not a constant. A
+    // desperate cat crowds you; a bored one goes quiet as well as still.
+    if (now - arena.spokeAt < LINE_MS + talkGap(aggression(boss.mood))) return;
     const id = pickLine(fightState(now), arena.lastLine);
     if (id) say(id);
   }
@@ -1036,9 +1093,14 @@
     // Stances bend durations, they do not replace them (§9.3). A bell's doubled telegraph
     // rides on top of the stance's own multiplier and is spent when the wind-up ends.
     const spec = STANCES[boss.stance];
+    const aggro = aggression(boss.mood);
     const scale =
       boss.phase === 'telegraph'
-        ? spec.telegraph * boss.telegraphMul
+        ? // §7.3's desperate tier, and it only ever shortens this — see `telegraphScale`.
+          // Recovery is deliberately absent from this list: scaling it too breaks §10's
+          // whiff invariant for siege, and a dodge has to stay worth making precisely
+          // when the cat is desperate.
+          spec.telegraph * boss.telegraphMul * telegraphScale(aggro)
         : boss.phase === 'recover'
           ? spec.recover
           : boss.phase === 'eat'
@@ -1134,6 +1196,35 @@
       return;
     }
 
+    /*
+     * §7.3's bored tell: the cat stops chasing you and washes.
+     *
+     * A pause, not just an animation. "Gets bored, grooms itself" is only legible if the
+     * cat visibly gives up on you for a moment — a head-wash performed while still
+     * marching at your cursor reads as a glitch, not as indifference. So this holds it
+     * still and takes the pounce away for the duration, which is also the mercy the tier
+     * exists to deliver.
+     *
+     * `.grooming` and its keyframe are SiteCat's, already written for affection tier 3
+     * (§0: nothing new is drawn). Re-added through a reflow because a non-looping CSS
+     * animation will not replay for a class that is already present — the same trick the
+     * arena note's nudge uses.
+     */
+    if (boss.mood === 'bored' && now >= boss.groomUntil && now - boss.groomedAt > GROOM_EVERY_MS) {
+      boss.groomedAt = now;
+      boss.groomUntil = now + GROOM_MS;
+      root.classList.remove('grooming');
+      void root.offsetWidth;
+      root.classList.add('grooming');
+    }
+    if (now < boss.groomUntil) {
+      // Busy. Not stalking, not pouncing.
+      if (boss.mood !== 'bored') endGrooming(root);
+      else return;
+    } else {
+      endGrooming(root);
+    }
+
     if (!scrub.inside || scrub.x < 0) return; // nothing to stalk
     const dx = scrub.x - boss.x;
     const dy = scrub.y - boss.y;
@@ -1142,7 +1233,10 @@
     if (
       canPounce(boss.phase) &&
       now - arena.openedAt > OPENING_GRACE_MS &&
-      provoked(dist, progress, spec.patience) &&
+      // The stance's patience and the mood's, composed and clamped (§7.3): a bored cat
+      // waits until you have nearly finished before it can be bothered, a desperate one
+      // commits as soon as you have started.
+      provoked(dist, progress, patienceFor(spec.patience, aggro)) &&
       arena.claimed.length > 0
     ) {
       /*
@@ -1172,7 +1266,12 @@
 
     if (dist > 1) {
       const slowed = now < boss.slowUntil ? boss.slowMul : 1;
-      const step = Math.min(dist, STALK_SPEED * spec.stalk * slowed * dt);
+      // Mood is the fourth multiplier here, after the stance, the yarn and the frame: a
+      // bored cat ambles, a desperate one hurries. Unlike the telegraph this one scales
+      // both ways — walking slowly costs the player nothing, so there is no invariant to
+      // protect, and an ambling cat is the most legible tell the bored tier has after
+      // the grooming.
+      const step = Math.min(dist, STALK_SPEED * spec.stalk * slowed * aggro * dt);
       let nx = boss.x + (dx / dist) * step;
       let ny = boss.y + (dy / dist) * step;
       // Anchored by a feather (or the tail of a biscuit): it will come this far and no
@@ -1460,8 +1559,11 @@
     if (!root) return;
     root.classList.add('boss');
     // SiteCat's `stop()` parked it as `idle`; a boss is not idle, and leaving the
-    // class on lets its resting animations fight the phase ones.
+    // class on lets its resting animations fight the phase ones. `grooming` goes for the
+    // same reason and one more: SiteCat may have left one running from its own idle
+    // repertoire, and a fight that opens mid-wash would inherit it.
     root.classList.remove('idle');
+    endGrooming(root);
     const r = root.getBoundingClientRect();
     boss.last = now;
     boss.facing = 1;
@@ -1475,6 +1577,11 @@
     boss.lureMs = LURE_MS;
     boss.immuneMs = LURE_MS;
     boss.regrowAt = now + STANCES[pickStance(arena.seed)].regrowMs;
+    // Every fight starts even, whatever the last one ended as: `mood` is hysteretic, so a
+    // stale tier would carry the previous board's verdict into the opening of this one.
+    boss.mood = 'even';
+    boss.groomedAt = now;
+    root.dataset.mood = 'even';
     root.dataset.stance = boss.stance;
     bossPhase(root, 'stalk', now);
     placeCat(root, r.left + r.width / 2, r.top + r.height / 2);
@@ -1493,7 +1600,9 @@
         'boss-fetch',
         'boss-feint',
       );
+      endGrooming(root);
       delete root.dataset.stance;
+      delete root.dataset.mood;
       document.dispatchEvent(
         new CustomEvent('cat:resume', { detail: { x: boss.x - root.offsetWidth / 2 } }),
       );
