@@ -1,8 +1,8 @@
 # GDD — "Whose Screen Is It" (cat boss fight)
 
-**Version** 0.9 · steps 0–7 built. §7.3's rubber band closed the loop's last slack
-seam; what remains is §9.4's handicap ladder, §7.1's "both paths → the cat sits on
-the cursor" — and, still, a playtest
+**Version** 1.0 · **every numbered section is built** except §7.1's top state, which
+0.6 deferred on purpose because it changes ambient browsing rather than the fight.
+The next thing this needs is not a feature. It is a person
 **Status** hypothesis. Every number below is `[PH]` (placeholder) until playtested —
 including the ones now running in a browser. Built is not playtested.
 
@@ -16,6 +16,7 @@ including the ones now running in a browser. Built is not playtested.
 | 0.4 | **Built step 2** (§12) — the pounce. One design bug and one correction: **§5.3** never said *when* the aim locks, and locking it at the end of the telegraph deletes the telegraph, so it now locks at the start and the prediction leads the whole commitment; **§10's** rationale for `RECOVER_MS` was wrong on its own terms, and what a dodge actually buys is relocation, not banked progress. **§0** corrected: the fight reuses the cat *element*, not SiteCat's state machine. **§7.4's** opening grace drops from 6s to 2.5s for the board that exists. New §10 rows for the numbers the pounce introduced. |
 | 0.5 | **Built step 3** (§12) — treats, and with them the loop's missing half: an A/B on one claim shows a hold the cat would have taken completing once a treat is thrown, so **§12's "verify the safe window is a real decision" is answered**. One deviation: a throw during `recover` is *not* wasted (a treat is an object, not a spell), paired with one-treat-at-a-time so lures cannot be banked. One constraint found: most of a portfolio is a link and a link is not a throwing surface, so the arena now shows a crosshair and links keep their pointer (§6). One bug found by screenshot: SiteCat's `announce()` timer stomped the borrowed HUD line mid-fight. §7.4's "treats explained by the cat asking" is **unbuilt** and now flagged as the weakest seam. |
 | 0.6 | **Built step 4** (§12) — territory, endings, dialogue: the loop has two ends and both were played to completion in the harness. Three corrections. **§4 was right and the build was wrong**: the arena is "viewport bounds + queried list" and I had queried the whole document, which dealt 24 claims on `/timeline/` (past §10's own ceiling) and a fight that ran 124s without finishing — the board now prefers what is on screen, with a floor and a cap (`MIN_BOARD`/`MAX_BOARD`). **A loss was unreachable**: a landed pounce only took back already-freed elements, so territory could never pass the opening 55%; it now takes fresh ground, preferring what it landed on. **§8's priority order was wrong**: bluffing above supporting had the cat gloating at a player with nothing left to try, so being kind now outranks it. Added one line to §8.2 to close §7.4's teaching gap. Deferred, with reasons: §6's separate truce label, and §7.1's "both paths → sits on the cursor". |
+| 1.0 | **Built §9.4's handicap ladder** — the last unbuilt section, and **the build order is complete**. Its own stated blocker was the wrong diagnosis: "it needs an ending that asks a question" describes a prompt, and §7.4 ships "no modal, no 'play again?' button" as a deliberate decision. The question was already on screen — **§13's toggle is the only way in and never goes away**, so a rematch does not need a new control, it needs the next press to *mean* something different. A win raises a rung, a loss lowers it (§7.2: nobody gets stranded), the ceiling is your own found-set, and pressing the toggle again is the acceptance. The handicap is revealed as the fight opens: a withheld paw in the HUD, given its own hollow state because unfilled already means two things and a third meaning wearing the same face would make the HUD lie. Withheld deterministically from the right, which takes a *specific* treat — so the ladder narrows §9.5's kit as well as thinning it. **One real bug, and only a browser could have found it:** winning without spending is the commonest way a good player wins, and `win-clean` sat directly above the offer in §8.4's priority — so the rematch was never offered to the visitor most likely to want it. Every line was reachable and every gate correct in isolation; it took a real fight to show which branch good play lands on. The clean line now carries the question. **And 0.9's stalemate finding is retracted:** a treatless fight is winnable, **won in 37s with every claim worked from 482px out** against a 423px safe distance — 0.9's harness had simply been fighting at 76–300px, inside the cat's reach. `LADDER_FLOOR` stays at 0 and §9.4's bottom rung means what it says. What survives is narrower and still useful: holding still *near the cat* gains nothing, so §5.2's fleeing is the counter the fight is actually built on. |
 | 0.9 | **Built step 7** — §7.3's rubber band, the first of the things earlier steps deferred, and chosen because 0.7's balance finding names it: the cat has no answer to a stationary player once it is behind, so the endgame was free. Three tiers rather than a curve, because a drift cannot be read and an unreadable scaling is the invisible fudge §7.3 exists to replace. **The load-bearing decision is what aggression does *not* touch:** scaling recovery alongside the telegraph is the symmetric-looking choice and it breaks §10's whiff invariant — at 1.4, siege comes up **60ms short** while trickster and sleepy scrape through on 10ms and 35ms, and repairing that means retuning three of four stances to accommodate a §7.3 feature. Clamping the telegraph scale to 1 leaves 140ms at the worst point in the whole space, and is the more faithful reading anyway: a bored cat's tell is that it *does less*, not that it does the same thing slowly. **One number was wrong for a reason worth keeping:** the hysteresis band started at 0.08, which is **1.2 claims** on a real board — narrower than a single trade, so the tier strobed `even→bored→even→bored→even` in the browser. A band has to be measured in the units of the signal it damps; it is now ≥2 claims on `MIN_BOARD`, with a test tying the two together. §8.2's supporting lines now gate on the bored tier instead of proxying it, closing a comment in `arena.ts` that had said "does not exist until step 5" since step 5 shipped. §7.4's treat-teaching bullet is **ticked** — `support-bribe` landed in 0.6 and the checklist was never updated, so the doc had been calling its own weakest seam unbuilt for three versions. Grooming reuses SiteCat's existing `.grooming`, so §0's "nothing new is drawn" still holds. §9.4's handicap ladder and §7.1's top state remain deferred. |
 | 0.8 | **Built step 6** (§12) — the ink curtain, and with it the build is complete through §12. The largest finding is that presentation had a **correctness** consequence §13.5 predicted and §14 never mentioned: a ~1.9s transition creates a window where the visitor's intent and the arena's state disagree, and every branch in the component read the state, so a second press mid-flood opened two boards and stranded the first one's styling on a page that promises to be handed back byte-identical. Intent is now its own thing (§13.5). Three visual corrections, all from measurement rather than looking: **the ink field cannot supply the flood's front** (it is empty above the pours, so what came out was a linear-gradient wipe — a loading bar, which is the one thing §14.1 says this is not); **`coverage` is the wrong curve here** (`COVERAGE_FULL` is 0.055 and 83% of the flood's cells are past it, so the "texture" was a constant); and **alpha carries cover while colour carries texture**, except during the reveal, where the texture has to be ramped back into alpha or `inkAfterDrying` — a threshold — leaves a uniform sheet at full opacity until it vanishes on one frame. Two things §14.3 asked for were wrong at the scale they exist at: a 3px bar cannot slide, and the handoff has to be *aimed* into the reveal rather than fired at the hold. One performance finding: painting per device pixel ran at **13fps**; sizing the canvas in grid cells and letting CSS stretch it — `InkWash.astro`'s own trick — took it to 34fps, faster than this machine's idle baseline for the page. §14.7's "focus returns to the toggle" is **cut**: nothing takes focus, so nothing needs to restore it, and a `.focus()` on exit would have created the problem it was written to solve. |
 | 0.7 | **Built step 5** (§12) — stances and loadout. §9.5's biscuit line ("shortest interrupt immunity but cat stays put longest") turns out to be **two clocks, not a contradiction**, and the anchor that implements it serves the feather too. Two stance numbers were set by a test rather than by taste: a whiff must cost the cat more than the attack gained it, which forced trickster's recovery to 1.2× and sleepy's to 1.55×. One real bug, found by a harness that could not find anywhere to click: `PROTECTED` matched `<main tabindex="-1">` and the click handler used it, so **no click inside the page content ever threw a treat while the crosshair said it would** — a lying affordance, now split into `PROTECTED` (never claim) and `INTERACTIVE` (never intercept). One balance finding recorded below: **no stance's pounce can take the page from a stationary player.** §9.4's handicap ladder is still unbuilt. |
@@ -564,6 +565,11 @@ which is in character, funnier, and does the same job as an invisible fudge.
       available, so it must not be spoiled by UI
 - [x] Ends on a hook: on a win, the cat re-claims **one** element and walks off.
       Unfinished business, no modal, no "play again?" button
+      *(**Still true in 1.0**, and §9.4's ladder was built around it rather than through it.
+      §9.4 asked for "an ending that asks a question", which is a prompt by another name and
+      would have contradicted this line — so instead the question is asked by the toggle that
+      is already there. The cat names its terms and leaves; the next press is the answer.
+      Nothing was added to the ending except a sentence.)*
 
 ---
 
@@ -637,6 +643,23 @@ admit it.
 | Truce during cat's recovery | `...that was cowardly. respect.` |
 | Win, having already earned the collar | `both, then. show-off.` |
 
+**Added in 1.0 for §9.4's ladder.** These are not decoration on the feature — with no modal
+and no button, *they are the feature's whole voice*: the offer of a harder rematch is a
+sentence, and the acceptance is pressing the toggle again.
+
+| Ending | Line |
+|---|---|
+| Win, and a rung left to climb | `again? i keep one back.` |
+| Win with every treat withheld | `i kept everything. you still won.` |
+| Loss on a raised rung | `take one back. go on.` |
+| A handicapped fight *opening* | `you asked for this one.` |
+
+Priority is load-bearing rather than tidy, and the order is: floor, collar, clean, offer,
+generic. A rung line placed under the generic `win` would never be reached — the trap
+`support-last` fell into in 0.9. The offer fires while `rung < found`, evaluated *before*
+`finish` moves the ladder, so the cat is naming terms it has not yet imposed; move the rung
+first and a win at the top would announce a paw it had already taken.
+
 ---
 
 ## 9. Structural replayability
@@ -700,12 +723,59 @@ Same verbs, different counter-play. This is where the fight gets legs.
 > how much of their aggression converts, not only in how they feel.
 
 ### 9.4 Handicap ladder
-**Unbuilt as of 0.7**, and the only piece of §9 that is. It needs an ending that asks a
-question, and every ending currently restores the page and gets out of the way.
+~~**Unbuilt as of 0.7**, and the only piece of §9 that is. It needs an ending that asks a
+question, and every ending currently restores the page and gets out of the way.~~
 
 On a win the cat offers a rematch at `treats - 1`. Self-selected difficulty
 ratchet, no menus, and it converts the win into a decision rather than an
 endpoint. Bottoms out at zero treats — a pure-skill fight for whoever wants it.
+
+> **Built, 1.0 — and the blocker was not the one this section named.**
+>
+> "It needs an ending that asks a question" was the wrong diagnosis, and following it would
+> have broken something better. §7.4 ships the opposite as a deliberate decision: *"ends on a
+> hook — no modal, no 'play again?' button"*. An ending that asks a question is a prompt, and a
+> prompt is the one shape this ending is not allowed to take.
+>
+> The question was already on screen. **§13's toggle is the only way into a fight and it never
+> goes away**, so a rematch does not need to be offered by a new control — it needs the next
+> press to *mean* something different. The ladder is therefore a piece of session state that a
+> win raises and a loss lowers; the cat names its terms on the way out; pressing the toggle
+> again is the acceptance. No modal, no timer, no new control, and §7.4's ending is untouched:
+> the cat still takes one thing back and walks off.
+>
+> **A loss eases the rung back down.** A pure ratchet reads as a truer difficulty setting and
+> can strand somebody on a rung they beat once by luck, which is precisely what §7.2 forbids.
+> The selection stays the player's — the rung only ever *rises* by winning, and nothing makes
+> you press the button again.
+>
+> **The ceiling is your own exploration.** `nextRung` clamps to the treats you have actually
+> found, so a visitor who found two can never be handicapped three. Without it the ladder
+> would punish the behaviour §9.5 rewards.
+>
+> **The handicap is revealed as the fight opens**, not before the press: a withheld paw appears
+> in the HUD and the cat says what it has done. The note under the toggle stays strictly for
+> "why you cannot play". No §13.5 conflict — that failure state is about the button and the
+> arena disagreeing on *on/off*, which is all the button ever claims.
+>
+> **The withheld paw needs its own face.** An unfilled paw already means two things — "not
+> found" outside a fight, "spent" inside one — and a third meaning wearing the same face would
+> make the HUD lie about the one number the visitor is being asked to plan around. Hollow: the
+> accent says *yours*, the missing fill says *not in hand*. Same 9px shape, no new art (§0).
+>
+> **Withheld from the right, deterministically**, which has a consequence worth being
+> deliberate about: it takes a *specific treat*, not a count. A rung-2 fight is missing two
+> particular tools from §9.5's loadout, and which ones is a fact about where you have been. The
+> same found-set always yields the same handicapped fight — the bargain §9.2's seed makes for
+> the board.
+>
+> **One line became unreachable and had to be rescued.** With the offer sitting above it, every
+> win path was caught by floor, collar, clean or again, and `win`'s "keep it. it's drafty
+> anyway." could never fire. Gating `win-clean` on `found > 0` reopens the one case that
+> belongs to it — a visitor who found no treats and was never offered anything to hold back —
+> and fixes a pre-existing slip on the way: crediting somebody with not bribing the cat when
+> they had nothing to bribe it with is a small dishonesty, and §8's tone rules exist to catch
+> exactly that.
 
 ### 9.5 Loadout from the treats you actually found
 `resolveTreat(slug)` already hashes a treat *type* per tab. So **which pages you
@@ -755,6 +825,7 @@ treat's win-rate contribution exceeds any other's by more than `[PH 10%]`.
 | `MAX_THRESHOLD` | 0.9 | Ceiling on stance + mood patience combined. `provoked` caps progress at 1, so 1.0 does not make the pounce rare — it deletes it, which a bored sleepy cat hits exactly | 1.0: the mechanic switches itself off for one stance/tier pair, silently |
 | Hysteresis band | 0.15 | Must be wider than one claim on the smallest board (`MIN_BOARD` 14), or it is a rounding difference rather than damping | 0.08: measured as 1.2 claims on a real board, and the tier strobed on alternate trades |
 | `GROOM_EVERY_MS` | 5200 | ~3× the 1.5s wash, so the beats read as an animal losing interest | <3000: constant washing, which reads as a stuck loop |
+| `LADDER_FLOOR` | 0 | §9.4's bottom rung: every treat withheld, "a pure-skill fight for whoever wants it". A constant rather than a literal because whether that fight is *winnable* is measured, not assumed — see §12's step 8 note | >0: the hardest fight still hands you a tool, and the top of the ladder is not a skill test. Or 0 while a treatless fight cannot actually be won, which is worse: a rung reachable only by winning your way to a wall |
 | Fight length | 90–180s | One coffee. Longer and it competes with the portfolio | >4min: nobody finishes |
 
 Added in 0.3, from building steps 0 and 1. Still `[PH]` — built and measured is not
@@ -910,6 +981,12 @@ them independently is how this gets unbalanced.
    the bored cat stops chasing you and washes, the desperate one winds up faster and crowds
    you. Rules in `src/lib/arena.ts`, four seams in `CatArena.astro`, no new art.
 
+8. ✅ **The handicap ladder** (§9.4) — *built in 1.0.* A win raises a rung, a loss lowers it, and
+   a raised rung withholds treats from the paw row. No modal and no new control: **§13's toggle
+   is the offer**, and pressing it again is the acceptance. The section's own stated blocker —
+   "it needs an ending that asks a question" — turned out to be the wrong diagnosis, and
+   following it would have contradicted §7.4's built ending.
+
 **On that ordering.** The request named the toggle and the transition together,
 and this splits them to opposite ends of the build. Deliberately: the toggle is a
 *correctness* requirement and the transition is *presentation*, and a curtain over
@@ -1037,6 +1114,69 @@ the harness started throwing treats when the cat closed in. That is §5.4's "the
 a real decision" arriving from the opposite direction, and it sharpens 0.7's finding: the
 stationary player wins every *exchange* and still cannot win the *fight* without spending the
 resource exploration gave them.
+
+> **Retracted in 1.0. That was the harness, not the game.**
+>
+> Building §9.4's floor required settling it properly, and holding still alone wins fine — a
+> treatless fight, against a leaping stance, **won in 37s with 7 reclaims and one stall**. The
+> difference is *where* you hold still. 0.9's harness worked whatever claim was nearest and
+> spent its between-move time with the cursor sitting on the board; it was fighting at
+> 76–300px, inside `POUNCE_RANGE` plus the cat's reach. Lure the cat to one edge and hold at
+> the other and it cannot arrive before a 1400ms scrub completes — **every claim in the winning
+> run was worked from 482px out, against a 423px safe distance.**
+>
+> What survives of the original claim is much narrower and still worth knowing: a player who
+> holds still *near the cat* gains nothing, so §5.2's fleeing is not flavour, it is the counter
+> the fight is actually built on. Treats buy you the right to ignore that — which is a fair
+> description of what a resource should do, and leaves §5.4 intact.
+>
+> Recorded at length because it is the second time this build has mistaken a harness's rhythm
+> for a property of the game, and both times the wrong version was the more interesting story.
+
+**Step 8 ship gate, actual:** 397 unit tests and a 25-check harness
+(`scratchpad/arena8.mjs`), plus every earlier harness, the ink harness, the cycle check and a
+warning-free build.
+
+**The floor, settled.** §9.4 promises the bottom rung is "a pure-skill fight for whoever wants
+it", and 0.9's retracted stalemate finding put that in doubt — so it was measured rather than
+assumed, and the measurement had a sharp form available. The cat can only take ground by
+landing a pounce, which needs it *within `POUNCE_RANGE`* of a hold already past
+`POUNCE_THRESHOLD`; so a player holding further away than the cat can walk in one scrub cannot
+be interrupted at all. At the desperate tier that distance is **423px**, and the question stops
+being "how fast is the player" — which a harness cannot honestly emulate — and becomes "does
+the board keep offering that much room", which is a property of the page.
+
+It does. A treatless fight was **won in 37s, 7 reclaims, one stall, every claim worked from
+482px out.** `LADDER_FLOOR` stays at 0 and §9.4's bottom rung means what it says. Worth noting
+against §10's 90–180s target: a skilled treatless win is *fast*, which suggests the ladder's
+lower rungs may be where the interesting fights are.
+
+Three things went wrong in the measuring, and all three were the harness playing badly rather
+than the game being broken:
+
+- **Fleeing in the wrong space.** The first strategy sorted claims by distance from the cat and
+  then scrolled the winner to the viewport centre — destroying the distance it had just sorted
+  for. The cat chases the cursor, the cursor had been parked on the previous target's centre,
+  and every target arrived at that same centre, so the animal was already standing on it. The
+  diagnostic reported the nearest worked claim at **76px** against a 423px requirement, which
+  is what stopped this being written up as "the floor is unwinnable".
+- **Then keeping a stale measurement.** The second attempt nudged the scroll and re-picked, but
+  kept the pre-nudge coordinates when the new candidate was not better — pointing the cursor at
+  where a claim used to be. Replaced with a deliberate placement: the offset that puts a claim
+  at the bottom of the viewport is arithmetic, and the bottom is the furthest point from a decoy
+  held at the top.
+- **Asserting a guarantee as a requirement.** The safe-distance check originally demanded that
+  *every* worked claim be beyond 423px, and failed on a run that **won** while working one at
+  227px. Past that distance the cat provably cannot arrive; inside it, it merely might. The
+  check now earns its place by explaining a stall rather than gating a success.
+
+And one real bug, found in the browser and not by the unit tests. **A clean win suppressed the
+offer.** Winning without spending a treat is the commonest way a good player wins — the
+flee-and-scrub counter needs no treats at all — and `win-clean` sat directly above `win-again`
+in §8.4's priority, so §9.4's rematch was never offered to precisely the visitor most likely to
+want it. The clean line now carries the question itself. The unit tests could not have caught
+this: every line was reachable and every gate correct in isolation. It needed a real fight to
+show which branch a good player actually lands on.
 
 **The lying affordance.** `Base.astro` renders `<main id="main" tabindex="-1">` as its
 skip-link target. `PROTECTED` contained `[tabindex]`, the click handler used `PROTECTED`, and

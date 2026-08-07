@@ -152,6 +152,19 @@
     cursor: crosshair;
   }
 
+  /* ---- a treat the ladder is holding back (§9.4) ----
+     A third state for a 9px dot, and it needs to be a third one rather than a reuse. Unfilled
+     already means "not found" outside a fight and "spent" inside one; a withheld treat is
+     neither, and the visitor is being asked to plan around exactly this number.
+
+     Hollow rather than dimmed: the accent says *yours*, and the missing fill says *not in
+     hand*. Dimming would read as a rendering artefact at this size, and a different hue would
+     be a new colour for one dot. Same shape, no new art (§0). */
+  :global(#cat-score .cat-paw.withheld) {
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--color-accent) 70%, transparent);
+  }
+
   /* ---- the cat, while the arena has it (§5.3) ----
      `SiteCat.astro` owns this element; the arena borrows it via `cat:standdown` and
      writes only its transform. These rules are the phases, and they are all on the
@@ -393,6 +406,8 @@
     pickStance,
     treatSpec,
     type Stance,
+    nextRung,
+    ammoCap,
     mood as moodFor,
     aggression,
     telegraphScale,
@@ -463,6 +478,15 @@
     },
     /** Which paws were filled when the fight opened, so spending is fight-local. */
     ammoWas: [] as boolean[],
+    /**
+     * Which rung of §9.4's ladder the next fight will be fought on.
+     *
+     * Module scope, like the rest of `arena` — Astro runs this script once per document, so
+     * the rung survives moving between pages and dies on a refresh. That is the same lifetime
+     * as SiteCat's found-set and exactly the one §7.2 asks for, and it costs nothing to get:
+     * there is no storage to write and nothing a returning visitor inherits.
+     */
+    rung: 0,
     /** What the borrowed HUD line should say — see `holdCaption`. */
     caption: '',
     /** Treats thrown this fight, which the cat has opinions about (§8.4). */
@@ -636,8 +660,40 @@
    */
   function restoreAmmo(): void {
     const paws = [...document.querySelectorAll<HTMLElement>('#cat-score .cat-paw[data-slug]')];
-    paws.forEach((paw, i) => paw.classList.toggle('got', arena.ammoWas[i] ?? paw.classList.contains('got')));
+    paws.forEach((paw, i) => {
+      paw.classList.toggle('got', arena.ammoWas[i] ?? paw.classList.contains('got'));
+      paw.classList.remove('withheld');
+    });
     arena.ammoWas = [];
+  }
+
+  /**
+   * Take the rung's worth of treats off the table for this fight (§9.4).
+   *
+   * Runs straight after the snapshot in `open()`, so `restoreAmmo` gives them back on close —
+   * the handicap is fight-local for the same reason spending is (§7.2). Nothing else needs to
+   * know: `ammo()` counts `.got`, so `isLost`'s ammo term, the throw handler and §8.2's
+   * `support-bribe` all pick the cap up for free.
+   *
+   * **From the right, deterministically.** Two consequences worth being deliberate about.
+   * It takes a *specific* treat, not a count, so the ladder narrows your kit as well as
+   * thinning it — a rung 2 fight is missing two particular tools from §9.5's loadout, and
+   * which ones is a fact about your own exploration. And it is reproducible: the same
+   * found-set always yields the same handicapped fight, the bargain §9.2's seed makes for
+   * the board.
+   *
+   * The withheld paws get their own class rather than merely losing `got`, because an unfilled
+   * paw already means two things — "not found" outside a fight, "spent" inside one — and a
+   * third meaning wearing the same face would make the HUD lie about the one number the
+   * visitor is being asked to plan around.
+   */
+  function withholdForRung(paws: HTMLElement[]): void {
+    const filled = paws.filter((p) => p.classList.contains('got'));
+    const keep = ammoCap(filled.length, arena.rung);
+    for (const paw of filled.slice(keep)) {
+      paw.classList.remove('got');
+      paw.classList.add('withheld');
+    }
   }
 
   /* ---------------------------------------------------------------- *
@@ -1055,6 +1111,12 @@
       staleMs: now - arena.movedAt,
       collared: !!catEl()?.classList.contains('lv6'),
       mood: boss.mood,
+      rung: arena.rung,
+      // The found-set as of this fight's opening, which is what the snapshot is. Counting
+      // `.got` here instead would return the *ammo* — already reduced by the rung and by
+      // spending — and "is there another paw left to take" would go false the moment you
+      // threw your last treat.
+      found: arena.ammoWas.filter(Boolean).length,
       ending,
     };
   }
@@ -1390,8 +1452,20 @@
   function finish(ending: 'win' | 'lose', now: number): void {
     if (arena.ending) return;
     arena.ending = ending;
+    /*
+     * The line is chosen *before* the rung moves, and the order is the whole of §9.4's voice.
+     *
+     * `fightState` reports the rung this fight was fought on, so "again? i keep one back."
+     * fires on a win while `rung < found` — the cat naming terms it has not yet imposed. Move
+     * the ladder first and the line would describe the next fight instead of offering it, and
+     * a win at the top rung would announce a paw it had already taken.
+     */
     const line = pickLine(fightState(now, ending), undefined);
     if (line) say(line, ending === 'win' ? WIN_BEAT_MS : LOSE_BEAT_MS);
+
+    // §9.4: up on a win, down on a loss. A truce never comes through here, which is why
+    // `nextRung` leaves the rung alone for one — an interruption is not a result.
+    arena.rung = nextRung(arena.rung, ending, arena.ammoWas.filter(Boolean).length);
 
     if (ending === 'win') {
       // the notch, for the rest of the session (§7.1)
@@ -1539,9 +1613,9 @@
     scrub.seen = now;
     scrub.target = null;
     paintTerritory(behindCurtain);
-    arena.ammoWas = [
-      ...document.querySelectorAll<HTMLElement>('#cat-score .cat-paw[data-slug]'),
-    ].map((p) => p.classList.contains('got'));
+    const paws = [...document.querySelectorAll<HTMLElement>('#cat-score .cat-paw[data-slug]')];
+    arena.ammoWas = paws.map((p) => p.classList.contains('got'));
+    withholdForRung(paws);
     takeCat(now);
     arena.raf = requestAnimationFrame(tick);
   }

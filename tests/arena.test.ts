@@ -57,6 +57,9 @@ import {
   DESPERATE_LEAVE,
   GROOM_EVERY_MS,
   GROOM_MS,
+  LADDER_FLOOR,
+  nextRung,
+  ammoCap,
   nextPhase,
   provoked,
   predict,
@@ -631,6 +634,8 @@ describe('aggression (§7.3) — difficulty as characterisation', () => {
     staleMs: 0,
     collared: false,
     mood: 'even',
+    rung: 0,
+    found: 3,
     ...over,
   });
 
@@ -938,6 +943,130 @@ describe('the ending conditions', () => {
   });
 });
 
+describe('the handicap ladder (§9.4)', () => {
+  // Its own base state: the §8 block's is scoped to that describe, and reaching across would
+  // couple two sets of tests through a shared literal.
+  const base: FightState = {
+    territory: 0.55,
+    ammo: 2,
+    spent: 0,
+    freed: 0,
+    interrupts: 0,
+    idleMs: 0,
+    staleMs: 0,
+    collared: false,
+    mood: 'even',
+    rung: 0,
+    found: 3,
+  };
+
+  it('rises on a win — that is the whole ratchet', () => {
+    expect(nextRung(0, 'win', 5)).toBe(1);
+    expect(nextRung(2, 'win', 5)).toBe(3);
+  });
+
+  it('eases back down on a loss, so nobody is stranded', () => {
+    /*
+     * §7.2: losing costs nothing permanent. A pure ratchet reads as a truer difficulty
+     * setting, and it can leave somebody on a rung they beat once by luck — which is the one
+     * thing this fight must never do to a reader.
+     */
+    expect(nextRung(3, 'lose', 5)).toBe(2);
+    expect(nextRung(0, 'lose', 5)).toBe(LADDER_FLOOR);
+  });
+
+  it('ignores a truce, because an interruption is not a result', () => {
+    expect(nextRung(2, 'truce', 5)).toBe(2);
+    expect(nextRung(2, 'truce-recover', 5)).toBe(2);
+    expect(nextRung(2, undefined, 5)).toBe(2);
+  });
+
+  it('never climbs past the treats you actually found', () => {
+    // Otherwise the ladder would punish the exploration §9.5 rewards: a visitor who found two
+    // treats could be handicapped three, i.e. handed a fight with negative ammo.
+    expect(nextRung(2, 'win', 2)).toBe(2);
+    expect(nextRung(0, 'win', 0)).toBe(0);
+  });
+
+  it('never goes below the floor', () => {
+    expect(nextRung(LADDER_FLOOR, 'lose', 5)).toBe(LADDER_FLOOR);
+    expect(nextRung(LADDER_FLOOR - 3, 'lose', 5)).toBe(LADDER_FLOOR);
+  });
+
+  it('bottoms out where §9.4 says it does', () => {
+    // "Bottoms out at zero treats — a pure-skill fight for whoever wants it." A constant
+    // rather than a literal because whether that fight is *winnable* is measured, not assumed.
+    expect(LADDER_FLOOR).toBe(0);
+  });
+
+  it('hands out one fewer treat per rung', () => {
+    expect(ammoCap(5, 0)).toBe(5);
+    expect(ammoCap(5, 2)).toBe(3);
+    expect(ammoCap(5, 5)).toBe(0);
+  });
+
+  it('never returns a negative cap, however the two disagree', () => {
+    // Read straight into a loop that withholds paws from the end of a list; a negative count
+    // there would slice from the wrong end and withhold the ones it meant to keep.
+    expect(ammoCap(2, 5)).toBe(0);
+    expect(ammoCap(0, 3)).toBe(0);
+    expect(ammoCap(3, -2)).toBe(3);
+  });
+
+  it('still offers the rematch when the win was clean', () => {
+    /*
+     * The bug this pins, found in a browser and not here. Winning without spending a treat is
+     * the *commonest* way a good player wins — the flee-and-scrub counter needs no treats — and
+     * `win-clean` sat directly above `win-again`, so §9.4's offer was suppressed for exactly
+     * the visitor most likely to want the next rung. The clean line now carries the question.
+     */
+    const clean = { ...base, ending: 'win' as const, spent: 0, freed: 5, rung: 0, found: 3 };
+    expect(pickLine(clean)).toBe('win-clean');
+    expect(lineText('win-clean')).toMatch(/again/);
+  });
+
+  it('always says something as a handicapped fight opens, however the rung was reached', () => {
+    // `win-both` and `win-floor` can both outrank the offer, so a visitor can arrive at a
+    // harder fight without having been asked. The opening line is the reliable channel, and
+    // must therefore not claim they agreed to anything.
+    expect(lineText('rung-open')).not.toMatch(/asked|agreed/);
+    expect(pickLine({ ...base, rung: 1, freed: 0, spent: 0 })).toBe('rung-open');
+  });
+
+  it('offers a rematch on a win, and stops offering at the top', () => {
+    const won = (rung: number, found: number): FightState => ({
+      ...base,
+      territory: 0,
+      ammo: 0,
+      spent: 1,
+      freed: 4,
+      rung,
+      found,
+      ending: 'win',
+    });
+    expect(pickLine(won(0, 3))).toBe('win-again');
+    expect(pickLine(won(2, 3))).toBe('win-again');
+    // Every treat withheld and still beaten: the top of the ladder, and it outranks the collar.
+    expect(pickLine(won(3, 3))).toBe('win-floor');
+  });
+
+  it('says something as a handicapped fight opens, and nothing in a normal one', () => {
+    const opening = (rung: number) => ({ ...base, rung, freed: 0, spent: 0, territory: 0.55 });
+    expect(pickLine(opening(1))).toBe('rung-open');
+    expect(pickLine(opening(0))).toBe(null);
+  });
+
+  it('stops saying it once the fight is actually under way', () => {
+    // Gated on nothing having happened yet, or the cat would keep explaining the terms.
+    expect(pickLine({ ...base, rung: 1, freed: 1, spent: 0, territory: 0.55 })).toBe(null);
+  });
+
+  it('hands a paw back on a loss without gloating about it', () => {
+    expect(pickLine({ ...base, ending: 'lose', rung: 2 })).toBe('lose-rung');
+    expect(pickLine({ ...base, ending: 'lose', rung: 0 })).toBe('lose');
+  });
+});
+
 describe('the cat’s writing (§8)', () => {
   const base: FightState = {
     territory: 0.55,
@@ -949,6 +1078,8 @@ describe('the cat’s writing (§8)', () => {
     staleMs: 0,
     collared: false,
     mood: 'even',
+    rung: 0,
+    found: 3,
   };
 
   it('never says more than seven words', () => {
@@ -986,7 +1117,18 @@ describe('the cat’s writing (§8)', () => {
 
   it('notices the collar on a win, because doing both is the point (§7.1)', () => {
     expect(pickLine({ ...base, ending: 'win', collared: true, spent: 2 })).toBe('win-both');
-    expect(pickLine({ ...base, ending: 'win', collared: false, spent: 2 })).toBe('win');
+    /*
+     * Changed in 1.0, and the new answer is the right one: an uncollared win with a rung still
+     * to climb gets §9.4's offer rather than the generic sign-off. The collar still outranks
+     * it — earning both paths is a bigger moment than a rematch.
+     */
+    expect(pickLine({ ...base, ending: 'win', collared: false, spent: 2 })).toBe('win-again');
+  });
+
+  it('keeps a plain win line for a visitor with no treats to be offered', () => {
+    // The reachability check. With the ladder's offer above it, the only way to the generic
+    // line is a fight where there was never anything to hold back.
+    expect(pickLine({ ...base, ending: 'win', spent: 0, found: 0, rung: 0 })).toBe('win');
   });
 
   it('has a different truce line for running away mid-pounce', () => {

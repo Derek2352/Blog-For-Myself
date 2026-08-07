@@ -830,6 +830,53 @@ export const GROOM_EVERY_MS = 5200;
  */
 export const GROOM_MS = 1500;
 
+/* ------------------------------------------------------------------ *
+ * The handicap ladder (§9.4)
+ * ------------------------------------------------------------------ */
+
+/**
+ * The bottom of the ladder — how many treats the hardest fight leaves you.
+ *
+ * `[PH 0]`. §9.4 says it bottoms out at zero, "a pure-skill fight for whoever wants it", and
+ * that is what this is set to — but it is a constant rather than a literal `0` because
+ * whether a no-treat fight is *winnable* is a measured question, not an assumed one. Step 7
+ * found that a player who never spends anything reclaims ground at about the rate a landed
+ * pounce takes it back. See the note in §9.4 for what the measurement said.
+ */
+export const LADDER_FLOOR = 0;
+
+/**
+ * Where the ladder goes after a fight ends.
+ *
+ * Up on a win, down on a loss, unchanged on a truce — a truce is not a result, and §8.4
+ * already treats it as its own kind of ending rather than a quiet loss.
+ *
+ * Down on a loss is the decision that keeps §7.2's promise that losing costs nothing
+ * permanent. A pure ratchet would be a truer reading of "self-selected difficulty", but it can
+ * strand somebody on a rung they beat once by luck, and being stuck is the one thing this
+ * fight is not allowed to do to a reader. The selection is still the player's: the rung only
+ * ever *rises* by winning, and nothing makes you press the button again.
+ *
+ * `found` is the ceiling and it moves with exploration, so a visitor who has found two treats
+ * can never be handicapped three. Without that the ladder would punish the very thing §9.5
+ * rewards.
+ */
+export function nextRung(rung: number, ending: FightState['ending'], found: number): number {
+  const ceiling = Math.max(LADDER_FLOOR, found);
+  const want = ending === 'win' ? rung + 1 : ending === 'lose' ? rung - 1 : rung;
+  return Math.max(LADDER_FLOOR, Math.min(ceiling, want));
+}
+
+/**
+ * How many treats a fight at this rung starts with.
+ *
+ * Never below zero however the rung and the found-set disagree: this is read straight into a
+ * loop that withholds paws, and a negative count there would withhold from the wrong end.
+ */
+export function ammoCap(found: number, rung: number): number {
+  return Math.max(0, found - Math.max(0, rung));
+}
+
 /** What the cat is reacting to, gathered once per frame. */
 export interface FightState {
   /** Cat's share of the board, 0..1. */
@@ -850,6 +897,21 @@ export interface FightState {
   collared: boolean;
   /** Which tier the fight is in (§7.3). Carried here so §8.2 can gate on it directly. */
   mood: Mood;
+  /**
+   * Which rung of §9.4's ladder this fight is being fought on — how many paws the cat is
+   * holding back. Zero for a first fight. Here for the same reason `mood` is: the ending is
+   * where the ladder asks its question, so the writing has to be able to see it.
+   */
+  rung: number;
+  /**
+   * How many treats the visitor had found when this fight opened — the ladder's ceiling.
+   *
+   * Not the same as `ammo`, which is what is left *after* the rung withholds some and after
+   * spending. The writing needs the difference: "is there another paw left to take" is
+   * `rung < found`, and offering a harder rematch to somebody already fighting with nothing
+   * would be the cat promising something it cannot deliver.
+   */
+  found: number;
   /** Which ending, if the fight is ending. */
   ending?: 'win' | 'lose' | 'truce' | 'truce-recover';
 }
@@ -867,13 +929,86 @@ export interface FightState {
  * first, then losing badly, then winning, then the kind ones.
  */
 export const LINES: readonly { id: string; text: string; when: (s: FightState) => boolean }[] = [
-  // ---- 8.4 endings
+  /*
+   * ---- 8.4 endings, and §9.4's ladder
+   *
+   * The ladder has no menu and no button, so **these lines are the whole of it**: the offer of
+   * a harder rematch is a sentence, and the acceptance is pressing the toggle again. That
+   * makes the ordering here load-bearing rather than tidy — a rung line placed under the
+   * generic `win` would never be reached, which is the trap `support-last` fell into in 0.9.
+   *
+   * `rung` is the rung the fight was *fought* on; `finish` advances it afterwards. So "is
+   * there another paw left to take" reads as `rung < found`.
+   */
+  {
+    // The top of the ladder: every treat withheld, and you won anyway. Rarer than the collar,
+    // so it outranks it.
+    id: 'win-floor',
+    text: 'i kept everything. you still won.',
+    when: (s) => s.ending === 'win' && s.found > 0 && s.rung >= s.found,
+  },
   { id: 'win-both', text: 'both, then. show-off.', when: (s) => s.ending === 'win' && s.collared },
-  { id: 'win-clean', text: 'you didn’t even bribe me.', when: (s) => s.ending === 'win' && s.spent === 0 },
+  {
+    /*
+     * `found > 0` added in 1.0, and it does two jobs.
+     *
+     * It keeps the generic `win` below reachable: with the ladder's offer sitting above it,
+     * every other win path was caught by floor, collar, clean or again, and "keep it. it's
+     * drafty anyway." became a line that could never fire. The case left for it is the one
+     * this gate opens — a visitor who found no treats at all, and so was never offered
+     * anything to hold back.
+     *
+     * And it makes the line mean what it says. Not bribing the cat is restraint; having
+     * nothing to bribe it with is not, and crediting somebody with a choice they never had
+     * is the kind of small dishonesty §8's tone rules exist to catch.
+     *
+     * The line **carries the offer itself**, and that was a bug found in a browser rather than
+     * here. Winning without spending a treat is the commonest way a good player wins — the
+     * flee-and-scrub counter §5.2 is built around needs no treats at all — so this line sat
+     * directly on top of `win-again` and suppressed §9.4's offer for exactly the visitor most
+     * likely to want the next rung. Two sentences rather than two lines: appending the question
+     * keeps both jobs and keeps every win line reachable.
+     */
+    id: 'win-clean',
+    text: 'you didn’t even bribe me. again?',
+    when: (s) => s.ending === 'win' && s.spent === 0 && s.found > 0 && s.rung < s.found,
+  },
+  {
+    // §9.4's offer. Not a prompt, not a modal — the terms for a fight you may never take.
+    id: 'win-again',
+    text: 'again? i keep one back.',
+    when: (s) => s.ending === 'win' && s.rung < s.found,
+  },
   { id: 'win', text: 'keep it. it’s drafty anyway.', when: (s) => s.ending === 'win' },
+  {
+    // The rung easing back down, said without making a thing of it (§7.2: losing costs
+    // nothing permanent, and a cat that gloated here would be a different animal).
+    id: 'lose-rung',
+    text: 'take one back. go on.',
+    when: (s) => s.ending === 'lose' && s.rung > 0,
+  },
   { id: 'lose', text: 'you may read on. quietly.', when: (s) => s.ending === 'lose' },
   { id: 'truce-recover', text: '…that was cowardly. respect.', when: (s) => s.ending === 'truce-recover' },
   { id: 'truce', text: 'sensible.', when: (s) => s.ending === 'truce' },
+
+  /*
+   * ---- §9.4, at the top of a laddered fight
+   *
+   * The handicap is revealed *as the fight opens* rather than before the press, so something
+   * has to say what the withheld paw in the HUD means. Gated on nothing having happened yet,
+   * which is only true in the opening seconds — and on a normal fight it never fires at all,
+   * because `rung` is 0.
+   */
+  {
+    id: 'rung-open',
+    // Not "you asked for this one": `win-both` and `win-floor` can both outrank the offer, so a
+    // visitor may arrive at a harder fight without having been asked anything. A line that
+    // presumes the offer was heard would be the cat inventing a conversation. This one states
+    // the fact, which is true however you got here — and it is the reliable channel, because
+    // unlike the win lines it always fires when the rung is raised.
+    text: 'one of yours stays with me.',
+    when: (s) => !s.ending && s.rung > 0 && s.freed === 0 && s.spent === 0,
+  },
 
   /*
    * ---- 8.2 supporting, when the player is losing
