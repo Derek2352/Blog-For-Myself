@@ -37,6 +37,12 @@
  */
 ---
 
+{/* The curtain (§14). Full-screen, on top of everything, and inert: a click during the
+    transition is swallowed rather than landing on a half-claimed page. Hidden except
+    during the ~1.7s it is running, so it costs a page that never opens a fight nothing
+    but an empty element. */}
+<canvas id="cat-curtain" transition:persist="cat-curtain" aria-hidden="true" hidden></canvas>
+
 {/* Territory (§6): 3px on the top edge, no numbers.
     The cat pushes up from the bottom of the page, so the top edge is *your* edge, and
     the filled part is your share. A percentage would invite optimising a thing that is
@@ -210,6 +216,38 @@
     transform: rotate(-6deg);
   }
 
+  /* ---- the curtain (§14) ---- */
+  #cat-curtain {
+    position: fixed;
+    inset: 0;
+    /*
+     * Explicit, and load-bearing. The backing store is sized in *grid* cells rather than
+     * device pixels (see `runCurtain`), so the element has an intrinsic size of a few hundred
+     * pixels — and an absolutely positioned replaced element with `width: auto` takes its
+     * intrinsic width and drops the `right` offset on the floor. `inset: 0` alone would leave
+     * a 256×180 curtain in the corner of the screen.
+     */
+    width: 100%;
+    height: 100%;
+    z-index: 60;
+    /* Never the thing under the cursor: a click aimed at the page mid-transition should
+       be swallowed, not delivered to a page that is halfway through being claimed. */
+    pointer-events: none;
+    /*
+     * The colour the screen floods toward, and it **darkens in both themes** (§14.4). In
+     * light mode that is the ink. In dark mode the ink is a pale pink, and a full-screen
+     * pale sheet over a dark page is a flashbang — so dark mode floods toward a ground
+     * deepened almost to black instead. One luminance reversal, downward, either way.
+     */
+    --curtain-ink: #2a241e;
+  }
+  :global(html.dark) #cat-curtain {
+    --curtain-ink: #0b0908;
+  }
+  #cat-curtain[hidden] {
+    display: none;
+  }
+
   /* ---- territory, on the top edge ---- */
   #cat-territory {
     position: fixed;
@@ -328,6 +366,7 @@
 
 <script>
   import { motionReduced } from '@/lib/a11y-prefs';
+  import { runCurtain, stop as stopCurtain, HOLD_FLOOR_MS, REVEAL_MS } from '@/lib/curtain';
   import { tallyFor, resolveTreat } from '@/lib/cat-game';
   import {
     CLAIMABLE,
@@ -431,6 +470,23 @@
     lineTimer: 0,
     /** Set once an ending has started, so nothing can end twice. */
     ending: null as null | 'win' | 'lose',
+    /**
+     * What the visitor has *asked* for, which is not the same as what is running.
+     *
+     * Step 6 opened a window — the length of the flood — in which the fight is committed to
+     * but not yet on. Everything used to branch on `on`, so a second press inside that window
+     * read as "not in a fight, start one": it aborted the curtain, opened the arena through
+     * the abort path, and then opened it *again* when the second curtain reached its hold.
+     * Two `open()`s with no `close()` between them replace `arena.claimed` wholesale and the
+     * first board's claims are stranded on the page. Six presses at six beats left 12.
+     *
+     * So intent is what the toggle and Esc branch on, and it is set the instant the press
+     * lands. This is also the better answer for §13.5: while a curtain is up, what the button
+     * should say is what you asked it for.
+     */
+    want: false,
+    /** Reverses the running curtain from wherever it has got to (§14.6). */
+    curtain: null as null | (() => void),
     /** rAF handle for the loop. */
     raf: 0,
   };
@@ -865,13 +921,41 @@
    * ---------------------------------------------------------------- */
 
   /** Paint the bar. Player's share, so it grows as you win. */
-  function paintTerritory(): void {
+  function paintTerritory(arrive = false): void {
     const bar = el('cat-territory');
     if (!bar) return;
     const mine = 1 - territory(arena.claimed.length, arena.order.length);
     bar.hidden = false;
     const fill = bar.querySelector<HTMLElement>('.territory-mine');
-    if (fill) fill.style.width = `${(mine * 100).toFixed(1)}%`;
+    if (!fill) return;
+    const width = `${(mine * 100).toFixed(1)}%`;
+    if (!arrive) {
+      fill.style.transitionDelay = '';
+      fill.style.width = width;
+      return;
+    }
+    /*
+     * §14.3 wants the bar to *arrive* rather than to be found already there, and to arrive
+     * from an edge, because direction is meaning. A 3px strip cannot slide anywhere legibly,
+     * so what arrives is the **fill**, measured out from the left while the ink dries off it.
+     *
+     * Two problems, both about timing rather than looks. A width transition on an element
+     * that was `display: none` one statement ago has nothing to transition *from*, hence the
+     * double rAF. And `open()` runs during the hold, with the screen opaque — so a sweep
+     * starting immediately would happen entirely behind the curtain.
+     *
+     * The delay is `HOLD_FLOOR_MS + 55% of the reveal`, not merely the hold, and the extra is
+     * measured rather than taste: drying is a smoothstep, so the sheet is still at 0.99 cover
+     * a fifth of the way into the reveal and only opens up past the halfway mark. Waiting for
+     * the hold alone put one growth frame in six where it could be seen.
+     */
+    fill.style.width = '0%';
+    fill.style.transitionDelay = `${Math.round(HOLD_FLOOR_MS + REVEAL_MS * 0.55)}ms`;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        fill.style.width = width;
+      });
+    });
   }
 
   function hideTerritory(): void {
@@ -1236,11 +1320,38 @@
    * transition) belongs with the transition, which is step 6; an instant swap has
    * no window to land in.
    */
+  /**
+   * The way in and out, behind the curtain (§14).
+   *
+   * The transition is decoration and the state change is not, so every path here ends with
+   * `open()` or `close()` having run exactly once: no canvas, no 2D context, a device too
+   * slow to finish inside `WALL_MS`, a tab hidden halfway, or the visitor pressing Esc
+   * during the flood. That is why step 0 built the instant swap first — this is a layer on
+   * top of a thing that already worked (§14.6).
+   *
+   * `arena.curtain` holds the reverse handle: an interruption that has to wait for an
+   * animation to finish is not an interruption.
+   */
   function setArena(on: boolean): void {
-    if (on === arena.on) return;
-    if (on) open();
-    else close();
+    if (on === arena.want) return;
+    arena.want = on;
+    // The button answers the press, not the animation.
     syncToggle();
+    arena.curtain?.();
+    arena.curtain = null;
+    const canvas = el('cat-curtain') as HTMLCanvasElement | null;
+    const swap = (behindCurtain: boolean) => {
+      if (on) open(behindCurtain);
+      else close();
+      syncToggle();
+    };
+    if (!canvas || motionReduced()) {
+      // §14.5: never a half-speed flood. Under reduced motion the arena does not open at
+      // all today (§11), so this is really the no-canvas path.
+      swap(false);
+      return;
+    }
+    arena.curtain = runCurtain(canvas, on ? 'in' : 'out', () => swap(true));
   }
 
   /**
@@ -1267,7 +1378,13 @@
   }
 
   function truce(): void {
-    if (!arena.on) return;
+    if (!arena.want) return;
+    if (!arena.on) {
+      // Esc during the flood. There is no fight yet to have an opinion about how it went,
+      // so this is a cancelled commitment rather than a truce, and the cat says nothing.
+      setArena(false);
+      return;
+    }
     if (arena.ending) {
       // an ending is already playing; let it have the last word
       setArena(false);
@@ -1279,9 +1396,26 @@
     setArena(false);
   }
 
-  function open(): void {
+  /**
+   * `behindCurtain` is not cosmetic bookkeeping: it is the difference between the bar
+   * sweeping into a reveal the visitor can see and sweeping behind an opaque sheet.
+   */
+  function open(behindCurtain = false): void {
+    /*
+     * A second open over a live fight would replace `arena.claimed` wholesale and leave the
+     * first board claimed with nothing tracking it — and worse, `claim()` snapshots the
+     * element's style into `wasStyled`, so claiming an already-claimed node records the
+     * *tilted* style as the original and `free()` faithfully restores the tilt. Closing first
+     * costs nothing on the normal path and makes that unreachable rather than unlikely.
+     */
+    if (arena.on) close();
     const board = candidates();
-    if (!board.length) return; // nothing to fight over; leave the toggle off
+    if (!board.length) {
+      // Nothing to fight over. The intent has to be given back too, or the button stays
+      // pressed over an arena that never opened — §13.5's exact failure state.
+      arena.want = false;
+      return;
+    }
     const seed = (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0;
     const picked = pickClaims(board.length, INITIAL_CLAIM_FRACTION, seed);
     arena.order = board;
@@ -1305,7 +1439,7 @@
     arena.ending = null;
     scrub.seen = now;
     scrub.target = null;
-    paintTerritory();
+    paintTerritory(behindCurtain);
     arena.ammoWas = [
       ...document.querySelectorAll<HTMLElement>('#cat-score .cat-paw[data-slug]'),
     ].map((p) => p.classList.contains('got'));
@@ -1381,6 +1515,15 @@
     arena.order = [];
     arena.total = 0;
     arena.on = false;
+    /*
+     * `want` is deliberately *not* touched here. It is intent, owned by `setArena` and by
+     * `open`'s no-board bail; this function is mechanism. Syncing it looked like harmless
+     * belt-and-braces and was the opposite: pressing the toggle during the exit transition
+     * runs `setArena(true)`, which aborts the out-curtain and delivers its `close()` — so
+     * `close()` would land *after* the new intent and reset it to false. The button then read
+     * "off" over a fight that was opening, and the next press opened a second board on top of
+     * the first, stranding the first one's `--claim-tilt` on the page.
+     */
     document.documentElement.classList.remove('cat-arena-on');
     hideRing();
     scrub.target = null;
@@ -1431,7 +1574,7 @@
   function syncToggle(): void {
     const btn = toggle();
     if (!btn) return;
-    btn.setAttribute('aria-pressed', arena.on ? 'true' : 'false');
+    btn.setAttribute('aria-pressed', arena.want ? 'true' : 'false');
     const why = blockedBecause();
     btn.setAttribute('aria-disabled', why ? 'true' : 'false');
     const note = el('cat-arena-note');
@@ -1466,7 +1609,7 @@
         return;
       }
       // The toggle is the same gesture as Esc, so it gets the same parting line.
-      if (arena.on) truce();
+      if (arena.want) truce();
       else setArena(true);
     });
 
@@ -1544,7 +1687,9 @@
     // arena adds no other binding (§11 — the site's own shortcuts stay owned by
     // the pages that define them).
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && arena.on) truce();
+      // `want`, not `on`: Esc during the flood is the clearest case there is of an
+      // interruption that must not have to wait for an animation to finish.
+      if (e.key === 'Escape' && arena.want) truce();
     });
 
     // Tab hidden long enough ends it: nobody comes back to a page mid-invasion.
@@ -1575,6 +1720,10 @@
 
   document.addEventListener('astro:page-load', () => {
     init();
+    // A curtain caught mid-flight by a navigation has nothing left to reveal.
+    arena.curtain?.();
+    arena.curtain = null;
+    stopCurtain();
     // A fight does not survive a page change yet: the old board's elements are
     // gone, and step 1 has nothing worth carrying across. Re-querying the new
     // page (§13.6) waits for the build that has something to carry.

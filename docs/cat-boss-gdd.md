@@ -1,6 +1,8 @@
 # GDD — "Whose Screen Is It" (cat boss fight)
 
-**Version** 0.7 · steps 0–5 built. Only §14's ink curtain (step 6) is unbuilt
+**Version** 0.8 · §12's build order is complete, steps 0–6. What remains is not a
+step but the things each step deferred: §9.4's handicap ladder, §7.3's rubber band,
+§7.1's "both paths → the cat sits on the cursor" — and a playtest
 **Status** hypothesis. Every number below is `[PH]` (placeholder) until playtested —
 including the ones now running in a browser. Built is not playtested.
 
@@ -14,6 +16,7 @@ including the ones now running in a browser. Built is not playtested.
 | 0.4 | **Built step 2** (§12) — the pounce. One design bug and one correction: **§5.3** never said *when* the aim locks, and locking it at the end of the telegraph deletes the telegraph, so it now locks at the start and the prediction leads the whole commitment; **§10's** rationale for `RECOVER_MS` was wrong on its own terms, and what a dodge actually buys is relocation, not banked progress. **§0** corrected: the fight reuses the cat *element*, not SiteCat's state machine. **§7.4's** opening grace drops from 6s to 2.5s for the board that exists. New §10 rows for the numbers the pounce introduced. |
 | 0.5 | **Built step 3** (§12) — treats, and with them the loop's missing half: an A/B on one claim shows a hold the cat would have taken completing once a treat is thrown, so **§12's "verify the safe window is a real decision" is answered**. One deviation: a throw during `recover` is *not* wasted (a treat is an object, not a spell), paired with one-treat-at-a-time so lures cannot be banked. One constraint found: most of a portfolio is a link and a link is not a throwing surface, so the arena now shows a crosshair and links keep their pointer (§6). One bug found by screenshot: SiteCat's `announce()` timer stomped the borrowed HUD line mid-fight. §7.4's "treats explained by the cat asking" is **unbuilt** and now flagged as the weakest seam. |
 | 0.6 | **Built step 4** (§12) — territory, endings, dialogue: the loop has two ends and both were played to completion in the harness. Three corrections. **§4 was right and the build was wrong**: the arena is "viewport bounds + queried list" and I had queried the whole document, which dealt 24 claims on `/timeline/` (past §10's own ceiling) and a fight that ran 124s without finishing — the board now prefers what is on screen, with a floor and a cap (`MIN_BOARD`/`MAX_BOARD`). **A loss was unreachable**: a landed pounce only took back already-freed elements, so territory could never pass the opening 55%; it now takes fresh ground, preferring what it landed on. **§8's priority order was wrong**: bluffing above supporting had the cat gloating at a player with nothing left to try, so being kind now outranks it. Added one line to §8.2 to close §7.4's teaching gap. Deferred, with reasons: §6's separate truce label, and §7.1's "both paths → sits on the cursor". |
+| 0.8 | **Built step 6** (§12) — the ink curtain, and with it the build is complete through §12. The largest finding is that presentation had a **correctness** consequence §13.5 predicted and §14 never mentioned: a ~1.9s transition creates a window where the visitor's intent and the arena's state disagree, and every branch in the component read the state, so a second press mid-flood opened two boards and stranded the first one's styling on a page that promises to be handed back byte-identical. Intent is now its own thing (§13.5). Three visual corrections, all from measurement rather than looking: **the ink field cannot supply the flood's front** (it is empty above the pours, so what came out was a linear-gradient wipe — a loading bar, which is the one thing §14.1 says this is not); **`coverage` is the wrong curve here** (`COVERAGE_FULL` is 0.055 and 83% of the flood's cells are past it, so the "texture" was a constant); and **alpha carries cover while colour carries texture**, except during the reveal, where the texture has to be ramped back into alpha or `inkAfterDrying` — a threshold — leaves a uniform sheet at full opacity until it vanishes on one frame. Two things §14.3 asked for were wrong at the scale they exist at: a 3px bar cannot slide, and the handoff has to be *aimed* into the reveal rather than fired at the hold. One performance finding: painting per device pixel ran at **13fps**; sizing the canvas in grid cells and letting CSS stretch it — `InkWash.astro`'s own trick — took it to 34fps, faster than this machine's idle baseline for the page. §14.7's "focus returns to the toggle" is **cut**: nothing takes focus, so nothing needs to restore it, and a `.focus()` on exit would have created the problem it was written to solve. |
 | 0.7 | **Built step 5** (§12) — stances and loadout. §9.5's biscuit line ("shortest interrupt immunity but cat stays put longest") turns out to be **two clocks, not a contradiction**, and the anchor that implements it serves the feather too. Two stance numbers were set by a test rather than by taste: a whiff must cost the cat more than the attack gained it, which forced trickster's recovery to 1.2× and sleepy's to 1.55×. One real bug, found by a harness that could not find anywhere to click: `PROTECTED` matched `<main tabindex="-1">` and the click handler used it, so **no click inside the page content ever threw a treat while the crosshair said it would** — a lying affordance, now split into `PROTECTED` (never claim) and `INTERACTIVE` (never intercept). One balance finding recorded below: **no stance's pounce can take the page from a stationary player.** §9.4's handicap ladder is still unbuilt. |
 
 ---
@@ -831,7 +834,14 @@ them independently is how this gets unbalanced.
    fight from the board's own seed, and the five treat shapes stop being interchangeable.
    Replayability last, as planned: it is worthless before the loop is fun, and it is the first
    step whose value a harness genuinely cannot judge.
-6. **The ink transition** (§14), replacing step 0's instant swap.
+6. ✅ **The ink transition** (§14), replacing step 0's instant swap — *built in 0.8.* Ink
+   floods up from the cat's own edge, the arena is built behind full cover, and the sheet
+   *dries* off the page rather than fading. `src/lib/curtain.ts` splits pure beats from the
+   canvas driver the way `a11y-prefs.ts` does. The thing worth recording is that presentation
+   turned out to have a *correctness* consequence nobody had written down: putting a
+   ~1.9-second gap between the press and the state change created a window in which the
+   visitor's intent and the arena's state disagree, and everything in the component branched
+   on the state. See §13.5.
 
 **On that ordering.** The request named the toggle and the transition together,
 and this splits them to opposite ends of the build. Deliberately: the toggle is a
@@ -858,6 +868,33 @@ Three of those changes were harnesses that had been passing for the wrong reason
 on `phases.some(recover)` and so matched a pounce from *earlier* in the recording, one snapshot
 was taken 200ms after a toggle that step 4 gave a 2.2-second ending beat, and one re-rolled the
 fight — and therefore the stance — in the middle of measuring a stance.
+
+**Step 6 ship gate, actual:** 364 unit tests, a 46-check browser harness
+(`scratchpad/arena6.mjs`), all five earlier harnesses, the ink harness, the cycle check
+and a warning-free build.
+
+Step 5 broke four harnesses by adding variance; step 6 broke **all five** by adding
+*latency*. Every one of them clicked the toggle and then waited 120–200ms, which was ample
+against an instant swap and is now a race they always lose — the first symptom was
+`getBoundingClientRect` on a null `.cat-claimed`. They now wait on the observable (claims
+present, or claims gone) instead of on a stopwatch, which is both correct and usually
+shorter. That is the recurring lesson of this build order in its clearest form: **a fixed
+delay is an assumption about the implementation, wearing the costume of a test.**
+
+Two notes on measuring this step, since almost everything about it is a number that had to
+be taken off a real page:
+
+- Three checks failed for reasons that had nothing to do with the code. A luminance baseline
+  read from `document.body` came back `rgba(0,0,0,0)`, so "does the screen only darken" was
+  comparing dark ink against a page it believed was black. A scroll baseline read on a timer
+  caught the site's own smooth-scroll mid-flight and reported the *arena* moving the page. A
+  per-frame cap on the flood's speed turned out to measure this machine's frame rate, and
+  satisfying it would have meant slowing the animation. A wrong baseline does not fail
+  loudly; it answers a different question and accuses the code under test.
+- And two failures were caused by the measuring apparatus itself: a bulk edit that inserted a
+  `press()` helper also rewrote the `page.click` *inside* that helper, so it called itself
+  forever — and the hung process then sat spinning on the CPU while the next run went by,
+  producing three timing failures in a harness that was fine.
 
 **The lying affordance.** `Base.astro` renders `<main id="main" tabindex="-1">` as its
 skip-link target. `PROTECTED` contained `[tabindex]`, the click handler used `PROTECTED`, and
@@ -988,6 +1025,28 @@ panel; both are one press away at all times.
 | **Success** | The visitor can find the switch without being told, and pressing it does exactly what its label said |
 | **Failure** | Any state where the button's rendering and the arena's actual state disagree — this is the bug class to hunt, not a balance question |
 
+**Built, 0.8 — the failure row, found exactly where it said it would be.** Step 6
+put ~1.9s between the press and the state change, and until then every branch in the
+component asked "is the arena on?" — including the toggle's own handler and Esc.
+During a flood the answer is *no* while the honest answer to "what did the visitor
+ask for" is *yes*, so a second press read as "start one", aborted the curtain, opened
+the arena through the abort path, and opened it again when the replacement curtain
+reached its hold. Two `open()`s with no `close()` between them replace the claim list
+wholesale and strand the first board's styling on the page: twelve marks left behind,
+on a page the arena promises to hand back byte-identical.
+
+The fix is that **intent is a separate thing from state**, set the instant the press
+lands, and it is what the toggle, Esc and `aria-pressed` all read. Which is also the
+better answer to the row above: while a curtain is up, what the button should say is
+what you asked it for.
+
+One further trap, worth recording because I walked into it while fixing the first:
+syncing intent from `close()` as belt-and-braces is not defensive, it is a race.
+Pressing the toggle during the *exit* transition runs the open path, which aborts the
+out-curtain and delivers its `close()` — so `close()` lands *after* the new intent and
+cancels it. The button then reads "off" over a fight that is opening. Intent is owned
+by the entry point; the teardown is mechanism and does not get a vote.
+
 ### 13.6 Edge cases
 
 - **Pressed during a transition.** Latch the request and resolve it once the
@@ -1044,8 +1103,8 @@ dependency. §0's "nothing new is drawn" still holds.
 
 | Reused | From | As |
 |---|---|---|
-| `injectStreak`, `reseedField`, `stepInk` | `ink-field.ts` | The flood itself |
-| `fiveTones`, `sampleSmooth`, `coverage` | `ink-field.ts` | Render path, unchanged |
+| `injectStreak`, `reseedField`, `resetField`, `stepInk` | `ink-field.ts` | The flood's body |
+| `valueNoise2` | `ink.ts` | The **shape of the front** — see below, this was not the plan |
 | `inkAfterDrying` | `ink.ts` | The reveal — the curtain *dries*, it does not fade |
 | `mulberry32` | `ink.ts` | A per-entry seed, so no two floods match |
 
@@ -1061,6 +1120,30 @@ Two hard constraints this reuse imposes:
 - **The hero wash pauses while the arena is on.** It is scenery, and its 10fps ×
   12-tick loop is a real frame cost the game needs back. Resume on truce.
 
+**Built, 0.8 — the row that changed, and why it matters more than a row.** The
+original table gave the field three jobs: the flood, the render path via
+`sampleSmooth`/`coverage`, and the drying. Two of those turned out to be wrong in a
+way that only showed on screen.
+
+- **The field cannot supply the front.** Taking the flood's ragged upper edge from
+  the ink itself is the honest-sounding version and it produced a **linear-gradient
+  wipe**: the field is *empty* above the pours, so there is nothing up there to be
+  ragged with, and all that was left was the ramp. A gradient sweeping up the page
+  reads as a loading bar, which is precisely what §14.1 says this is not. The front
+  is now three octaves of `valueNoise2` per column, drifting with the rise.
+- **`coverage` is the wrong curve for a flood.** `COVERAGE_FULL` is `0.055`, tuned
+  for a wash where a hint of pigment should already show. Measured against the
+  curtain's load, **83% of cells are past it**, so `coverage` returned 1 almost
+  everywhere and the "texture" was a constant. The raw load has the range the
+  picture needed (p10 0, p50 1.19, p90 1.91) and is tone-mapped without a ceiling.
+- **Alpha is coverage; colour is texture.** Not a style choice: §14.3 puts the
+  arena's construction behind full cover, so nothing decorative may make the sheet
+  see-through. The mottling lives in the ink's darkness instead — except during the
+  reveal, where the texture is ramped *back into* the alpha, because
+  `inkAfterDrying` is a threshold and returns 1 for a uniform sheet however far
+  along the drying is. A sheet with no variation does not dry; it vanishes on one
+  frame, which is the snap §14.4 forbids.
+
 ### 14.3 Beats — forward (off → on)
 
 | Beat | `[PH]` | What the player sees | What actually happens |
@@ -1074,6 +1157,23 @@ Two hard constraints this reuse imposes:
 Direction is meaning: ink rises from the cat's edge on the way in, and the
 territory bar arrives from the *opposite* edge (§6) on handoff, so the fiction's
 two poles are established before the first mechanic fires.
+
+**Built, 0.8.** Three things this table got wrong, all found by measuring rather
+than by looking.
+
+- **A 3px bar cannot slide anywhere.** "Slides in from the top edge" is a legible
+  gesture for a panel and an invisible one for a hairline: the whole travel is 3px.
+  What arrives instead is the **fill**, measured out from the left while the ink
+  dries off it — still an arrival, still from an edge, and actually perceptible.
+- **The handoff is not a moment, it is a window, and it has to be aimed.** The bar
+  is created during the Hold, behind full ink; a sweep starting there plays entirely
+  behind the curtain. Delaying by the hold alone is not enough either, because
+  drying is a smoothstep and the sheet is still at 0.99 cover a fifth of the way
+  into the Reveal. The delay is `HOLD_FLOOR_MS + 55% of REVEAL_MS`, measured: at the
+  hold alone, **one growth frame in six** was visible; now all of them are.
+- **The Commit beat does not change the cursor to a paw.** §0 forbids new art. The
+  arena's crosshair arrives at Commit instead, which is the same signal — the page
+  has stopped being a page — using something that already exists.
 
 ### 14.4 Beats — reverse (on → off), and theme
 
@@ -1112,6 +1212,12 @@ happens; it just happens behind a dissolve instead of behind ink.
 - **Scroll position preserved in both directions**, to the pixel.
 - **No focus stealing** and no focus trap, in or out. Focus returns to the toggle
   on exit, because that is where the player's attention already is.
+  **Built, 0.8:** nothing restores focus, because nothing takes it. The arena opens
+  no dialog and traps nothing, so the control the visitor pressed simply keeps focus
+  through the whole round trip — which is the stronger property, and the one the
+  harness pins. "Restores focus" would have been a fix for a problem that does not
+  exist, and a `.focus()` call on exit would have *created* one for anybody who
+  opened the fight from the keyboard and then tabbed elsewhere.
 - **`pointer-events` off on the curtain** during Flood and Reveal, so a click
   aimed at the page during the transition is swallowed rather than landing on a
   half-claimed arena.
@@ -1131,6 +1237,30 @@ happens; it just happens behind a dissolve instead of behind ink.
 Coupled, and must be tuned as a set, not row by row: `FLOOD_MS + HOLD_FLOOR_MS +
 REVEAL_MS` must stay under `WALL_MS`, and `REVERSE_MS` must stay under their sum.
 A spreadsheet with those two formulas before any code.
+
+**Built, 0.8.** The two formulas are `tests/curtain.test.ts` rather than a
+spreadsheet, which is the same thing that cannot go stale. Every timing above
+survived contact; what changed is a row this table did not have.
+
+| Var | `[PH]` | Rationale | "Broken" looks like |
+|---|---|---|---|
+| `CELL` | 5 | Grid cells per pixel of curtain. Coarser than the wash's 4 because this is a curtain, not a painting — but not the 8 it started at: drying *amplifies* the field's differences, and at 8px what gets amplified is the bilinear lattice | 8: the sheet dries into a regular mesh and reads as a dither pattern |
+
+And one performance finding, which is really a rendering-architecture finding.
+Painting per **device** pixel is a 1.15M-iteration loop with two bilinear samples
+each, every frame; measured, that ran at **13fps with 261ms gaps** — a flood that
+moves half the screen between frames, which is the snap §14.4 forbids arriving by
+the back door. The canvas is now sized in *grid* cells and stretched by CSS, the
+same trick `InkWash.astro` uses, so the loop is 46k iterations of direct array
+reads and the browser's own upscale supplies the softness. That took it to 34fps —
+**faster than this machine's idle rAF baseline for the page itself** (31fps), which
+is the honest ceiling and the right thing to compare against.
+
+The photosensitivity rule is measured on the page rather than asserted about the
+arithmetic: `scratchpad/arena6.mjs` samples composited luminance every frame and
+requires at most one reversal per direction, in both themes. The pacing check is
+in **cover per millisecond**, not per frame — a per-frame cap turned out to measure
+the machine's frame rate, and satisfying it would have meant slowing the flood.
 
 ### 14.9 Dependencies
 

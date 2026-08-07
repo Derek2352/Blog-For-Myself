@@ -486,9 +486,19 @@
     raf = 0;
   }
 
-  /** Run only while the hero is actually on screen and the tab is in front. */
+  /**
+   * True while the cat arena has the screen.
+   *
+   * The wash is scenery, and a 10fps × 12-tick simulation is a real frame cost the fight
+   * wants back — `docs/cat-boss-gdd.md` §14.2 says so as a hard constraint of reusing the
+   * ink for the curtain. It also stops two ink simulations running at once, which is a
+   * silly thing to ask of a laptop for a joke about a cat.
+   */
+  let lentOut = false;
+
+  /** Run only while the hero is on screen, the tab is in front, and no fight is on. */
   function sync(): void {
-    if (onScreen && !document.hidden) start();
+    if (onScreen && !document.hidden && !lentOut) start();
     else stop();
   }
 
@@ -755,6 +765,20 @@
     // element, so the ink waits rather than competing with it.
     if (document.readyState === 'complete') mount();
     else window.addEventListener('load', mount, { once: true });
+  });
+
+  /*
+   * The arena already announces itself at exactly the right moments: it borrows the cat on
+   * `cat:standdown` and hands it back on `cat:resume`. Reusing those means no new protocol
+   * between the two components, and no way for the wash to miss a fight starting.
+   */
+  document.addEventListener('cat:standdown', () => {
+    lentOut = true;
+    sync();
+  });
+  document.addEventListener('cat:resume', () => {
+    lentOut = false;
+    sync();
   });
 
   document.addEventListener('astro:before-swap', unmount);
