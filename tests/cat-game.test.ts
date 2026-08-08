@@ -3,6 +3,10 @@ import {
   TREATS,
   LEVELS,
   MAX_LEVEL,
+  isTopState,
+  PERCH_STILL_MS,
+  PERCH_SNAP_PX,
+  PERCH_BREAK_PX,
   resolveTreat,
   levelFor,
   levelName,
@@ -136,5 +140,57 @@ describe('isComplete', () => {
 
   it('is false on a site with nothing to collect', () => {
     expect(isComplete(0, 0)).toBe(false);
+  });
+});
+
+describe('the top state (§7.1)', () => {
+  it('needs both paths, not more of one', () => {
+    /*
+     * The entire design of this reward. Either ladder alone already pays out — the collar for
+     * patience, the notch for winning a fight — so a state above both is only meaningfully
+     * "above" if it cannot be reached by doing more of whatever you were already doing.
+     */
+    expect(isTopState(MAX_LEVEL, true)).toBe(true);
+    expect(isTopState(MAX_LEVEL, false)).toBe(false); // every treat, never fought
+    expect(isTopState(MAX_LEVEL - 1, true)).toBe(false); // won a fight, still exploring
+    expect(isTopState(0, false)).toBe(false);
+  });
+
+  it('does not care which order they came in', () => {
+    // Both are session-only flags with no ordering between them; §7.1 says "both in one
+    // session", not "collar then notch".
+    expect(isTopState(MAX_LEVEL, true)).toBe(isTopState(MAX_LEVEL, true));
+  });
+
+  it('is not fooled by a level past the top rung', () => {
+    // `levelFor` clamps, but nothing stops a caller passing something larger.
+    expect(isTopState(MAX_LEVEL + 3, true)).toBe(true);
+  });
+
+  it('waits for the pointer to actually stop, not merely to arrive', () => {
+    /*
+     * §7.1 says the cat sits on the cursor "when idle", and it is the *pointer* being idle
+     * that makes sense of it — a cat sitting on a moving cursor is chasing. Long enough that
+     * crossing the cat's strip on the way somewhere else never summons it.
+     */
+    expect(PERCH_STILL_MS).toBeGreaterThan(300);
+    expect(PERCH_STILL_MS).toBeLessThan(1500);
+  });
+
+  it('sits on the cursor rather than beside it', () => {
+    // The chase that already ships stops at 26px and calls that "beside". This number is the
+    // difference between a new reward and the old one held longer.
+    expect(PERCH_SNAP_PX).toBeLessThan(26);
+  });
+
+  it('leaves room to hold still without twitching', () => {
+    /*
+     * Arrive within the snap, hold until the break. Ordered this way or the cat re-closes a gap
+     * it is already sitting in — walking and curled up at once, re-purring on every tremor of a
+     * hand resting on a mouse.
+     */
+    expect(PERCH_SNAP_PX).toBeLessThan(PERCH_BREAK_PX);
+    // ...but small enough that a deliberate move always gets the cat off your cursor.
+    expect(PERCH_BREAK_PX).toBeLessThan(60);
   });
 });

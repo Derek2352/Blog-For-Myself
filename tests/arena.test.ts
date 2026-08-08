@@ -1190,6 +1190,65 @@ describe('the cat’s writing (§8)', () => {
     for (const l of LINES) expect(lineText(l.id)).toBe(l.text);
     expect(lineText('nope')).toBe('');
   });
+
+  /*
+   * Every line has a state that reaches it — swept, not spot-checked.
+   *
+   * 1.0 shipped a line nobody could ever hear: §9.4's rematch offer went in above `win-clean`,
+   * which catches the commonest good-player win, and the offer was never made to the visitor
+   * most likely to want it. It was found in a browser, by winning a fight and reading the
+   * ribbon. The tests around this one each assert *a* state maps to *a* line, which is the
+   * wrong shape for catching a shadow: a line stops being reachable because of what sits above
+   * it, and no test that names its own expected answer is looking at that.
+   *
+   * `pickLine` returns the first `when` that is true, so shadowing is a property of the whole
+   * ordered table and only a sweep over the table can see it. This is not proof of coverage —
+   * the grid is coarse and the state space is not — but any line that survives 170k-odd states
+   * without once being chosen is either dead or gated on something the fight cannot produce,
+   * and both are worth a red line.
+   */
+  it('has no line that nothing can reach — the shadowing check 1.0 needed', () => {
+    const seen = new Set<string>();
+    const endings = [undefined, 'win', 'lose', 'truce', 'truce-recover'] as const;
+    const moods = ['bored', 'even', 'desperate'] as const;
+    // Every axis a `when` reads has to vary, including down to nothing. A first attempt pinned
+    // `idleMs` at 9000 across the whole grid, and `support-idle` — which sits above eleven
+    // other lines — then shadowed all of them and the sweep accused the writing of what the
+    // sweep was doing. A coarse grid does not just miss states; it invents shadows.
+    for (const ending of endings)
+      for (const territory of [0, 0.08, 0.15, 0.3, 0.45, 0.55, 0.6, 0.8, 0.92, 1])
+        for (const ammo of [0, 1, 3])
+          for (const spent of [0, 1, 3])
+            for (const collared of [false, true])
+              for (const mood of moods)
+                for (const idleMs of [0, 9000])
+                  for (const staleMs of [0, 25_000])
+                    for (const interrupts of [0, 1, 2, 3])
+                      for (const [rung, found] of [
+                        [0, 0],
+                        [0, 3],
+                        [1, 3],
+                        [3, 3],
+                      ] as const) {
+                        const id = pickLine({
+                          territory,
+                          ammo,
+                          spent,
+                          freed: spent,
+                          interrupts,
+                          idleMs,
+                          staleMs,
+                          collared,
+                          mood,
+                          rung,
+                          found,
+                          ...(ending ? { ending } : {}),
+                        });
+                        if (id) seen.add(id);
+                      }
+    const unreachable = LINES.filter((l) => !seen.has(l.id)).map((l) => l.id);
+    expect(unreachable, `unreachable: ${unreachable.join(', ')}`).toEqual([]);
+  });
 });
 
 describe('dialogue pacing', () => {

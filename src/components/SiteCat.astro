@@ -190,6 +190,13 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
     pointer-events: auto;
     cursor: pointer;
   }
+  /* §7.1's top state: while the cat is sitting *on* the cursor it stops being a hit target.
+     The reward must not cost the reader a click — see `perch()` for the full argument. This is
+     the only thing the class does; the look is `dozing` and `purring`, both already written. */
+  #site-cat.perched .cat-svg {
+    pointer-events: none;
+    cursor: default;
+  }
   /* A phone has no cursor for the cat to run from, so its 48x30 body just sits
      at the bottom edge of the screen and swallows taps meant for whatever link
      is under it — a dead zone that moves. On touch it stops being a hit target;
@@ -591,7 +598,17 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
 
 <script>
   import { motionReduced } from '@/lib/a11y-prefs';
-  import { resolveTreat, captionFor, tallyFor, levelFor, isComplete } from '@/lib/cat-game';
+  import {
+    resolveTreat,
+    captionFor,
+    tallyFor,
+    levelFor,
+    isComplete,
+    isTopState,
+    PERCH_STILL_MS,
+    PERCH_SNAP_PX,
+    PERCH_BREAK_PX,
+  } from '@/lib/cat-game';
 
   const CAT_W = 48;
   const CAT_H = 30;
@@ -671,6 +688,16 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
     // (see the observers at the end), so flipping the accessibility control
     // starts or stops the cat without a reload.
     const parkIdle = () => {
+      /*
+       * Through `unperch`, not by stripping the class: the perch is a *flag* as well as two
+       * classes, and this used to clear only the classes. Reduce-motion turned on mid-perch
+       * then stopped the loop with `perched` still true — so when it was turned back off, the
+       * first `hunt` frame saw a stale `perched`, measured against `PERCH_BREAK_PX` instead of
+       * `PERCH_SNAP_PX`, found itself already "close enough", and skipped `perch()` because
+       * `!perched` was false. The cat then held the frame forever, 20px off the cursor, with
+       * none of the curl-up it thinks it is wearing. The same desync `arena.want` was added for.
+       */
+      unperch(); // removes `perched` and `dozing`
       root.classList.remove('walking', 'chasing', 'pounce', 'startled');
       root.classList.add('idle');
     };
@@ -730,14 +757,41 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
      * reports once, and without a longer window the cat would give up crossing
      * the room before it arrived.
      */
-    const prey = { x: -9999, y: -9999, t: 0, hold: 2500 };
+    const prey = {
+      x: -9999,
+      y: -9999,
+      t: 0,
+      hold: 2500,
+      /**
+       * Where the pointer settled, and when — §7.1's top state needs "still", which `t`
+       * cannot express because it is re-stamped by every move. Movement past
+       * `PERCH_BREAK_PX` counts as going somewhere; anything less is a hand resting.
+       */
+      sx: -9999,
+      sy: -9999,
+      still: 0,
+      /**
+       * Is the pointer even in the window? A mouse that left stops reporting, so the last
+       * sighting stays valid forever — and the cat would sit on a cursor that is not there.
+       */
+      here: false,
+    };
     const sight = (x: number, y: number, hold = 2500) => {
       prey.x = x;
       prey.y = y;
       prey.hold = hold;
       prey.t = performance.now();
+      prey.here = true;
+      if (Math.hypot(x - prey.sx, y - prey.sy) > PERCH_BREAK_PX) {
+        prey.sx = x;
+        prey.sy = y;
+        prey.still = prey.t;
+      }
     };
     window.addEventListener('pointermove', (e) => sight(e.clientX, e.clientY), { passive: true });
+    // Leaving the document is the one way a pointer stops existing without saying so.
+    document.addEventListener('mouseleave', () => (prey.here = false));
+    document.addEventListener('mouseenter', () => (prey.here = true));
 
     /**
      * How far up the page the cat bothers to notice you. The fonder it is the
@@ -915,6 +969,40 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
     };
 
     /**
+     * §7.1's top state, arriving and leaving.
+     *
+     * The load-bearing line is `perched` turning hit-testing off. On a mouse `.cat-svg` is a
+     * live target so the cat can be petted, and the touch path already turned that off with a
+     * comment that describes this feature exactly: a 48x30 body at the bottom edge "swallows
+     * taps meant for whatever link is under it — a dead zone that moves". A cat parked *under*
+     * the cursor is that dead zone placed precisely where the reader is about to click, which
+     * is what 0.6 meant by "worth building deliberately".
+     *
+     * So while perched it is scenery: the click goes through, `elementFromPoint` keeps
+     * returning the page (which `CatArena`'s `claimUnder` depends on), and the cursor resting
+     * on the cat cannot pin `petting` on forever — which would have quietly turned the one
+     * interaction the cat already had into its permanent state.
+     *
+     * The purr therefore has to be fired from here rather than from `pointerenter`, which can
+     * no longer arrive. Once, on arrival: `dozing` is lv6's own curl-up and carries the rest of
+     * it, and a cat purring continuously for as long as you read is a busier animal than this.
+     */
+    let perched = false;
+    const perch = (now: number) => {
+      perched = true;
+      s.mode = 'idle';
+      s.until = now + 1e9; // held by owning the frame, not by a clock
+      root.classList.add('perched', 'dozing');
+      setClasses();
+      purr();
+    };
+    const unperch = () => {
+      perched = false;
+      root.classList.remove('perched', 'dozing');
+      s.until = 0; // let `chooseNext` pick something up straight away
+    };
+
+    /**
      * Hunt logic: if the pointer lingers near the floor, chase it; pounce on
      * arrival, then sit beside it until it moves again. Returns true while
      * the chase owns the cat this frame.
@@ -924,6 +1012,66 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
       const preyFresh = now - prey.t < prey.hold;
       const preyLow = withinNotice(prey.y);
       const canHunt = s.mode === 'walk' || s.mode === 'idle' || s.mode === 'chase';
+
+      /*
+       * §7.1's top state: collar *and* notch in one session, and the cat comes and sits on
+       * your cursor.
+       *
+       * Deliberately **not** gated on `preyFresh`. A sighting expires after `hold` because a
+       * moving cursor re-reports itself constantly, so silence means it went away — but a
+       * cursor that has stopped is exactly the case this reward is for, and it stops
+       * reporting too. Stillness is tracked separately (`prey.still`) and `prey.here` covers
+       * the one case where silence really does mean gone.
+       */
+      const wantsPerch =
+        isTopState(game.level, root.classList.contains('notched')) &&
+        !motionReduced() &&
+        prey.here &&
+        preyLow &&
+        now - prey.still >= PERCH_STILL_MS;
+
+      /*
+       * Release whenever the perch is not going to be *held this frame* — which is not the
+       * same as "the pointer moved".
+       *
+       * `canHunt` excludes `away`, `fetch` and `climb`, so a treat appearing, a scamper, or a
+       * wall climb takes the cat out from under the cursor while `wantsPerch` is still
+       * perfectly true. Checking only `wantsPerch` left `perched` set through all three: a cat
+       * running across the screen, curled up and click-through.
+       */
+      if (perched && !(wantsPerch && canHunt)) unperch();
+
+      if (wantsPerch && canHunt) {
+        const target = Math.min(maxX(), Math.max(minX(), prey.x - CAT_W / 2));
+        const dx = target - s.x;
+        /*
+         * Arrive within `PERCH_SNAP_PX`, then hold until `PERCH_BREAK_PX` — the same
+         * hysteresis §7.3's tiers needed, for the same reason.
+         *
+         * Without it, drift too small to break the perch is still bigger than the snap, so the
+         * cat re-enters `chase` *while wearing* `perched` — walking and curled up at once — and
+         * re-purrs on every twitch of a resting hand. Anything past this really has moved: a
+         * pointer move that large resets `prey.still` and un-perches on the line above.
+         */
+        if (Math.abs(dx) > (perched ? PERCH_BREAK_PX : PERCH_SNAP_PX)) {
+          if (perched) unperch();
+          // The last stretch, closing all the way instead of stopping at the chase's 26px —
+          // which is the whole difference between this and the reward that already shipped.
+          if (s.mode !== 'chase') {
+            s.mode = 'chase';
+            setClasses();
+          }
+          s.dir = dx > 0 ? 1 : -1;
+          const sprint = Math.min(210, 62 + game.level * 6 + Math.abs(dx) * 0.35);
+          s.x = Math.max(minX(), Math.min(maxX(), s.x + s.dir * sprint * dt));
+          root.classList.toggle('face-left', s.dir === -1);
+          return true;
+        }
+        if (!perched) perch(now);
+        // Owning the frame is what holds the perch: the tick returns early on `true`, so
+        // `chooseNext` never runs and `idleBusiness` never clears the curl-up.
+        return true;
+      }
 
       if (canHunt && preyFresh && preyLow) {
         const target = Math.min(maxX(), Math.max(minX(), prey.x - CAT_W / 2));
@@ -1315,6 +1463,10 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
      */
     document.addEventListener('cat:standdown', () => {
       standDown = true;
+      // A boss is not a lap cat, and a perch surviving into a fight would keep
+      // `pointer-events: none` on the animal the arena is about to make the only thing worth
+      // clicking at. `stop()` parks through `parkIdle` → `unperch`, so this is covered by the
+      // one path that owns the perch rather than by a second call racing it.
       stop();
     });
     document.addEventListener('cat:resume', (e) => {

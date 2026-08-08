@@ -499,6 +499,8 @@
     lastLine: '' as string,
     spokeAt: 0,
     lineTimer: 0,
+    /** The ending beat's own timer, so a stale one cannot close the *next* fight. */
+    beatTimer: 0,
     /** Set once an ending has started, so nothing can end twice. */
     ending: null as null | 'win' | 'lose',
     /**
@@ -661,7 +663,23 @@
   function restoreAmmo(): void {
     const paws = [...document.querySelectorAll<HTMLElement>('#cat-score .cat-paw[data-slug]')];
     paws.forEach((paw, i) => {
-      paw.classList.toggle('got', arena.ammoWas[i] ?? paw.classList.contains('got'));
+      /*
+       * The snapshot restores; it never rolls back. `||`, not a plain `toggle` to the
+       * snapshot's value — a paw that was filled *during* the fight keeps its fill.
+       *
+       * Reachable, and it cost the visitor a find. Leaving a page with an uncollected treat
+       * credits it (`collect(pending)` in SiteCat, "you were there, which is the thing being
+       * rewarded"), and SiteCat is mounted first so its `astro:page-load` handler runs before
+       * the one here that ends the fight. So: open a fight on a tab whose treat is still on the
+       * floor, click a link, and the row lit the new paw, played the level-up, and then this
+       * function took it straight back off — leaving the HUD saying one thing and `game.found`
+       * saying another until the next navigation quietly re-synced them.
+       *
+       * §7.2 is that a fight must never cost you exploration. It says it about *losing*; it
+       * meant it about the fight.
+       */
+      const found = paw.classList.contains('got');
+      paw.classList.toggle('got', found || (arena.ammoWas[i] ?? false));
       paw.classList.remove('withheld');
     });
     arena.ammoWas = [];
@@ -730,6 +748,15 @@
    * whether you are committed enough to be worth interrupting.
    */
   function stepScrub(now: number): number {
+    // The other half of freezing the ending (see the pounce commitment in `stepBoss`): a hold
+    // started or continued during the beat wins nothing, because there is nothing left to win.
+    // Without this the win beat's one reclaimed element could be scrubbed straight back off
+    // under the line announcing it, and the parting shot would be about a thing not on screen.
+    if (arena.ending) {
+      scrub.target = null;
+      hideRing();
+      return 0;
+    }
     const target = scrub.inside && scrub.x >= 0 ? claimUnder(scrub.x, scrub.y) : null;
     if (!target || target !== scrub.target) {
       // moved onto something else, or off the board: the hold restarts
@@ -746,6 +773,20 @@
       scrub.ax = scrub.x;
       scrub.ay = scrub.y;
     }
+    /*
+     * Holding a claim **is** playing, and the idle truce has to know that.
+     *
+     * `scrub.seen` was refreshed only by `pointermove`, and §11's auto-truce ends a fight
+     * `IDLE_TRUCE_MS` after the last one. But the core verb of this game (§5.2) is holding the
+     * pointer *still*, and 1.0 measured flee-and-hold as the counter the whole fight is built
+     * on — so the better you play, the less you move. A player pinned on one claim by a cat
+     * that keeps interrupting makes progress, never moves the mouse, and at twenty seconds the
+     * game quietly ends itself under them.
+     *
+     * Found by a harness reporting an emptied board with no win: a truce and a victory look
+     * identical from outside, which is why this survived four versions of browser testing.
+     */
+    scrub.seen = now;
     const progress = scrubProgress(now - scrub.since);
     showRing(scrub.x, scrub.y, progress);
     if (progress < 1) return progress;
@@ -949,7 +990,12 @@
    * "wasted" (see the note in the GDD's 0.5 entry).
    */
   function throwTreat(x: number, y: number): void {
-    if (!arena.on || arena.treat) return;
+    // A fourth way, added in 1.1: not once the fight is decided. The ending is a beat rather
+    // than a stop, so `arena.on` is still true for a couple of seconds after a win or a loss —
+    // and a treat arcing across the screen under the parting line, spending a paw on a fight
+    // that is over, is the same "nothing new during the ending" rule the pounce and the regrow
+    // now keep. Silent, like the other three.
+    if (!arena.on || arena.ending || arena.treat) return;
     const paws = ammo();
     const paw = paws[paws.length - 1];
     if (!paw) return;
@@ -1079,7 +1125,15 @@
     const x = cat ? cat.left + cat.width / 2 - w / 2 : 24;
     const y = cat ? cat.top - node.offsetHeight - 8 : 24;
     node.style.transform = `translate(${Math.max(8, Math.min(document.documentElement.clientWidth - w - 8, x)).toFixed(0)}px, ${Math.max(8, y).toFixed(0)}px)`;
-    requestAnimationFrame(() => node.classList.add('show'));
+    // `hidden` is re-cleared inside the frame, not only above it. The fade-out below removes
+    // `show` at `ms` and hides the node 220ms later, guarded on `show` being absent — but a
+    // line said inside that 220ms window sets `hidden = false` and then waits a frame to add
+    // `show`, and if the hide timer lands in that gap the guard sees no `show`, hides the node,
+    // and the new line is spoken invisibly. Asserting it here makes the order stop mattering.
+    requestAnimationFrame(() => {
+      node.hidden = false;
+      node.classList.add('show');
+    });
     clearTimeout(arena.lineTimer);
     arena.lineTimer = window.setTimeout(() => {
       node.classList.remove('show');
@@ -1294,6 +1348,19 @@
 
     if (
       canPounce(boss.phase) &&
+      /*
+       * Nothing new is started once the fight is decided (§7.4).
+       *
+       * The ending is a *beat*, not a stop: the loop keeps running for `WIN_BEAT_MS` so the cat
+       * can take one thing back and walk off, and everything except the dialogue kept running
+       * with it. So the cat could wind up and pounce again inside its own exit, taking a second
+       * and third element after the one the ending is built around — and on a loss it kept
+       * hunting somebody who had already lost. §7.4 asks for "one element, then it leaves", and
+       * one is the whole gesture. A pounce already in flight is allowed to land: it was
+       * committed before the fight was decided, and freezing a cat mid-air to enforce a rule
+       * about starting things would be a worse lie than the one being fixed.
+       */
+      !arena.ending &&
       now - arena.openedAt > OPENING_GRACE_MS &&
       // The stance's patience and the mood's, composed and clamped (§7.3): a bored cat
       // waits until you have nearly finished before it can be bothered, a desperate one
@@ -1354,8 +1421,15 @@
       faceToward(root, dx);
     }
 
-    // Siege's other half: the page grows back.
-    if (spec.regrowMs > 0 && now > boss.regrowAt && arena.claimed.length < arena.order.length) {
+    // Siege's other half: the page grows back — but not once the fight is decided, for the same
+    // reason the pounce above stops committing. A siege win beat otherwise regrew the board
+    // under the very line saying the cat was taking one thing and leaving.
+    if (
+      spec.regrowMs > 0 &&
+      !arena.ending &&
+      now > boss.regrowAt &&
+      arena.claimed.length < arena.order.length
+    ) {
       boss.regrowAt = now + spec.regrowMs;
       const back = takeGround();
       if (back) {
@@ -1477,7 +1551,23 @@
         paintTerritory();
       }
     }
-    setTimeout(() => setArena(false), ending === 'win' ? WIN_BEAT_MS : LOSE_BEAT_MS);
+    /*
+     * Held so it can be cancelled, which it was not until 1.1.
+     *
+     * The beat closes the fight a couple of seconds after an ending. If the visitor closes it
+     * themselves inside that window and then opens a *new* fight, the old timer was still
+     * armed — and fired into the new fight, shutting it a moment after it started. Reachable
+     * on the instant-swap path (§14.6), where a close and a re-open both cost nothing.
+     *
+     * A timer that outlives the thing it was scheduled for is the same class of bug as a class
+     * that outlives the fight, and `lineTimer` was already being cleared for exactly this
+     * reason two lines away.
+     */
+    clearTimeout(arena.beatTimer);
+    arena.beatTimer = window.setTimeout(
+      () => setArena(false),
+      ending === 'win' ? WIN_BEAT_MS : LOSE_BEAT_MS,
+    );
   }
 
   /* ---------------------------------------------------------------- *
@@ -1698,6 +1788,8 @@
     arena.order = [];
     arena.total = 0;
     arena.on = false;
+    clearTimeout(arena.beatTimer);
+    arena.beatTimer = 0;
     /*
      * `want` is deliberately *not* touched here. It is intent, owned by `setArena` and by
      * `open`'s no-board bail; this function is mechanism. Syncing it looked like harmless

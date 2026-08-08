@@ -86,3 +86,50 @@ export function tallyFor(found: number, total: number): string {
 export function isComplete(found: number, total: number): boolean {
   return total > 0 && found >= total;
 }
+
+/* ------------------------------------------------------------------ *
+ * The top state (§7.1)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Has the visitor proved themselves **both** ways this session?
+ *
+ * §7.1 runs two parallel ladders — the collar for patience (find every treat) and the notch
+ * for confrontation (win a fight) — and puts one state above both, "reachable only by playing
+ * both ways". The `&&` is the entire design: either path alone already has its own reward, and
+ * the point of this one is that it cannot be reached by doing more of what you were already
+ * doing.
+ *
+ * Both inputs are session-only and live as classes on the cat (`lv6`, `notched`), so there is
+ * nothing to store and nothing a returning visitor inherits.
+ */
+export function isTopState(level: number, notched: boolean): boolean {
+  return notched && level >= MAX_LEVEL;
+}
+
+/**
+ * `[PH 620]` ms the pointer must rest before the cat commits to sitting on it.
+ *
+ * §7.1 says the cat sits on the cursor "when idle", and it is the *pointer* being idle that
+ * makes sense of it — a cat sitting on a moving cursor is chasing, not sitting. Long enough
+ * that crossing the cat's strip on the way to something else never summons it; short enough
+ * that stopping to read feels answered rather than waited out.
+ */
+export const PERCH_STILL_MS = 620;
+
+/**
+ * `[PH 4]` px — how close counts as *on* rather than beside.
+ *
+ * The chase that already ships stops at 26px and calls it "sitting proudly next to the prey".
+ * This is the number that makes §7.1 a different reward rather than the same one held longer.
+ */
+export const PERCH_SNAP_PX = 4;
+
+/**
+ * `[PH 22]` px of pointer movement that ends the perch.
+ *
+ * Comfortably above `PERCH_SNAP_PX` so the cat's own arrival cannot break its own perch, and
+ * above the jitter of a hand resting on a mouse — but well under a deliberate move, because
+ * the one thing a cat sitting on your cursor must do is get off it the moment you want to work.
+ */
+export const PERCH_BREAK_PX = 22;
