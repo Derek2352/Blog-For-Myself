@@ -223,10 +223,61 @@ export const SCRUB_MS = 1400;
  */
 export const STILL_PX = 6;
 
+/**
+ * `[PH 260]` ms — the longest a touch can last and still be a **tap** rather than a hold (§3).
+ *
+ * On a mouse the two verbs are two events and cannot be confused: `click` throws a treat,
+ * dwelling scrubs, and nothing about one produces the other. A finger does both with the same
+ * gesture, because `click` also fires when a *hold* ends — so without this, scrubbing a claim
+ * spent a paw every single time the finger came off.
+ *
+ * Comfortably above a real tap (~80–150ms) and far below `SCRUB_MS`, so a slow thumb is still a
+ * tap and a deliberate hold is never one.
+ *
+ * It splits **both** touch questions, which is why it is one number and not two: `isTap` asks
+ * whether a lift should throw, and `isWorking` asks whether the click that ended the touch should
+ * be swallowed. On a claim those are exact complements — every touch is one or the other — and a
+ * test pins that, because two thresholds drifting apart would leave a duration that neither
+ * throws nor works.
+ */
+export const TAP_MS = 260;
+
 /** Fraction of a scrub completed after holding still this long. */
 export function scrubProgress(heldMs: number): number {
   if (!(heldMs > 0)) return 0;
   return heldMs >= SCRUB_MS ? 1 : heldMs / SCRUB_MS;
+}
+
+/**
+ * Was that touch a **tap**? (§3's one button, on one finger.)
+ *
+ * Duration alone, deliberately. A first version also required "achieved nothing", on the theory
+ * that a hold the cat interrupted early should not read as a tap — but an interrupted hold does
+ * not *end* early: the finger stays down and the player keeps holding, so the touch is long
+ * whatever the cat did. The extra term bought nothing and cost correctness, because scrub progress
+ * begins on the first frame, so a 90ms tap on a claim counted as "scrubbed" and could neither
+ * throw nor navigate.
+ */
+export function isTap(heldMs: number): boolean {
+  return heldMs <= TAP_MS;
+}
+
+/**
+ * Was that touch the player **working on a claim** rather than pressing the page?
+ *
+ * The question the click has to answer, and it cannot be answered by looking at the DOM: §5.1
+ * allows a claim inside a link, on touch a hold ends in a `click`, and by the time that click
+ * arrives a *completed* hold has already freed the element — so "is there a claim under this"
+ * reads false at exactly the moment it matters, and the page navigates out from under a fight the
+ * player just won. What the touch *was* has to be remembered while it happens.
+ *
+ * `onClaim` is set for any frame the hold had a claim under it; the duration is what separates
+ * working from pressing. So a hold on a claimed link is swallowed, while a brief tap on the same
+ * link still navigates — §11 promises the page keeps working, and this is the line that keeps
+ * both promises at once.
+ */
+export function isWorking(heldMs: number, onClaim: boolean): boolean {
+  return onClaim && heldMs > TAP_MS;
 }
 
 /** Has the pointer stayed put? Distance, not per-axis, or diagonals cheat. */

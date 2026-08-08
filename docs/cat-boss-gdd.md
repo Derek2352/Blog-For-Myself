@@ -1,11 +1,14 @@
 # GDD — "Whose Screen Is It" (cat boss fight)
 
-**Version** 1.1 · **every numbered section is built, and reviewed once.** Nothing
-specified is outstanding, which means the next thing this needs is not a feature —
-it is a person. The review pass is the argument for that rather than against it:
-seven real bugs, all of them in ordinary play, none of them findable by adding checks
-to what was already being checked. **Start a playtester on §9.4's floor** — the
-measurement there is the sharpest edge in the build and nothing on screen admits it.
+**Version** 1.2 · **every numbered section is built, reviewed once, and now playable
+on a phone.** Nothing specified is outstanding, which means the next thing this needs
+is not a feature — it is a person. 1.1's review pass is the argument for that rather
+than against it: seven real bugs, all of them in ordinary play, none of them findable
+by adding checks to what was already being checked. **Start a playtester on §9.4's
+floor** — the measurement there is the sharpest edge in the build and nothing on
+screen admits it. **Then hand them a phone**, where 1.2's whole design rests on a
+gradient nobody has felt: scroll high and you are safe, work where the claim landed
+and you are not.
 
 **Status** hypothesis. Every number below is `[PH]` (placeholder) until playtested —
 including the ones now running in a browser. Built is not playtested.
@@ -25,6 +28,7 @@ including the ones now running in a browser. Built is not playtested.
 | 0.9 | **Built step 7** — §7.3's rubber band, the first of the things earlier steps deferred, and chosen because 0.7's balance finding names it: the cat has no answer to a stationary player once it is behind, so the endgame was free. Three tiers rather than a curve, because a drift cannot be read and an unreadable scaling is the invisible fudge §7.3 exists to replace. **The load-bearing decision is what aggression does *not* touch:** scaling recovery alongside the telegraph is the symmetric-looking choice and it breaks §10's whiff invariant — at 1.4, siege comes up **60ms short** while trickster and sleepy scrape through on 10ms and 35ms, and repairing that means retuning three of four stances to accommodate a §7.3 feature. Clamping the telegraph scale to 1 leaves 140ms at the worst point in the whole space, and is the more faithful reading anyway: a bored cat's tell is that it *does less*, not that it does the same thing slowly. **One number was wrong for a reason worth keeping:** the hysteresis band started at 0.08, which is **1.2 claims** on a real board — narrower than a single trade, so the tier strobed `even→bored→even→bored→even` in the browser. A band has to be measured in the units of the signal it damps; it is now ≥2 claims on `MIN_BOARD`, with a test tying the two together. §8.2's supporting lines now gate on the bored tier instead of proxying it, closing a comment in `arena.ts` that had said "does not exist until step 5" since step 5 shipped. §7.4's treat-teaching bullet is **ticked** — `support-bribe` landed in 0.6 and the checklist was never updated, so the doc had been calling its own weakest seam unbuilt for three versions. Grooming reuses SiteCat's existing `.grooming`, so §0's "nothing new is drawn" still holds. §9.4's handicap ladder and §7.1's top state remain deferred. |
 | 1.0 | **Built §9.4's handicap ladder** — the last unbuilt section, and **the build order is complete**. Its own stated blocker was the wrong diagnosis: "it needs an ending that asks a question" describes a prompt, and §7.4 ships "no modal, no 'play again?' button" as a deliberate decision. The question was already on screen — **§13's toggle is the only way in and never goes away**, so a rematch does not need a new control, it needs the next press to *mean* something different. A win raises a rung, a loss lowers it (§7.2: nobody gets stranded), the ceiling is your own found-set, and pressing the toggle again is the acceptance. The handicap is revealed as the fight opens: a withheld paw in the HUD, given its own hollow state because unfilled already means two things and a third meaning wearing the same face would make the HUD lie. Withheld deterministically from the right, which takes a *specific* treat — so the ladder narrows §9.5's kit as well as thinning it. **One real bug, and only a browser could have found it:** winning without spending is the commonest way a good player wins, and `win-clean` sat directly above the offer in §8.4's priority — so the rematch was never offered to the visitor most likely to want it. Every line was reachable and every gate correct in isolation; it took a real fight to show which branch good play lands on. The clean line now carries the question. **And 0.9's stalemate finding is retracted:** a treatless fight is winnable, **won in 37s with every claim worked from 482px out** against a 423px safe distance — 0.9's harness had simply been fighting at 76–300px, inside the cat's reach. `LADDER_FLOOR` stays at 0 and §9.4's bottom rung means what it says. What survives is narrower and still useful: holding still *near the cat* gains nothing, so §5.2's fleeing is the counter the fight is actually built on. |
 | 1.1 | **Built §7.1's top state** — collar *and* notch in one session, and the cat comes and sits on your cursor. With it, **every numbered section in the GDD is built.** 0.6 deferred this as "worth building deliberately" because it is the one reward that changes ambient browsing rather than the fight, and the deliberate part turned out to be a single CSS line. On a mouse `.cat-svg` is a live hit target so the cat can be petted; the touch path had already turned that off with a comment describing this feature exactly — a 48×30 body at the bottom edge *"swallows taps meant for whatever link is under it — a dead zone that moves"*. Parked under the cursor, that dead zone sits precisely where a click is about to land. So a perched cat is scenery: **measured, a link under it is still the click target and clicking it navigates**, `elementFromPoint` still returns the page (which `claimUnder` depends on), and the cursor resting on the cat can no longer pin `petting` on forever. Most of the behaviour already existed — `hunt()` has chased and sat *beside* the pointer for versions — so this closes all the way instead of stopping 26px short, holds while the pointer is still instead of drifting off after 1.5s, and needed a second timestamp because `prey.t` is re-stamped by every move and so can say "recently seen" but never "has stopped". Arrive at 4px, hold until 22px: the same hysteresis §7.3's tiers needed, or drift too small to break the perch still exceeds the snap and the cat walks while curled up. No new art — `.perched` carries pointer-events and nothing else, and the pose is lv6's existing `.dozing`.<br><br>**Then a full review pass, which found seven real bugs — five of them older than this version.** (1) **The idle truce was ending fights that were being played well.** §11 says a fight ends when "the pointer leaves for 20s", and that was implemented as "the pointer stops moving" — the opposite thing, because §5.2's core verb is holding the pointer *still* and 1.0 measured flee-and-hold as the counter the fight is built on. Hold one claim against a cat that keeps interrupting and the game quietly quit under you. It hid for four versions because **a truce and a win look identical from outside** — empty board, restored page — and every harness asked "are the claims gone" rather than "who won". (2) **The ending beat's timer was never cancelled**, so closing a fight during the beat and starting another could have the old timer shut the new one down. (3) **A fight could cost you a find** (§7.2): the paw row's restore *toggled* to its snapshot instead of only filling from it, so a treat credited on arrival — which happens before the fight's own page-load handler — was taken straight back off. (4) **The ribbon could speak invisibly**: a line arriving inside the previous one's 220ms fade could be hidden by the outgoing timer, and §8's no-repeats rule then suppressed the retry. (5) Releasing the perch keyed on the pointer having moved rather than on the perch being held, so a scamper, a treat or a wall climb left the cat running across the screen curled up and click-through. (6) Parking the cat cleared the perch's *classes* but not its *flag* — the `arena.want` desync again, one file over: reduce-motion off-and-on left the cat frozen a few pixels from the cursor with none of the pose it thought it was wearing. (7) And §7.4’s ending promises the cat takes **one** element and leaves — but the beat only silenced the *dialogue*, so inside it the cat could pounce again, a siege board went on regrowing, a click still spent a paw, and the one re-claimed element could be scrubbed back off under the line announcing it. Nothing new starts once the fight is decided now; a pounce already in flight still lands, because it was committed before the ending. Two of the seven are the same shape as bugs this document already records, which is the argument for the review pass rather than against it.<br><br>**And five harness faults came out with them**, every one of which had been accusing the code. §12 step 3's A/B never moved the cursor off the claim between its arms, so arm A's hold quietly completed during arm B's setup and arm B was then measured on ground already won — a game bug's exact symptom, about one run in five. The ribbon-placement check waited twelve seconds inside one `evaluate` without touching the mouse, and a parked cursor gives the cat almost nothing to say, so the window could pass in silence and the check failed on the game working correctly. `arena8`'s rung-lifetime section fought on `/timeline/` — the page section 1 of the same file had already written down as the one where this harness's flight cannot resolve — and its two §7.2 checks sat inside `if (won.won)`, so they were silently *skipped* rather than failed. §12 step 4’s closing check had been right by luck for five versions: it asks whether SiteCat has the cat back and measures displacement, but the win loop leaves the pointer resting low on the page and an ambient cat’s answer to that is to come and sit *beside* it — so standing still was the correct behaviour and the check was sampling it. And two harnesses reported a **legitimate loss** as a broken feature, which is how §9.4's floor note above got measured: every treatless run with zero stalls won, every run with one stall lost, and that is `isLost` doing exactly what §2 specifies. A retry — which is what §9.4 says a rematch *is* — was the honest fix, not a wider timeout. |
+| 1.2 | **Touch mode — §5.2's refusal, overturned rather than worked around.** The build has said "needs a mouse or trackpad" since 0.3, and §5.2 gave two specific reasons rather than waving at "no hover": a press-and-hold has **no aim**, and **a finger covers what it holds**. Both are correct. Reading them against 1.0's flee-and-hold measurement turns up a **third and fatal one that neither 0.1 nor I had noticed**: the fight's counter is holding further away than `SAFE_FLEE_PX` (≈423px), a mouse pays **travel time** to get there, and a finger teleports — so a naive port is not a weaker fight, it is a fight with **no decisions at all**. The two stated objections describe a worse game; the third describes no game.<br><br>**One measured fact answers all three.** The cat is `position: fixed` at the bottom of the viewport and claims are in document flow, so **scroll position *is* distance**: scrolling moves the claim relative to the cat without the cat moving. Measured at 390×844 across three pages, a claim scrolled high sits **683–687px from the cat (safe, 15 of 15)**, centred **413–420px (0 of 16)**, low **161–178px (0 of 16)** — the 423px threshold falling *between* the top band and the middle one, with nothing tuned to put it there. So aim is back, fleeing costs a flick, and §5.2's oldest edge case — "a scroll while channelling is movement, interrupt" — turns out to be the rule that prices it. The same clause written to stop scroll-scrubbing is what makes touch mode a game.<br><br>**Occlusion is answered by moving the feedback, not the finger:** the 40px ring sits exactly where a fingertip is, so on a coarse pointer progress goes *into the claim*, §5.1's wash deepening 7% → 26% so a filling claim arrives at the tint `cat-freed`'s drain begins from. No new art (§0). **Long-press and scroll are suppressed on claimed elements only, only while claimed** — and `touch-action: pinch-zoom`, **not** `none`, because `none` refuses a pinch that begins on a claim and §11 makes zoom a no-exceptions row. None of the three properties affects layout, which is what §11 was restated in 0.3 to admit; the page still restores byte-identically after a touch fight.<br><br>**The code was smaller than the design.** `scrub.x/y` was fed only by `pointermove`, and the one thing a finger does that a cursor cannot is arrive and then emit nothing — so a finger held perfectly still fired `pointerdown`, no `pointermove`, and no hold could register. Everything else was already portable because `stepScrub` polls position per frame instead of reacting to events, and `pointerout` with a null `relatedTarget` turns out to fire on finger *lift*, so §5.3's whiff-on-leaving rule transferred for free. Three genuinely new rules, and they are one discovery: **on touch a hold ends in gestures a dwell never did.** A cursor resting on a link does nothing; a finger resting on one is a click, a text selection, a context menu *and* a drag — and §5.1 deliberately allows a claim *inside* a link, so on a portfolio the core verb landed on link after link. `isTap` decides whether a lift throws. `isWorking` swallows the click that ends a hold on a claim, and reads a flag recorded *during* the hold because a completed hold frees the element, so “is there a claim here” is already false by the time the click arrives — which is why the first attempt still navigated away. And `dragstart` is refused on claims, because a long press on a link is the native link-drag gesture: it fires `pointercancel` and released the hold a few hundred ms in, surfacing as `8 → 8 claims` from a hold that plainly should have taken one. Each needed a browser to find and none of them exists on a mouse.<br><br>**No difficulty lever was added.** Step 0 was run to decide whether a phone fight needed one and the answer was no, so none shipped — the plan reserved the right to a coarse `MIN_BOARD` or an aggression factor, and both would have been magic numbers. One thing is recorded rather than fixed: Chromium applies *touch adjustment* on mobile, snapping a tap that lands near a clickable target onto it, so throwing is fuzzier on a phone than the crosshair makes it on a desktop. Nothing can be done about that from here — but it makes §7.4’s `support-bribe` the only teaching for §5.4 that survives losing the cursor. |
 
 ---
 
@@ -116,10 +120,10 @@ a finite resource.
 
 | Input | Action | Why so few |
 |---|---|---|
-| Move pointer | Aim / flee | The cat's `chase` already keys off cursor proximity. Zero new plumbing. |
-| Hold still on a claim | **Scrub** (channel) | The core verb. Holding *still* while being hunted is the whole tension. |
-| Click / tap | **Throw treat** at cursor position | Sends the cat into existing `fetch`. One button, one resource. |
-| `Esc` | Truce (abort, restore) | Pillar 2. Non-negotiable. |
+| Move pointer · **scroll, on touch** | Aim / flee | The cat's `chase` already keys off cursor proximity. Zero new plumbing. On a phone the cat is `fixed` and claims are not, so scroll position *is* distance (§5.2, 1.2). |
+| Hold still on a claim · **hold a finger on it** | **Scrub** (channel) | The core verb. Holding *still* while being hunted is the whole tension. |
+| Click · **brief tap** | **Throw treat** at cursor position | Sends the cat into existing `fetch`. One button, one resource. On touch, `isTap` separates it from a hold — same gesture otherwise. |
+| `Esc` | Truce (abort, restore) | Pillar 2. Non-negotiable. **No Esc on a phone**, so the toggle carries pillar 2 there alone — which is why §13 makes it permanent. |
 | The arena toggle (§13) | Start / end the fight | The **only** entry point |
 
 Three verbs. Everything else is emergent from their interaction. **No dash, no
@@ -238,7 +242,9 @@ visually — the claim wash borrows `--color-accent`, which the ink never uses)
 **Purpose** The channel that creates tension.
 **Player fantasy** Steady hands under pressure.
 **Input** Pointer within `[PH 40px]` of a claimed element's centre, **moving less
-than `[PH 6px]` per frame**, held.
+than `[PH 6px]` per frame**, held. *(1.2: or a finger held on it — same tolerance,
+same clock. What differs is not the input but where the distance comes from; see the
+touch note below.)*
 **Output** `channelProgress += dt / SCRUB_MS`. At 1.0 the claim clears, territory
 drops by `1 / arenaSize`.
 **Success condition** `SCRUB_MS [PH 1400ms]` — long enough that a pounce can
@@ -252,14 +258,82 @@ partial. Partial retention would remove the reason to buy a safe window.
   would let a player clear the board by flicking.
 - Pointer leaves the window → pause, don't reset (they may be reaching for a
   treat click). Resets on `blur` after `[PH 2s]`.
-- Touch: **not offered.** 0.1 said "no hover, so hold-still is a press-and-hold,
+- ~~Touch: **not offered.**~~ 0.1 said "no hover, so hold-still is a press-and-hold,
   same timer", which sounds equivalent and isn't: a press-and-hold has no *aim*, so
   the tension of keeping a cursor somewhere while something walks at it has nothing
   left in it. Worse, a finger covers the thing it is holding. The build gates the
   toggle behind `(hover: hover) and (pointer: fine)` and says so in the widget —
   the same "not yet, and here's why" treatment reduced motion gets, rather than a
   button that starts a game you cannot play.
-**Tuning levers** `SCRUB_MS`, `STILL_PX`, `INTERRUPT_PENALTY`
+
+  > **Built, 1.2 — and both objections above were right, which is why the answer is not
+  > an input adapter.**
+  >
+  > There is also a **third objection neither 0.1 nor I had noticed, and it is the fatal
+  > one.** 1.0 measured the fight's counter as flee-and-hold: `SAFE_FLEE_PX` ≈ 423px, past
+  > which the cat provably cannot arrive before a hold completes. A mouse pays **travel
+  > time** to reach that distance. A finger teleports. So a naive port is not a fight with
+  > weaker tension — it is a fight with **no decisions at all**, because every hold is free.
+  > The two stated objections describe a worse game; this one describes no game.
+  >
+  > **What answers all three is one fact about a phone, measured rather than invented.** The
+  > cat is `position: fixed` at the bottom of the viewport. Claims are in document flow. So
+  > **scroll position *is* distance** — scrolling moves the claim relative to the cat without
+  > the cat moving. At 390×844, measured across `/`, `/timeline/` and `/experience/`:
+  >
+  > | claim scrolled to | distance from the cat | safe past 423px? |
+  > |---|---|---|
+  > | high (150px down the screen) | 683–687px | **15 of 15** |
+  > | centred | 413–420px | 0 of 16 |
+  > | low | 161–178px | 0 of 16 |
+  >
+  > The threshold falls *between* the top band and the middle one, and I tuned nothing to
+  > put it there — it is 423px meeting an 844px viewport. So **aim is back** (which claim you
+  > work, and how high you put it), it **costs a gesture** (a flick), and §5.2 has said since
+  > 0.1 that a scroll mid-hold interrupts it. The rule that made scroll-scrubbing illegal is
+  > the same rule that now prices fleeing.
+  >
+  > **Occlusion is answered by moving the feedback, not the finger.** The 40px ring is drawn
+  > at the contact point, which is the one place a fingertip is guaranteed to hide, so on a
+  > coarse pointer the progress goes *into the claim*: §5.1's own wash deepens from 7% toward
+  > the 26% that `cat-freed`'s drain begins at, so a filling claim visibly arrives at the tint
+  > its release starts from. No new art (§0), and the claim was already the thing being
+  > watched.
+  >
+  > **One structural change in the code, and it was smaller than the design.** `scrub.x/y` was
+  > fed only by `pointermove`, and the one thing a finger does that a cursor cannot is arrive
+  > somewhere and then emit nothing at all — so a finger held perfectly still fired
+  > `pointerdown` and no `pointermove`, and no hold could ever register. Everything else was
+  > already portable, because `stepScrub` polls the position every frame instead of reacting to
+  > events. `pointerout` with a null `relatedTarget` even turns out to fire on finger *lift*, so
+  > §5.3's "a cursor that leaves mid-leap is a whiff" transferred for free.
+  >
+  > **And three new rules, all of them the same discovery: on touch, a hold ends in gestures a
+  > dwell never did.** A mouse cursor resting on a link does nothing. A finger resting on one is
+  > a click, a text selection, a context menu and a drag — and §5.1 deliberately allows a claim
+  > *inside* a link ("a `.frame` inside a card link is fair game"), so on a portfolio the core
+  > verb landed on link after link.
+  >
+  > - **`isTap` (§10)** — `click` fires when a hold ends as well as when a tap does, so scrubbing
+  >   spent a paw on release every single time. Duration decides.
+  > - **`isWorking` (§10)** — the click that ends a hold on a claim is swallowed, so working on
+  >   something is not pressing it. It reads a flag recorded *during* the hold, because a hold
+  >   that completes frees the element and "is there a claim here" is false by the time the click
+  >   arrives — which is how the first attempt still navigated away. A *tap* on the same link
+  >   still navigates, because §11 promises the page keeps working.
+  > - **`dragstart` refused on claims** — a long press on a link is the native link-drag gesture,
+  >   which fires `pointercancel` and released the hold a few hundred ms in. It surfaced as
+  >   `8 → 8 claims` from a hold that plainly should have taken one. Refused with a listener
+  >   rather than `-webkit-user-drag`, because the drag source is the *link* and the claim is its
+  >   descendant, so the CSS would have to go on somebody else's element.
+  >
+  > **One thing the browser does that cannot be fixed from here, only known:** Chromium applies
+  > *touch adjustment* on mobile, snapping a tap that lands near a clickable target onto it. So
+  > "tap open ground to throw" is fuzzier on a phone than the crosshair makes it on a desktop, and
+  > a tap aimed between two cards may navigate. Nothing to do about it — but it is a reason §7.4's
+  > `support-bribe` line matters more on touch, since it is the only teaching that survives the
+  > loss of the cursor.
+**Tuning levers** `SCRUB_MS`, `STILL_PX`, `INTERRUPT_PENALTY`, `TAP_MS` (touch only)
 **Dependencies** CatBoss.pounce, Claim
 
 > **Built, 0.3.** Hold-still-to-reclaim works, with a 40px ring at the cursor
@@ -968,6 +1042,7 @@ the same as playtested:
 | Var | `[PH]` | Rationale | "Broken" looks like |
 |---|---|---|---|
 | `STILL_PX` | 6 | A hand on a trackpad is never perfectly still, and a mouse jitters a pixel or two. Must be a *distance*, not per-axis, or a diagonal drift passes at 1.4× | 0: the mechanic reads as broken rather than demanding. >12: drifting across a block still clears it |
+| `TAP_MS` | 260 | Touch has one gesture for §3's two verbs, because `click` fires when a *hold* ends as well as when a tap does. Above a real tap (~80–150ms), far below `SCRUB_MS`. Splits both `isTap` (does this throw?) and `isWorking` (is this click swallowed?) | ≥`SCRUB_MS/3`: a deliberate hold reads as a tap and spends a treat. <150: a slow thumb can no longer throw at all |
 | `MAX_TILT` | 0.5° | A nudge, not a glitch — and the ceiling is structural: a rotated full-width block is wider than the page | >2°: horizontal scrollbar on a phone |
 | Claim wash | 7% accent | The most that keeps `.rail` (mono, `--color-muted`) over AA on its own tinted background. 12% read better and measured 4.15:1 | 0%: invisible on a monochrome page. >10%: fails the §11 contrast gate |
 | Claim outline | 2px dashed, 62% accent | Carries the read that the wash can't afford to. Painted, so it costs no layout | 1px at 55%: too quiet to find claims by |
@@ -1050,18 +1125,46 @@ them independently is how this gets unbalanced.
   is `overflow-x: clip` while a fight runs (`clip`, not `hidden`, so no scroll
   container appears and the sticky header still works). An easter egg does not get
   to hand a phone a horizontal scrollbar.
-- **`(hover: hover) and (pointer: fine)`** — the core verb is holding a cursor
+- ~~**`(hover: hover) and (pointer: fine)`**~~ — the core verb is holding a cursor
   still on a thing, so on a touch screen the toggle says "needs a mouse or
   trackpad" instead of starting something unplayable (§5.2).
-  > **Known limitation, recorded in 1.1 — the gate cannot see a keyboard-only visitor.**
-  > A desktop with a mouse attached satisfies the query whether or not anyone is touching the
-  > mouse, so someone navigating by keyboard can press the toggle and open a fight they cannot
-  > play: there is no scrub without a pointer. Nothing in CSS or JS distinguishes "has a fine
-  > pointer" from "is using one", so this is not fixable by widening the gate. What holds it
-  > together is that Esc always ends it, the arena traps no focus, and the whole thing is
-  > `aria-hidden` — so the worst case is a page that looks briefly odd and closes on one key.
-  > The real answer would be a keyboard verb for §5.2, which is a feature and not a fix, and is
-  > not being invented at review time.
+  > **Overturned in 1.2, the way 0.2 overturned the reduced-motion row above — and for the
+  > same reason.** That row was reversed once there was an explicit opt-in, because withholding
+  > the game then stopped being protection and became a decision made on someone's behalf. This
+  > one held longer and more honestly: the fight really was unplayable on a phone, and §5.2 said
+  > why in two specific objections rather than waving at "no hover".
+  >
+  > What changed is not the gate, it is that the objections were answered — see §5.2's 1.2 note.
+  > Scroll position turns out to be distance on a phone, which restores aim and gives fleeing a
+  > price; the progress moved off the fingertip into the claim; and `isTap` split the one gesture
+  > into the two verbs §3 needs. **Nothing here was relaxed to fit.** The three touch properties
+  > that make a held finger possible are on claimed elements only, only while claimed, and none
+  > of them affects layout — which is what this section's "transform and filter only" was
+  > restated in 0.3 to admit.
+  >
+  > The zoom row below is why `touch-action` is **`pinch-zoom`** and not `none`. `none` is the
+  > obvious way to stop a scroll stealing a hold and it would have refused a pinch that began on
+  > a claim, which this document calls a no-exceptions row. `pinch-zoom` refuses panning only.
+  >
+  > What *is* still gated: reduced motion, unchanged.
+  > **Known limitation, carried from 1.1 — the gate cannot see a keyboard-only visitor.**
+  > Someone navigating by keyboard can press the toggle and open a fight they cannot play: there
+  > is no scrub without a pointer, and nothing in CSS or JS distinguishes "has a pointer" from
+  > "is using one". Removing the coarse-pointer gate in 1.2 neither helped nor hurt this — a
+  > keyboard user on a desktop always satisfied it — but it does leave them the only visitor the
+  > toggle offers something it cannot deliver.
+  >
+  > **And touch mode does not supply the answer, though it looks as if it should.** The touch
+  > verb is "hold a finger on a thing", and a keyboard's equivalent would be "hold a key on a
+  > *focused* thing" — but §5.1 excludes everything tabbable from being claimable in the first
+  > place, precisely so the fight never touches what you can reach by keyboard. The two rules
+  > are consistent and they close the door: a keyboard verb needs a way to address a claim, and
+  > this design deliberately gives claims no address.
+  >
+  > What holds it together meanwhile is that Esc always ends it, the arena traps no focus, and
+  > the whole thing is `aria-hidden` — so the worst case is a page that looks briefly odd and
+  > closes on one key. A real keyboard verb is a feature, not a fix, and is not being invented
+  > at the end of an unrelated one.
 - **Contrast gate** — no claimed element may push text below WCAG AA. Verify with
   the existing backdrop-sampling harness, not by eye; sampling the composite
   gives false passes (it reads the glyphs — that mistake already cost a round on
@@ -1334,10 +1437,135 @@ want it. The clean line now carries the question itself. The unit tests could no
 this: every line was reachable and every gate correct in isolation. It needed a real fight to
 show which branch a good player actually lands on.
 
+**1.2 — touch mode, designed from a measurement rather than from an opinion.** 410 unit tests, a
+43-check touch harness (`scratchpad/touch-fight.mjs`) driving real touches through CDP because
+Playwright's `touchscreen` only taps and the core verb is a **hold**, `arena.mjs` up to 63 with its
+touch section rewritten from asserting the refusal to asserting the fight, and every other harness green on the
+same build (63, 27, 36, 39, 21, 46, 25, 25, 20 · ink 20/20 · cycle), and a warning-free build.
+
+**Then the browser found three rules the design had not thought of, and they are one discovery:
+on touch, a hold ends in gestures a dwell never did.** A cursor resting on a link does nothing. A
+finger resting on one is a click, a text selection, a context menu *and* a drag — and §5.1
+deliberately allows a claim *inside* a link, which on a portfolio is most of them. So: the click
+that ends a hold is swallowed (`isWorking`), the lift only throws if it was a tap (`isTap`), and
+`dragstart` is refused on claims. The third one is the one I would never have predicted: a long
+press on a link starts the native link-drag, which fires `pointercancel` and quietly released the
+hold a few hundred milliseconds in — **only on claims inside links**, so most of the board on an
+index page and none of it on a prose page.
+
+Two of the three were first written wrong in the same way, and it is worth naming: I reached for
+the DOM at click time — `e.target.closest('.cat-claimed')` — and a hold that *completes* has
+already freed its element, so the check read false at exactly the moment it was needed and the
+page navigated out from under a fight the player had just won. **The question was about the
+gesture, and the gesture is over by the time you can ask.** The flag has to be set while the hold
+is happening. That is the same shape as 1.1's four lifetime bugs, arriving from the other end.
+
+**The whole design came out of step 0, and step 0 was the point.** §5.2's two objections had held
+for eleven versions and I could have answered them plausibly and wrongly. Instead: three passes of
+measurement before a line of mechanic. What they found, in order —
+
+- **The board leaves the screen on a phone, by a lot.** `boardSlice` borrows from past the fold
+  when the on-screen candidates cannot reach `MIN_BOARD`, and a 390px viewport is exactly the
+  "screen too thin to hold a game" case that clause was written for: boards spanning **1.3–3.5
+  screens**, 8 claims on `/` and `/timeline/`, 3 on `/experience/`.
+- **My first threat metric measured the wrong space.** "Distance to the cat" used
+  `getBoundingClientRect()` — viewport-relative — on claims sitting up to 3000px down the
+  document, so it reported *document* distance and called it threat. Reported 75% of claims
+  "already safe" when the honest number, taken once each claim is actually on screen, is different
+  in kind. The third time this build has measured fleeing in the wrong space (0.9's harness, then
+  1.1's arena3 A/B).
+- **Corrected, it said 0 of 19 claims were safe** — 407–422px against a 423px requirement, on
+  every page. Read flat that is "a phone fight is unwinnable". Read properly it is the mechanic:
+  422px is *half of 844*, and the cat is fixed at the bottom while claims are not. **Scroll
+  position is distance.** Pass three confirmed the gradient: high 683–687px (15/15 safe), centred
+  413–420px (0/16), low 161–178px (0/16).
+
+That is a designed mechanic arrived at by arithmetic I did not write — `SAFE_FLEE_PX` was derived
+in 1.0 for a desktop endgame, and it happens to land one pixel above the middle of a phone screen.
+**No difficulty lever shipped**, because step 0 was run to decide whether one was needed and said
+no. The plan reserved the right to add a coarse `MIN_BOARD` or an aggression factor; both would
+have been magic numbers.
+
+**Nine harness faults, and the pattern is now unmistakable.** A helper that reported a claim as
+"placed high" without checking the scroll had put it there — so the fight was played in the danger
+band and called safe, the same shape as 1.1's arena8 fighting on the wrong page. A hit-test run
+immediately after `scrollTo`, which caught the site's `sticky` header mid-reposition and returned
+`NAV.tabbar` at every height; measured with a settle, the chrome scrolls away and the page owns a
+**166–402px** safe band. An assertion matching `/rgba?\(/` that failed on
+`color(srgb … / 0.17184)` — testing Chromium's choice of notation while the wash worked perfectly
+(the alpha is exactly `7% + 19% × 0.536`). And a `-webkit-touch-callout` check read through the
+CSSOM, which Chromium strips because it does not implement the property: the declaration was in
+the shipped CSS all along, and the honest question is what the *network* served.
+
+Two more came from the browser doing something reasonable that the harness did not model. A point
+reported as open ground by `elementFromPoint` still navigated when tapped, because **Chromium
+applies touch adjustment on mobile** and snaps a tap near a clickable target onto it — so the
+throw check failed for having no fight left rather than for anything to do with throwing, and the
+helper now requires a whole neighbourhood to be free. And the probe meant to leave a touch on the
+record for the hybrid check held a *claim* for 120ms, which is a tap, on an element that may sit
+inside a link: it navigated, and again the failure landed on an unrelated assertion. A third of the
+same family: a point found before `place()` scrolled the page, then tapped afterwards, when the
+coordinates belonged to whatever had scrolled into them. **All three say the same thing — a
+coordinate is only as good as the moment it was taken, and every one of them failed a check that
+was not the one at fault.**
+
+**The one that took longest, and it was the site.** A hold on a claim inside a link scrubbed
+nothing, reproducibly. Three theories came and went — the click, the link-drag, the board count —
+and the last of them was right about *why the count lied* and still wrong about this. What settled
+it was following the element itself across time: a claim spanning y 137..156 when the point was
+chosen spanned y 126..145 sixty milliseconds later, at **identical `scrollY`**. The site reveals
+content on scroll with a `translateY` transition, so a claim scrolled into view keeps *travelling*
+for a few hundred milliseconds — and the point picked at its centre was past its bottom edge by the
+time the finger landed, so `elementFromPoint` returned the parent link and the game correctly
+scrubbed nothing. §12 recorded this in 0.8 against the site's smooth-scroll; the scroll-reveal is
+the same trap one layer over, and a fixed pause cannot fix either. The finders now wait for the
+rect to stop changing.
+
+**And it explains a flake this build has been misreading since 1.0.** `arena8` has intermittently
+reported `nothing parkable` — every claim failing its `elementFromPoint` check, which the harness
+surfaces as *"a fight cannot be won"*. 1.1 saw it, patched section 2 around it by fighting on a
+different page, and wrote the patch up as the fix. It was not: the cause is this, in
+`placeFarTarget`, which scrolled a claim to the bottom of the viewport and hit-tested it while the
+reveal was still carrying it. Now hardened the same way. **Three versions of a flake attributed to
+the board running out of distance, and it was the harness photographing a moving object** — which
+is the strongest argument yet for the rule §12 keeps rediscovering: when a measurement disagrees
+with the design, suspect the measurement first, and go and watch the thing rather than theorise
+about it. Two of the theories I formed about this one were plausible, cheap to implement, and wrong.
+
+**Worth keeping as a design note rather than a fix:** that means a player who scrolls and holds
+*immediately* can miss, for as long as the reveal runs. The reveal belongs to the site rather than
+the game, holding again works, and touch mode is not going to start suppressing the page's own
+animations — but it is real friction that only exists on touch, because only on touch is scrolling
+part of the verb.
+
+**And the one where a game mechanic invalidated the metric.** "Did my hold reclaim
+something" was measured as the board count going down — and it failed intermittently, on whichever
+runs happened to roll **siege**, whose regrow puts back *the most recently freed element*. So a
+hold that worked perfectly read `8 → 7 → 8`, and the count said nothing happened. Three separate
+theories about what was interrupting the hold came and went before a diagnostic recorded the actual
+events — `pointerup`, then a correctly prevented `click`, no `pointercancel` anywhere — which is
+what ruled out interruption entirely and left "it worked, and something put it back". The checks
+now watch for `.cat-freed`, which `free(node, true)` adds on a completed scrub and nothing else
+does. **A count is a proxy; the class is the event.** That is 1.1's lesson in a new disguise, and
+the disguise is what makes it worth writing down twice: the proxy was not prose or `aria-pressed`
+this time, it was a number that genuinely counts the right things and is held constant by a
+mechanic the check had no reason to know about. (An eighth, smaller: a link-finder that did not
+scroll reported "no link in the band" once earlier checks had left the page elsewhere — §11's
+promise failing where only the harness was standing in the wrong place.)
+
+Two of the nine are §12's oldest lesson — **measure in the space the mechanic lives in** — and two
+are the 1.1 lesson: *a check that names its own expected format is testing the format.* One more
+worth keeping: the first version of the tap-versus-hold section found no treats in hand on a cold
+load and **skipped both checks while printing PASS**, which is precisely the "guard that turns a
+failure into an absence" 1.1 wrote up. It now earns treats by tapping through tabs, and asserts on
+`#cat-throw` rather than on the paw row — because counting paws across a hold caught a *win*, and
+§7.2 hands spent treats back on close, so "did not throw" read as `3 → 4 in hand` and failed for
+being right.
+
 **1.1 — §7.1, then a review pass over the whole thing.** 404 unit tests, a 20-check harness
 for the top state (`scratchpad/top-state.mjs`), every earlier harness green on one build (60, 27,
-36, 39, 21, 46, 25, 25), the ink harness, the cycle check and a warning-free build. `arena.mjs` gains a check for the truce bug below, since
-that one had eight harnesses' worth of room to hide in.
+36, 39, 21, 46, 25, 25), the ink harness, the cycle check and a warning-free build. `arena.mjs`
+gains a check for the truce bug below, since that one had eight harnesses' worth of room to hide in.
 
 **And one test written against a bug that already shipped.** 1.0's unreachable line — §9.4's
 rematch offer shadowing `win-clean`, so the offer never reached the player most likely to want

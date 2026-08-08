@@ -12,6 +12,9 @@ import {
   INITIAL_CLAIM_FRACTION,
   SCRUB_MS,
   STILL_PX,
+  TAP_MS,
+  isTap,
+  isWorking,
   HIDDEN_TRUCE_MS,
   IDLE_TRUCE_MS,
   TELEGRAPH_MS,
@@ -363,6 +366,51 @@ describe('stillEnough', () => {
 
   it('is a real tolerance, not zero', () => {
     expect(STILL_PX).toBeGreaterThan(0);
+  });
+});
+
+describe('one finger, two verbs (§3, touch mode in 1.2)', () => {
+  it('calls a quick touch a tap, and a hold not', () => {
+    expect(isTap(90)).toBe(true);
+    expect(isTap(TAP_MS)).toBe(true);
+    expect(isTap(TAP_MS + 1)).toBe(false);
+    expect(isTap(SCRUB_MS)).toBe(false);
+  });
+
+  it('leaves daylight between a real tap and the core verb', () => {
+    // A human tap is ~80-150ms; anything at or under TAP_MS must be a tap, and TAP_MS must sit
+    // far enough below SCRUB_MS that a deliberate hold can never be mistaken for one.
+    expect(TAP_MS).toBeGreaterThan(150);
+    expect(TAP_MS).toBeLessThan(SCRUB_MS / 3);
+  });
+
+  /*
+   * `isWorking` is the one that keeps §11's promise and §5.2's verb at the same time. §5.1 allows
+   * a claim inside a link; on touch a hold ends in a `click`; so without this the core verb
+   * navigated off the page. The two conditions have to be *both*, and each rules out a different
+   * way of getting it wrong.
+   */
+  it('swallows the click that ends a hold on a claim', () => {
+    expect(isWorking(SCRUB_MS, true)).toBe(true);
+    expect(isWorking(TAP_MS + 1, true)).toBe(true);
+  });
+
+  it('but never a tap — §11 promises a link still navigates', () => {
+    expect(isWorking(90, true)).toBe(false);
+    expect(isWorking(TAP_MS, true)).toBe(false);
+  });
+
+  it('and never a long press on something the fight does not own', () => {
+    // A reader resting a finger on an ordinary link is not playing, and the page must keep
+    // working. Gating on duration alone would have broken every long-press on the site.
+    expect(isWorking(4000, false)).toBe(false);
+  });
+
+  it('the two verbs cannot both fire, and cannot both decline', () => {
+    // On a claim, every duration is exactly one of "tap" (throws) or "working" (swallowed).
+    for (const held of [0, 50, TAP_MS - 1, TAP_MS, TAP_MS + 1, 900, SCRUB_MS, 9000]) {
+      expect(isTap(held) !== isWorking(held, true), `held=${held}`).toBe(true);
+    }
   });
 });
 

@@ -115,6 +115,43 @@
     /* the pointer is the tool, so a claim says it is a target */
     cursor: crosshair;
   }
+
+  /* ---- touch (§5.2, answered in 1.2) ----
+     Three properties, only on claimed elements, only while claimed, and removed with the class.
+
+     A finger held on a claimed *link* for 1400ms is a long-press: iOS raises its link preview,
+     Android its context menu, and either one eats the core verb. And any held finger is a
+     candidate scroll, so the page slides out from under the hold.
+
+     `touch-action: pinch-zoom` and **not** `none`: `none` would refuse a pinch that begins on a
+     claim, and §11 makes zoom a no-exceptions row. This refuses panning only — which is the
+     thing that was stealing the hold — and leaves the gesture an accessibility requirement
+     depends on.
+
+     None of the three affects layout, which is what §11's rule was restated in 0.3 to admit. */
+  @media (hover: none), (pointer: coarse) {
+    :global(.cat-claimed) {
+      -webkit-touch-callout: none;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: pinch-zoom;
+      /* no cursor to be a crosshair; the claim itself is the affordance */
+      cursor: auto;
+    }
+    /* The hold's progress, shown *in the claim* rather than at the finger that is covering it.
+       Reuses §5.1's own wash — the same `--color-accent` inset, scaled from the 7% of a claim up
+       toward the 26% the `cat-freed` drain starts at, so a filling claim is visibly on its way to
+       being released and arrives at exactly the tint the release animation begins from. `--scrub`
+       is set per-frame by `showScrub` and cleared by `hideRing`. */
+    :global(.cat-claimed) {
+      box-shadow: inset 0 0 0 100vmax
+        color-mix(
+          in srgb,
+          var(--color-accent) calc(7% + 19% * var(--scrub, 0)),
+          transparent
+        );
+    }
+  }
   /* The moment it comes back to you: the wash drains out rather than blinking off.
      Kept off under reduced motion like everything else, though the arena itself
      does not open there yet. */
@@ -419,6 +456,8 @@
     claimTilt,
     scrubProgress,
     stillEnough,
+    isTap,
+    isWorking,
     arenaCaption,
     territory,
     isWon,
@@ -546,6 +585,26 @@
      * counted as standing still and being caught — the opposite of the rule.
      */
     inside: false,
+  };
+
+  /**
+   * The current touch, so a **tap** can be told from a **hold** (§3, §5.2 as answered in 1.2).
+   *
+   * On a mouse these are different events: `click` throws, dwelling scrubs, and nothing about
+   * one produces the other. A finger does both with the same gesture — `click` fires when it
+   * lifts — so scrubbing a claim would have spent a paw on release, every single time. The
+   * discriminator has to be what the touch *did*, not where it was: a tap is brief and reclaimed
+   * nothing; anything that made scrub progress was the player working, and working is not asking
+   * to throw.
+   */
+  const touch = {
+    /** When the finger went down, and 0 for a mouse — see the `pointerdown` handler. */
+    at: 0,
+    /**
+     * Did this touch ever have a claim under it? Recorded *while it happens*, because a completed
+     * hold frees the element before the click arrives — see `isWorking` in `arena.ts`.
+     */
+    onClaim: false,
   };
 
   const el = (id: string) => document.getElementById(id);
@@ -733,7 +792,50 @@
   function hideRing(): void {
     const r = ring();
     if (r) r.hidden = true;
+    if (scrubbing) {
+      scrubbing.style.removeProperty('--scrub');
+      scrubbing = null;
+    }
   }
+
+  /** The claim currently showing its own progress, so exactly one ever does. */
+  let scrubbing: HTMLElement | null = null;
+
+  /**
+   * Where the hold's progress is shown — and on touch it cannot be at the pointer.
+   *
+   * §5.2 rejected touch partly because "a finger covers the thing it is holding", and it is
+   * right: the ring is a 40px circle centred on the contact point, which is the one place a
+   * fingertip is guaranteed to hide. So on a coarse pointer the progress goes **into the claim**
+   * — it already carries a wash and a dashed edge (§5.1), so it is already the object the player
+   * is watching, and filling it needs no new art (§0).
+   *
+   * One claim at a time, tracked in `scrubbing`, because a stale `--scrub` left on an element the
+   * finger has moved off would show a hold that is not happening — and `free()` restores the
+   * `style` attribute verbatim, so a custom property left behind would be restored *as the
+   * original*, which is pillar 2's exact failure.
+   */
+  function showScrub(target: HTMLElement, x: number, y: number, progress: number): void {
+    if (!coarse()) {
+      showRing(x, y, progress);
+      return;
+    }
+    if (scrubbing && scrubbing !== target) scrubbing.style.removeProperty('--scrub');
+    scrubbing = target;
+    target.style.setProperty('--scrub', progress.toFixed(3));
+  }
+
+  /**
+   * Does this visitor's pointer land rather than travel?
+   *
+   * The query object is made **once** and its `.matches` read per frame, not `matchMedia()` called
+   * per frame: `showScrub` runs inside the rAF loop, and minting a fresh `MediaQueryList` sixty
+   * times a second to ask a question whose answer almost never changes is the kind of waste §14's
+   * frame budget was rewritten to avoid. Still live — a tablet that gains a keyboard case, or a
+   * desktop the visitor starts touching, flips `.matches` on the same object.
+   */
+  const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
+  const coarse = () => !finePointer.matches;
 
   /** The claimed element under the pointer, if any. */
   function claimUnder(x: number, y: number): HTMLElement | null {
@@ -788,7 +890,13 @@
      */
     scrub.seen = now;
     const progress = scrubProgress(now - scrub.since);
-    showRing(scrub.x, scrub.y, progress);
+    /*
+     * Remembered here because this is the only place that knows a hold had a claim under it — and
+     * it has to be remembered rather than re-derived, since a *completed* hold frees the element
+     * before the click that ends the touch arrives. `isWorking` is what reads it.
+     */
+    touch.onClaim = true;
+    showScrub(target, scrub.x, scrub.y, progress);
     if (progress < 1) return progress;
 
     // reclaimed
@@ -1828,12 +1936,20 @@
    */
   function blockedBecause(): string | null {
     if (motionReduced()) return 'Not while motion is reduced — there is no still version of this yet.';
-    // The core verb is *holding a cursor still on a thing*. A touch screen has no
-    // hover to hold, so on a phone this would be a button that starts a game you
-    // cannot play. Saying so beats hiding it and beats faking it.
-    if (!matchMedia('(hover: hover) and (pointer: fine)').matches) {
-      return 'Needs a mouse or trackpad — the touch version isn’t designed yet.';
-    }
+    /*
+     * The coarse-pointer refusal is **gone as of 1.2**, and what replaced it was not an input
+     * adapter. §5.2 rejected touch on two grounds — a press-and-hold has no aim, and a finger
+     * covers what it holds — and 1.0's flee-and-hold measurement implies a third and worse one:
+     * a mouse pays travel time to reach safety and a finger teleports, so every hold would be
+     * free and the fight would have no decisions at all.
+     *
+     * All three are answered by one fact about a phone, measured rather than assumed: the cat is
+     * `position: fixed` at the bottom of the viewport and claims are in document flow, so
+     * **scroll position is distance**. At 390×844 a claim held high on the screen sits 683–687px
+     * from the cat (safe past `SAFE_FLEE_PX` ≈ 423px, 15 of 15 measured), centred it is 413–420px
+     * (0 of 16 safe), and low it is 161–178px. Aim is back, it costs a flick, and §5.2 already
+     * ruled that a scroll mid-hold interrupts it. See the 1.2 note in the GDD.
+     */
     return null;
   }
 
@@ -1925,6 +2041,127 @@
     );
 
     /*
+     * Touch (§5.2, answered in 1.2). **The whole input gap was this listener not existing.**
+     *
+     * `scrub.x/y` was fed only by `pointermove`, and the one thing a finger does that a mouse
+     * cannot is arrive somewhere and then emit nothing at all. A finger placed and held
+     * perfectly still fires `pointerdown` and no `pointermove`, so the position stayed at -1
+     * and no hold could ever register. Everything else about the scrub was already portable,
+     * because `stepScrub` polls the position every frame rather than reacting to events.
+     *
+     * Velocity is **zeroed, not sampled**. §5.3's aim leads the pointer, and a first touch has
+     * no previous sample to lead from — the same reasoning the `dt` window above uses, arrived
+     * at by the same bug. A finger also cannot be led anywhere: it does not travel, it lands.
+     *
+     * The anchor and the clock are reset too, so a new touch starts a fresh hold rather than
+     * inheriting the last one's progress from wherever the previous finger was.
+     */
+    window.addEventListener(
+      'pointerdown',
+      (e) => {
+        if (!arena.on) return;
+        /*
+         * A mouse press **clears** the touch record rather than ignoring it, so the most recent
+         * press is what the `click` handler below reads. Returning early instead left `touch.at`
+         * set forever after a single tap — and on a hybrid device (a touchscreen laptop, the one
+         * machine where both inputs are real) every subsequent *mouse* click was then measured
+         * against a timestamp from minutes earlier, failed the tap test, and silently stopped
+         * throwing treats. §5.4 going quiet with no error is exactly the failure §5.4 forbids.
+         */
+        if (e.pointerType === 'mouse') {
+          touch.at = 0;
+          return;
+        }
+        const now = performance.now();
+        scrub.x = scrub.ax = e.clientX;
+        scrub.y = scrub.ay = e.clientY;
+        scrub.vx = scrub.vy = 0;
+        scrub.at = now;
+        scrub.since = now;
+        scrub.seen = now;
+        scrub.inside = true;
+        scrub.target = null; // let `stepScrub` decide what is under the finger this frame
+        touch.at = now;
+        touch.onClaim = false;
+      },
+      { passive: true },
+    );
+
+    /*
+     * Lifting a finger ends the hold, and is not a mouse leaving the window.
+     *
+     * `pointerout` with a null `relatedTarget` already fires on lift and already clears
+     * `scrub.inside` — §5.3's "a cursor that leaves mid-leap is a whiff" turns out to describe
+     * touch exactly, for free. What it does *not* do is release the hold anchor, so without
+     * this the next touch could inherit a stale `since` and complete a scrub it never held.
+     */
+    const liftFinger = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse') return;
+      scrub.x = scrub.y = -1;
+      scrub.ax = scrub.ay = -1;
+      scrub.target = null;
+      scrub.inside = false;
+      hideRing();
+    };
+    window.addEventListener('pointerup', liftFinger, { passive: true });
+    window.addEventListener('pointercancel', liftFinger, { passive: true });
+
+    /*
+     * **A hold must not also be a click.** Found by a harness reporting `8 → 0 claims` from a
+     * single hold, which is a win the fight had not earned — the fight had *navigated away*.
+     *
+     * §5.1 deliberately allows a claim *inside* a link: `PROTECTED` excludes `a` from being
+     * claimed itself but not from containing one, because "a `.frame` inside a card link is fair
+     * game — tilting it leaves the link focusable, clickable and exactly where it was". True on a
+     * mouse, where dwelling on a link never clicks it. On touch a hold **ends in a click**, so the
+     * core verb navigated off the page on most of a portfolio, where nearly everything is inside a
+     * link. `touch-action` and `user-select` do nothing about this; only the click does.
+     *
+     * Capturing, and only for the click that *terminates a hold on a claim* — `isWorking`, which
+     * reads a flag recorded during the hold rather than the DOM at click time. The first attempt
+     * asked `e.target.closest('.cat-claimed')` and still navigated: a hold that *completes* frees
+     * the element, so the check read false at precisely the moment it was needed. The question is
+     * about the gesture, and the gesture is over by the time you can ask.
+     *
+     * A genuine tap on a claimed link still navigates, because §11 promises the page keeps
+     * working. So the rule is exactly "working on a claim is not pressing it" — the same thing
+     * the crosshair says on a desktop, except here it has to be enforced rather than drawn.
+     */
+    window.addEventListener(
+      'click',
+      (e) => {
+        if (!arena.on || !touch.at) return;
+        if (!isWorking(performance.now() - touch.at, touch.onClaim)) return;
+        e.preventDefault();
+        e.stopPropagation();
+      },
+      { capture: true },
+    );
+
+    /*
+     * **A held finger on a claimed link is a link *drag* to the browser.**
+     *
+     * Found as `8 → 8 claims` from a hold that plainly should have taken one: not a click this
+     * time but a drag. A long press on an `<a>` starts the native link-drag gesture, which fires
+     * `pointercancel` — so the hold released itself a few hundred milliseconds in, every time,
+     * only on claims that sit inside links. `touch-action` does not cover it (that governs
+     * panning and zooming), and neither does `user-select` (that governs text).
+     *
+     * Refused here rather than with `-webkit-user-drag` in CSS, because the drag source is the
+     * *link* and the claim is its descendant — the property would have to go on somebody else's
+     * element, and this is one listener that stops when the fight does.
+     */
+    window.addEventListener('dragstart', (e) => {
+      // Coarse pointers only. On a desktop a drag is deliberate — nobody drags an image by
+      // accident — and dragging a figure out of a page is a real affordance §11 has no reason to
+      // take away. The bug is specifically that a *long press* is indistinguishable from the start
+      // of a link-drag, and long-press-as-drag is a touch behaviour.
+      if (!arena.on || !coarse()) return;
+      const t = e.target;
+      if (t instanceof Element && t.closest('.cat-claimed')) e.preventDefault();
+    });
+
+    /*
      * Click to throw (§3, §5.4).
      *
      * Anything the page uses is left alone: a click on something `INTERACTIVE` — a link, a
@@ -1943,7 +2180,15 @@
       if (!arena.on) return;
       const t = e.target;
       if (t instanceof Element && (t.closest(INTERACTIVE) || t.closest('#cat-hud'))) return;
+      /*
+       * On touch, `click` also arrives when a *hold* ends — same gesture, same event — so the
+       * throw has to ask whether this was a tap. `touch.at` is stamped by `pointerdown` and
+       * cleared on a throw, so a zero here means the click came from a mouse and nothing changes
+       * for the path that has worked since 0.5.
+       */
+      if (touch.at && !isTap(performance.now() - touch.at)) return;
       throwTreat(e.clientX, e.clientY);
+      touch.at = 0;
     });
 
     // The pointer leaving the window is not the same as the pointer holding still
