@@ -27,6 +27,7 @@ import {
   AIM_LEAD_MS,
   STALK_SPEED,
   OPENING_GRACE_MS,
+  OPENING_LINE_MS,
   LURE_MS,
   FETCH_SPEED,
   phaseDuration,
@@ -219,10 +220,16 @@ describe('boardSlice — the fight is over the screen (§4)', () => {
 
   it('is tuned inside the design’s own bounds', () => {
     // §10: under four claims the fight is over before it starts; over twenty the page is
-    // unreadable. The board is 55% claimed, so the floor has to leave 4+ claims.
+    // unreadable. The board is 55% claimed, so the floor has to leave 4+ claims. 1.3 shrank
+    // both numbers (14/20 → 10/14) because every stance now regrows, and churn costs time —
+    // see the note on `MIN_BOARD`.
     expect(MIN_BOARD * INITIAL_CLAIM_FRACTION).toBeGreaterThanOrEqual(4);
     expect(MAX_BOARD).toBeLessThanOrEqual(20);
     expect(MIN_BOARD).toBeLessThanOrEqual(MAX_BOARD);
+    // 1.3: the board shrank. Both constants moved together, and the floor stayed above the
+    // "over before it starts" line rather than riding it.
+    expect(MIN_BOARD).toBeLessThan(14);
+    expect(MAX_BOARD).toBeLessThan(20);
   });
 
   it('keeps document order, so a claim’s tilt belongs to its place on the page', () => {
@@ -668,6 +675,14 @@ describe('the opening grace', () => {
     expect(OPENING_GRACE_MS).toBeGreaterThan(SCRUB_MS);
     expect(OPENING_GRACE_MS).toBeLessThan(SCRUB_MS * 3);
   });
+
+  it('speaks the first line inside the grace — the teach line must land while the cat cannot pounce', () => {
+    // 1.3: the playtest's opening was silent, then wrong. The teach line (§8) is only a
+    // safe context if it arrives inside OPENING_GRACE_MS, where §5.3 guarantees the cat
+    // cannot pounce — so the first-line delay is pinned below the grace by test.
+    expect(OPENING_LINE_MS).toBeGreaterThan(0);
+    expect(OPENING_LINE_MS).toBeLessThan(OPENING_GRACE_MS);
+  });
 });
 
 describe('aggression (§7.3) — difficulty as characterisation', () => {
@@ -756,7 +771,9 @@ describe('aggression (§7.3) — difficulty as characterisation', () => {
 
   it('does not flap when a single claim trades back and forth', () => {
     // The concrete version of the rule above, on the smallest board the query ever deals.
-    const claims = [11, 10, 11, 10, 11, 10];
+    // 8 and 7 claims on a 10-claim board straddle the bored enter threshold (0.72): one
+    // claim back and forth must not strobe the tier.
+    const claims = [8, 7, 8, 7, 8, 7];
     let m: Mood = 'even';
     let changes = 0;
     for (const c of claims) {
@@ -895,9 +912,25 @@ describe('stances (§9.3)', () => {
     }
   });
 
-  it('gives exactly one stance a regrowing board and one a floor it will not leave', () => {
-    expect(all.filter((s) => STANCES[s].regrowMs > 0)).toEqual(['siege']);
+  it('gives every stance a clock except the gift, and one a floor it will not leave', () => {
+    // 1.3: the playtest found ~61% of fights had no clock — only siege regrew, so keeping
+    // your distance cost nothing and the cat was scenery. Now ambush and trickster regrow
+    // too (derived from the reclaim rate, see §10), and only sleepy — "a gift, and rare
+    // enough to be a story" (§9.3) — keeps regrowMs 0, because a gift with a clock is not
+    // a gift.
+    expect(all.filter((s) => STANCES[s].regrowMs > 0)).toEqual(['ambush', 'siege', 'trickster']);
     expect(all.filter((s) => STANCES[s].pin)).toEqual(['siege']);
+  });
+
+  it('keeps the regrow slower than the reclaim rate — the treatless floor must stay winnable', () => {
+    // Derived in 1.3, not invented: a player reclaims about one claim per ~2s (§10), so a
+    // regrow faster than ~2000ms is unwinnable for a treatless fight (the arena8 gate) and
+    // one much slower is decoration. Every regrowing stance sits inside the band.
+    for (const s of all) {
+      if (STANCES[s].regrowMs === 0) continue;
+      expect(STANCES[s].regrowMs, s).toBeGreaterThan(2000);
+      expect(STANCES[s].regrowMs, s).toBeLessThan(2 * 9000);
+    }
   });
 
   it('only the trickster feints, and not most of the time', () => {
@@ -1098,15 +1131,19 @@ describe('the handicap ladder (§9.4)', () => {
     expect(pickLine(won(3, 3))).toBe('win-floor');
   });
 
-  it('says something as a handicapped fight opens, and nothing in a normal one', () => {
+  it('says something as a handicapped fight opens, and teaches a normal one', () => {
+    // 1.3: a normal opening is no longer silent — the teach line is the whole fix. The
+    // laddered opening still outranks it: explaining the withheld paw beats re-teaching
+    // the verb to someone who has already fought.
     const opening = (rung: number) => ({ ...base, rung, freed: 0, spent: 0, territory: 0.55 });
     expect(pickLine(opening(1))).toBe('rung-open');
-    expect(pickLine(opening(0))).toBe(null);
+    expect(pickLine(opening(0))).toBe('teach-hold');
   });
 
-  it('stops saying it once the fight is actually under way', () => {
+  it('stops explaining the terms once the fight is actually under way', () => {
     // Gated on nothing having happened yet, or the cat would keep explaining the terms.
-    expect(pickLine({ ...base, rung: 1, freed: 1, spent: 0, territory: 0.55 })).toBe(null);
+    // (The dead-band filler below still fires at this territory — that is a different line.)
+    expect(pickLine({ ...base, rung: 1, freed: 1, spent: 0, territory: 0.55 })).not.toBe('rung-open');
   });
 
   it('hands a paw back on a loss without gloating about it', () => {
@@ -1153,8 +1190,65 @@ describe('the cat’s writing (§8)', () => {
     for (const l of LINES) expect(l.text, l.id).not.toContain("'");
   });
 
-  it('says nothing at all when nothing is happening', () => {
-    expect(pickLine(base)).toBe(null);
+  it('teaches the verb at the opening — the first line a confused player ever hears', () => {
+    /*
+     * 1.3's whole reason to exist: the playtest's cold visitor opened a fight at territory
+     * 0.55 with nothing freed and nothing spent, and the cat said *nothing* — the state sat
+     * in the dead band between rattled-50 and bluff-75, so the first words the player ever
+     * heard were support-idle's "you can stop any time." at 8 seconds. The opening is no
+     * longer silent: the teach line fires there and only there.
+     */
+    expect(pickLine(base)).toBe('teach-hold');
+    // ...and only there: once the player has done anything, the tutorial is done.
+    expect(pickLine({ ...base, freed: 1 })).not.toBe('teach-hold');
+    expect(pickLine({ ...base, spent: 1 })).not.toBe('teach-hold');
+    expect(pickLine({ ...base, ending: 'truce' })).not.toBe('teach-hold');
+  });
+
+  it('does not hand the opening to support-idle — mercy is for someone who tried', () => {
+    // The playtest's exact failure: idle > 8s used to fire "you can stop any time." to a
+    // player who had not started. Re-gated so it only reads as mercy after an attempt —
+    // and the teach line above it wins the opening even when the clock has run.
+    expect(pickLine({ ...base, idleMs: 9000 })).toBe('teach-hold');
+    expect(pickLine({ ...base, idleMs: 9000, spent: 1, freed: 1 })).toBe('support-idle');
+  });
+
+  it('has no line that silence can hide behind — the dead band is filled', () => {
+    /*
+     * 1.3's inverse check. The 1.2 reachability sweep asked "is every line reachable" and
+     * could not see the hole: every line was reachable, and the state space still had a gap
+     * where a normal fight actually lives — territory 0.5–0.75 with nothing else due said
+     * nothing. So this sweeps live states (no ending) and asserts none maps to silence.
+     */
+    const moods = ['bored', 'even', 'desperate'] as const;
+    for (const territory of [0, 0.08, 0.15, 0.3, 0.45, 0.5, 0.51, 0.55, 0.6, 0.7, 0.74, 0.75, 0.8, 0.92, 1])
+      for (const ammo of [0, 1, 3])
+        for (const spent of [0, 1, 3])
+          for (const interrupts of [0, 1, 2, 3])
+            for (const idleMs of [0, 9000])
+              for (const staleMs of [0, 25_000])
+                for (const mood of moods)
+                  for (const [rung, found] of [
+                    [0, 0],
+                    [0, 3],
+                    [1, 3],
+                    [3, 3],
+                  ] as const) {
+                    const id = pickLine({
+                      territory,
+                      ammo,
+                      spent,
+                      freed: spent,
+                      interrupts,
+                      idleMs,
+                      staleMs,
+                      collared: false,
+                      mood,
+                      rung,
+                      found,
+                    });
+                    expect(id, `territory=${territory} ammo=${ammo} spent=${spent} interrupts=${interrupts} idle=${idleMs} stale=${staleMs} mood=${mood} rung=${rung}`).not.toBeNull();
+                  }
   });
 
   it('puts endings above everything else', () => {

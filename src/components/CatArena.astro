@@ -266,6 +266,101 @@
     transform: rotate(-6deg);
   }
 
+  /* ---- 1.3: the boss looks like a boss ----
+     `data-mood` (3 tiers) and `data-stance` (4 stances) have been published on the cat
+     since step 5, and until now no CSS read them — eight opponent states only a harness
+     could see, and a boss that was the same 48×30 silhouette as the ambient cat. The
+     levers, per §0's constraint: scale (the whole animal, via `.cat-flip` so the phase
+     transforms on `.cat-svg` stay theirs), colour (the SVG is `fill="currentColor"`, so
+     one property recolours the whole animal), glow (`drop-shadow`), and posture
+     (`transform` on `.cat-tail` / `.cat-ear` / `.cat-eye`) — never internal detail.
+
+     Posture is gated on **not** being in a phase: the telegraph's ears-back tell is a
+     phase rule below, and a mood that flattened the ears all the time would make the
+     feint unreadable. Mood and stance pose the *resting* cat; phases override while they
+     run. */
+
+  /* bigger than the cat, and growing with territory so the escalation is readable.
+     Scaled on `.cat-flip` (SiteCat's face-flip wrapper) so `placeCat`'s positioning math
+     — which reads the element box — never moves. */
+  :global(#site-cat.boss .cat-flip) {
+    transform: scale(var(--boss-scale, 1.5));
+    transform-origin: center bottom;
+  }
+  :global(#site-cat.boss.face-left .cat-flip) {
+    transform: scaleX(-1) scale(var(--boss-scale, 1.5));
+  }
+  /* the eye needs a transform-box before any posture can touch it */
+  :global(#site-cat.boss .cat-eye) {
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+
+  /* mood — the tiers are behaviour, and now they have a face too */
+  :global(#site-cat.boss[data-mood='bored']) {
+    /* losing interest: dimmer ink, no glow */
+    color: color-mix(in srgb, var(--color-ink) 60%, var(--color-muted));
+  }
+  :global(#site-cat.boss[data-mood='desperate']) {
+    /* wound up: ledger-wine silhouette with a hot glow */
+    color: var(--color-accent);
+    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--color-accent) 55%, transparent));
+  }
+  /* stance — the cat's posture at rest, per opponent */
+  :global(#site-cat.boss:not(.boss-telegraph):not(.boss-feint):not(.boss-leap):not(.boss-recover):not(.boss-eat):not(.boss-fetch)[data-stance='ambush']) .cat-tail {
+    transform: rotate(-22deg) translateY(2px); /* tucked, lying low */
+  }
+  :global(#site-cat.boss:not(.boss-telegraph):not(.boss-feint):not(.boss-leap):not(.boss-recover):not(.boss-eat):not(.boss-fetch)[data-stance='ambush']) .cat-ear {
+    transform: rotate(-12deg); /* half-back, watching */
+  }
+  :global(#site-cat.boss:not(.boss-telegraph):not(.boss-feint):not(.boss-leap):not(.boss-recover):not(.boss-eat):not(.boss-fetch)[data-stance='siege']) .cat-tail {
+    transform: rotate(6deg); /* planted, braced */
+  }
+  :global(#site-cat.boss:not(.boss-telegraph):not(.boss-feint):not(.boss-leap):not(.boss-recover):not(.boss-eat):not(.boss-fetch)[data-stance='trickster']) .cat-tail {
+    transform: rotate(-8deg); /* restless, mid-fidget */
+  }
+  :global(#site-cat.boss:not(.boss-telegraph):not(.boss-feint):not(.boss-leap):not(.boss-recover):not(.boss-eat):not(.boss-fetch)[data-stance='sleepy']) .cat-ear {
+    transform: rotate(28deg); /* drooped */
+  }
+  :global(#site-cat.boss:not(.boss-telegraph):not(.boss-feint):not(.boss-leap):not(.boss-recover):not(.boss-eat):not(.boss-fetch)[data-stance='sleepy']) .cat-eye {
+    transform: scaleY(0.25); /* half-lidded — barely interested */
+  }
+  /* mood posture, same phase gate — the tier is a stance on top of the stance */
+  :global(#site-cat.boss:not(.boss-telegraph):not(.boss-feint):not(.boss-leap):not(.boss-recover):not(.boss-eat):not(.boss-fetch)[data-mood='bored']) .cat-ear {
+    transform: rotate(14deg);
+  }
+  :global(#site-cat.boss:not(.boss-telegraph):not(.boss-feint):not(.boss-leap):not(.boss-recover):not(.boss-eat):not(.boss-fetch)[data-mood='bored']) .cat-tail {
+    transform: rotate(-16deg) translateY(1px);
+  }
+  :global(#site-cat.boss:not(.boss-telegraph):not(.boss-feint):not(.boss-leap):not(.boss-recover):not(.boss-eat):not(.boss-fetch)[data-mood='desperate']) .cat-ear {
+    transform: rotate(-30deg); /* pinned flat back */
+  }
+  :global(#site-cat.boss:not(.boss-telegraph):not(.boss-feint):not(.boss-leap):not(.boss-recover):not(.boss-eat):not(.boss-fetch)[data-mood='desperate']) .cat-tail {
+    transform: rotate(26deg); /* hackles up */
+  }
+  :global(#site-cat.boss:not(.boss-telegraph):not(.boss-feint):not(.boss-leap):not(.boss-recover):not(.boss-eat):not(.boss-fetch)[data-mood='desperate']) .cat-eye {
+    transform: scale(1.45); /* wide — the tell §7.3 promised and never had */
+  }
+
+  /* the trickster's tail twitch — the only piece that moves, so it is motion-gated */
+  @media (prefers-reduced-motion: no-preference) {
+    :global(#site-cat.boss:not(.boss-telegraph):not(.boss-feint):not(.boss-leap):not(.boss-recover):not(.boss-eat):not(.boss-fetch)[data-stance='trickster'] .cat-tail) {
+      animation: cat-twitch 0.9s ease-in-out infinite;
+    }
+    :global(#site-cat.boss .cat-flip) {
+      transition: transform 0.45s ease-out;
+    }
+    @keyframes cat-twitch {
+      0%,
+      100% {
+        transform: rotate(-8deg);
+      }
+      50% {
+        transform: rotate(2deg);
+      }
+    }
+  }
+
   /* ---- the curtain (§14) ---- */
   #cat-curtain {
     position: fixed;
@@ -418,6 +513,7 @@
   import { motionReduced } from '@/lib/a11y-prefs';
   import { runCurtain, stop as stopCurtain, HOLD_FLOOR_MS, REVEAL_MS } from '@/lib/curtain';
   import { tallyFor, resolveTreat } from '@/lib/cat-game';
+  import { playCue, setSfxEnabled, sfxEnabled } from '@/lib/cat-sfx';
   import {
     CLAIMABLE,
     PROTECTED,
@@ -429,6 +525,7 @@
     AIM_LEAD_MS,
     LEAP_MS,
     OPENING_GRACE_MS,
+    OPENING_LINE_MS,
     RECLAIM_ON_HIT,
     STALK_SPEED,
     THROW_ARC_MS,
@@ -904,6 +1001,9 @@
     arena.freed.push(target);
     arena.interrupts = 0;
     arena.movedAt = now;
+    // 1.3: taking a claim back is the fight's reward beat, and it has a visual (the wash
+    // draining) — so it gets the reward sound.
+    playCue('reclaim');
     free(target, true);
     caption(arenaCaption(arena.claimed.length, arena.total));
     paintTerritory();
@@ -1021,6 +1121,10 @@
   function bossPhase(root: HTMLElement, phase: Phase, now: number): void {
     boss.phase = phase;
     boss.since = now;
+    // 1.3: the wind-up sounds, because it has a visual — the telegraph is the one cue
+    // a player needs to hear to feel the pounce coming. A feint is a telegraph too
+    // (it gathers, then thinks better), so it sounds the same.
+    if (phase === 'telegraph') playCue('telegraph');
     root.classList.toggle('boss-telegraph', phase === 'telegraph');
     root.classList.toggle('boss-leap', phase === 'leap');
     root.classList.toggle('boss-recover', phase === 'recover');
@@ -1171,6 +1275,11 @@
     const bar = el('cat-territory');
     if (!bar) return;
     const mine = 1 - territory(arena.claimed.length, arena.order.length);
+    // 1.3: the boss grows with the cat's share of the page, so the escalation is readable
+    // without a number. The scale is published as a CSS variable on the cat element and
+    // consumed by the `.boss` rules in the style block above.
+    const share = territory(arena.claimed.length, arena.order.length);
+    catEl()?.style.setProperty('--boss-scale', String(1.2 + share * 0.6));
     bar.hidden = false;
     const fill = bar.querySelector<HTMLElement>('.territory-mine');
     if (!fill) return;
@@ -1303,9 +1412,17 @@
 
   /** One frame of deciding whether to speak. */
   function stepTalk(now: number): void {
-    // §7.3's "more taunting": the gap between lines is the mood's, not a constant. A
-    // desperate cat crowds you; a bored one goes quiet as well as still.
-    if (now - arena.spokeAt < LINE_MS + talkGap(aggression(boss.mood))) return;
+    /*
+     * The first line of a fight comes early — OPENING_LINE_MS, inside the opening grace —
+     * so a confused player hears the teach line while the cat provably cannot pounce.
+     * The 1.3 playtest found the alternative: with no line due in the opening state, the
+     * first thing the cat ever said was support-idle's "you can stop any time." at 8s.
+     * After the first line the mood-paced gap applies as usual.
+     */
+    const gap = arena.lastLine
+      ? LINE_MS + talkGap(aggression(boss.mood))
+      : OPENING_LINE_MS;
+    if (now - arena.spokeAt < gap) return;
     const id = pickLine(fightState(now), arena.lastLine);
     if (id) say(id);
   }
@@ -1562,6 +1679,9 @@
    */
   function land(root: HTMLElement, now: number): void {
     placeCat(root, boss.bx, boss.by);
+    // 1.3: the landing has a visual (the faceplant), so it has a sound. Hit or miss
+    // both land — the thud is the pounce arriving, not the catch.
+    playCue('land');
     const caught = scrub.inside && pounceHit(boss.bx, boss.by, scrub.x, scrub.y);
     if (!caught) return;
 
@@ -1634,6 +1754,8 @@
   function finish(ending: 'win' | 'lose', now: number): void {
     if (arena.ending) return;
     arena.ending = ending;
+    // 1.3: each ending has a visual (the parting line, the restored page) and a sound.
+    playCue(ending === 'win' ? 'win' : 'lose');
     /*
      * The line is chosen *before* the rung moves, and the order is the whole of §9.4's voice.
      *
@@ -1875,6 +1997,7 @@
       endGrooming(root);
       delete root.dataset.stance;
       delete root.dataset.mood;
+      root.style.removeProperty('--boss-scale');
       document.dispatchEvent(
         new CustomEvent('cat:resume', { detail: { x: boss.x - root.offsetWidth / 2 } }),
       );
@@ -1987,6 +2110,19 @@
     // Revealing the toggle here is what stops it being a dead control: if this
     // component is ever dropped from the layout, the button never appears.
     btn.closest<HTMLElement>('.cat-arena-chip')?.removeAttribute('hidden');
+
+    // 1.3: the sound toggle, beside the arena toggle in the same chip. Session-only,
+    // off by default — setSfxEnabled creates the AudioContext inside this click (a user
+    // gesture), which is the browser's autoplay gate and the consent moment at once.
+    const soundBtn = el('cat-sound-toggle') as HTMLButtonElement | null;
+    const syncSound = () => {
+      soundBtn?.setAttribute('aria-pressed', sfxEnabled() ? 'true' : 'false');
+    };
+    soundBtn?.addEventListener('click', () => {
+      setSfxEnabled(!sfxEnabled());
+      syncSound();
+    });
+    syncSound();
 
     btn.addEventListener('click', () => {
       if (blockedBecause()) {

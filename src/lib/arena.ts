@@ -97,11 +97,19 @@ export const MIN_CLAIM_AREA = 900;
  * Both numbers were tuned by playing both ends. A screen-*only* board deals about 8
  * candidates at 1280×900, so 55% of it is **four claims and a nine-second fight** — at
  * §10's own "over before it starts" floor. So the floor here is what a *game* needs
- * (14 candidates → the 8 opening claims §10 records for the homepage) and the ceiling is
+ * (10 candidates → the 6 opening claims §10 records for the homepage) and the ceiling is
  * what a *page* can survive. In between, screen first.
+ *
+ * **Corrected in 1.3 — smaller, because the fight got longer.** B gives every stance a
+ * regrow clock, and churn costs time: a board that used to clear in two minutes now
+ * takes three, on top of the playtest's "the pace is slow". Derived from the reclaim
+ * rate rather than picked: a player reclaims about one claim per ~2s, so the board is
+ * sized to what a *shorter* fight needs (10 → 6 opening claims) and the ceiling follows
+ * it down (14). §10's "under four claims the fight is over before it starts" still
+ * holds — 10 × 0.55 = 5.5 stays comfortably above 4.
  */
-export const MIN_BOARD = 14;
-export const MAX_BOARD = 20;
+export const MIN_BOARD = 10;
+export const MAX_BOARD = 14;
 
 /**
  * Which candidates make up the board, given which of them are on screen.
@@ -361,6 +369,22 @@ export const STALK_SPEED = 170;
  */
 export const OPENING_GRACE_MS = 2500;
 
+/**
+ * How soon after the fight opens the cat speaks its first line.
+ *
+ * `[PH 1600]` ms, and it has to be **shorter than `OPENING_GRACE_MS`** — the playtest
+ * that shipped 1.3 found a fight that opened in silence and then said the wrong thing:
+ * with no line due in the opening state, the first words a confused player ever heard
+ * were support-idle's "you can stop any time." at 8s. The teach line (§8) is the fix,
+ * and this number is what makes it land inside the safe window where §5.3 guarantees
+ * the cat cannot pounce. It is also the handoff: the curtain reveal ends around this
+ * point (§14.3), so the opening line arrives as the page becomes visible.
+ *
+ * A test pins the relationship (OPENING_LINE_MS < OPENING_GRACE_MS) so a future tuning
+ * pass cannot push the tutorial outside the window it exists for.
+ */
+export const OPENING_LINE_MS = 1600;
+
 /** How many freed elements a landed pounce takes back. */
 export const RECLAIM_ON_HIT = 1;
 
@@ -529,11 +553,30 @@ export interface StanceSpec {
 }
 
 export const STANCES: Record<Stance, StanceSpec> = {
-  /** Short wind-up, long regret. Counter: scrub beside it and punish the whiff. */
-  ambush: { telegraph: 0.78, recover: 1.45, stalk: 1, patience: 0, feint: 0, pin: false, regrowMs: 0 },
+  /**
+   * Short wind-up, long regret. Counter: scrub beside it and punish the whiff.
+   *
+   * `regrowMs` added in 1.3 — every stance has a clock now. Derived from the reclaim
+   * rate (a player takes ~1 claim per 2s): 15000ms is the slowest clock that still
+   * counts as a clock (§9.3: beyond 15000 it is decoration). Faster values were tried
+   * and measured: 4000ms and 6000ms made the treatless floor unwinnable outright;
+   * 8000ms — *faster* than siege's 9000 — put the mobile stances below the floor the
+   * arena8 harness measured (the harness reclaims at ~6s/claim once travel and dodging
+   * count, so a regrow at 8s nets out at zero and the treatless fight truces without a
+   * win); 12000ms still left the fight in the treadmill when pounces landed. 15000 is
+   * where the treatless fight clears: a lone claim regrows in fifteen seconds, which is
+   * inside the player's window, and the mobile stances keep their identity — they
+   * threaten with the pounce, siege threatens with the board, and siege keeps the
+   * faster regrow as the stance built around it.
+   */
+  ambush: { telegraph: 0.78, recover: 1.45, stalk: 1, patience: 0, feint: 0, pin: false, regrowMs: 15000 },
   /**
    * Never leaves the bottom edge, and the page grows back. Counter: clear top-down and
    * accept the churn — the cat is barely a threat up there, which is the trade.
+   *
+   * `regrowMs` 9000 is the stance's identity clock and it is deliberately not touched by
+   * 1.3: siege is built around regrow, so it keeps the slow, relentless version while the
+   * mobile stances gain the faster one.
    */
   siege: { telegraph: 1, recover: 1, stalk: 1.15, patience: 0, feint: 0, pin: true, regrowMs: 9000 },
   /**
@@ -544,14 +587,21 @@ export const STANCES: Record<Stance, StanceSpec> = {
    * leap already came to 722ms against a 700ms recovery. A trickster whose failed pounces
    * were *free* would have no reason ever to stop pouncing. Caught by the test, which is
    * the only reason that inequality is stated as one.
+   *
+   * `regrowMs` 15000, same derivation as ambush: every stance gets a clock, and a feinting
+   * cat that also regrows is the trickster's counter-play — the page slips away while you
+   * try to read its bluffs.
    */
-  trickster: { telegraph: 1.1, recover: 1.2, stalk: 1, patience: 0, feint: 0.3, pin: false, regrowMs: 0 },
+  trickster: { telegraph: 1.1, recover: 1.2, stalk: 1, patience: 0, feint: 0.3, pin: false, regrowMs: 15000 },
   /**
    * Barely fights. A gift, and rare enough to be a story rather than a let-down.
    *
    * `recover` had to rise with the telegraph to keep the whiff invariant: a long wind-up is
    * only generous if missing still costs the cat more than trying. Otherwise the sleepiest
    * stance would be the one that pounces most often, which is nobody's idea of sleepy.
+   *
+   * `regrowMs` stays 0 for the same reason the plan gives for not touching it: §9.3 calls
+   * sleepy "a gift, and rare enough to be a story" — and a gift with a clock is not a gift.
    */
   sleepy: { telegraph: 1.6, recover: 1.55, stalk: 0.55, patience: 0.35, feint: 0, pin: false, regrowMs: 0 },
 };
@@ -777,10 +827,10 @@ export const AGGRO_DESPERATE = 1.4;
  * Two claims is also the right answer in fiction, not just in arithmetic: mercy that
  * evaporates the instant you take one thing back was never mercy.
  */
-export const BORED_ENTER = 0.7;
-export const BORED_LEAVE = 0.55;
+export const BORED_ENTER = 0.72;
+export const BORED_LEAVE = 0.51;
 export const DESPERATE_ENTER = 0.2;
-export const DESPERATE_LEAVE = 0.35;
+export const DESPERATE_LEAVE = 0.42;
 
 /**
  * Which tier the fight is in, given which one it was in.
@@ -1102,7 +1152,29 @@ export const LINES: readonly { id: string; text: string; when: (s: FightState) =
     text: 'you could just bribe me.',
     when: (s) => s.ammo > 0 && s.spent === 0 && s.territory > 0.7,
   },
-  { id: 'support-idle', text: 'you can stop any time.', when: (s) => s.idleMs > 8000 },
+  {
+    // Added in 1.3 — the playtest's core finding: nothing teaches the verb.
+    // A cold visitor's opening state (territory 0.55, nothing freed, nothing spent) fell
+    // in the dead band between rattled-50 (≤0.5) and bluff-75 (≥0.75), so the fight opened
+    // in silence and the first thing the cat ever said was support-idle — "you can stop
+    // any time." — to somebody who had not started. This line is the missing §7.4 row:
+    // gated on the opening (no ending, freed === 0, spent === 0, territory above the dead
+    // band's lower edge) and placed above support-idle so it wins the opening seconds,
+    // inside OPENING_GRACE_MS where the cat provably cannot pounce — each mechanic in a
+    // safe context, exactly as §7.4 asks.
+    id: 'teach-hold',
+    text: 'hold still on it. it comes back.',
+    when: (s) => !s.ending && s.freed === 0 && s.spent === 0 && s.territory > 0.5,
+  },
+  {
+    // Re-gated in 1.3: "you can stop any time" must read as mercy to someone who has
+    // tried, not as dismissal to someone who has not started. A confused player's first
+    // feedback is now the teach line above, and idle mercy waits until the fight has
+    // actually been attempted.
+    id: 'support-idle',
+    text: 'you can stop any time.',
+    when: (s) => s.idleMs > 8000 && (s.freed > 0 || s.spent > 0),
+  },
   { id: 'support-stale', text: 'we could both sit down.', when: (s) => s.staleMs > 20000 },
   { id: 'support-interrupts', text: 'that one was mine. mostly.', when: (s) => s.interrupts >= 3 },
 
@@ -1118,6 +1190,19 @@ export const LINES: readonly { id: string; text: string; when: (s: FightState) =
   { id: 'bluff-hit', text: 'mine. still mine.', when: (s) => s.interrupts >= 1 && s.territory > 0.6 },
   { id: 'bluff-misses', text: 'try holding stiller. or don’t.', when: (s) => s.interrupts >= 2 },
   { id: 'bluff-75', text: 'you are making this loud.', when: (s) => s.territory >= 0.75 },
+
+  /*
+   * ---- 1.3: the dead band (0.5–0.75 territory) ----
+   *
+   * The 1.2 reachability sweep asked "is every line reachable" and could not see the hole
+   * this fills: every line is reachable, and the state space still had a gap where a normal
+   * fight actually lives. rattled fires at ≤0.5, bluffing at ≥0.75, and a mid-fight at 0.6
+   * with nothing else due said nothing — silence in the middle of a live fight. This line
+   * is the inverse check's answer. It sits **last**, below every specific line, so it only
+   * fires when nothing more interesting is due — the guarantee is that the band maps to a
+   * line, not that the cat stops having favourites.
+   */
+  { id: 'even-hold', text: 'i like it here.', when: (s) => !s.ending && s.territory > 0.5 && s.territory < 0.75 },
 ];
 
 /**

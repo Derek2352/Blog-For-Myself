@@ -134,6 +134,21 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
       <span class="cat-arena-pip" aria-hidden="true"></span>
       <span>Cat takes the screen</span>
     </button>
+    {/* 1.3: sound, opt-in, session-only — the second control in the HUD, beside the
+        arena toggle. Deliberately *not* in the accessibility panel: §13.1 already
+        settled that the arena toggle lives here because "a game is not a reading
+        preference", and game sound is the same category. Off by default; a refresh
+        forgets it (§13.4). The browser's autoplay gate aligns: the toggle click is the
+        user gesture that unlocks audio. */}
+    <button
+      id="cat-sound-toggle"
+      class="cat-arena-btn tap-safe"
+      type="button"
+      aria-pressed="false"
+    >
+      <span class="cat-arena-pip" aria-hidden="true"></span>
+      <span>Cat sounds</span>
+    </button>
     {/* Filled in by CatArena.astro, which is the only thing that knows *why* the
         arena can't open — reduced motion, or a pointer that can't hold still on a
         thing. Rendered empty rather than with a guess, so the widget can never
