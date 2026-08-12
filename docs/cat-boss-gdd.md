@@ -1,20 +1,25 @@
 # GDD — "Whose Screen Is It" (cat boss fight)
 
-**Version** 1.3 · **the playtest finding is fixed and the fight can be learned
-cold.** 1.2 shipped every numbered section and the review that followed found the
-game's single worst seam: **the fight never started** — nothing taught the core
-verb (players did nothing for the whole grace, ~61% of fights had no clock, the
-cat's mood and stance were invisible, the boss was indistinguishable from the
-ambient cat, and there was no audio). This version is the fix: **Legibility**
-(§8.1's teach line opens the fight, dead-band dialogue fills the silence),
-**Tempo** (§9.3 gives every stance a clock), **Presence** (§7.3's tiers and the
-stances now *show* on the cat), and **Sound** (§11, WebAudio, silent until
-opted in). The gate is a cold-visitor harness in `scratchpad/first-run.mjs`: it
-does nothing, the cat must teach the verb inside the opening grace, and the
-visitor then wins a treatless fight doing only what it was taught. **That gate
-passes** (4 consecutive runs), 414 tests pass, and the regrow derivation
-(4000→6000→8000→12000→15000ms) is recorded in §9.3/§10 with its measurements.
-Next: a person.
+**Version** 1.4 · **more fight, and every addition priced against the floor.**
+1.3 made the fight legible; this one makes it a fight worth reading. Three
+additions, each on machinery that already existed: §7.3's cornered cat now
+speeds its **clock** and not just its wind-up (the half 0.9 could not deliver,
+and the half that reaches a *fleeing* player — the counter 1.0 measured);
+§9.3 gives each stance **one signature move** (siege sweeps two adjacent
+claims, a landed ambush pounce **pins** the cat over what it took, the
+trickster's feint can double into a real telegraph); and §5.4's throw gains a
+**second target** — a treat landing on a recovering cat stuns it, which is a
+new *decision* rather than §3's rejected fourth verb, inside a 380ms window
+that is a consequence (`RECOVER_MS − THROW_ARC_MS`) rather than a chosen
+number. The load-bearing lesson is a balance one: the sweep first took two
+claims free and **plateaued** a fleeing player — neither winning nor losing —
+so the cat now pays **one interval per claim it takes**, which makes the board's
+long-run rate provably 1.3's and §9.4's floor safe by construction. The gate is
+a new `scratchpad/battle.mjs` that measures every addition on machine state
+(regrow gaps by mood, sweep sizes, the stun's phase log, the pin's leash in
+pixels), plus the discovery that **siege had never actually been measured**:
+every harness forces an ambush, and flee-and-hold is the leaper's counter, not
+the counter to a cat that cannot leave the floor. Next: still a person.
 
 **Status** hypothesis. Every number below is `[PH]` until playtested —
 including the ones now running in a browser. Built is not playtested.
@@ -36,6 +41,7 @@ including the ones now running in a browser. Built is not playtested.
 | 1.1 | **Built §7.1's top state** — collar *and* notch in one session, and the cat comes and sits on your cursor. With it, **every numbered section in the GDD is built.** 0.6 deferred this as "worth building deliberately" because it is the one reward that changes ambient browsing rather than the fight, and the deliberate part turned out to be a single CSS line. On a mouse `.cat-svg` is a live hit target so the cat can be petted; the touch path had already turned that off with a comment describing this feature exactly — a 48×30 body at the bottom edge *"swallows taps meant for whatever link is under it — a dead zone that moves"*. Parked under the cursor, that dead zone sits precisely where a click is about to land. So a perched cat is scenery: **measured, a link under it is still the click target and clicking it navigates**, `elementFromPoint` still returns the page (which `claimUnder` depends on), and the cursor resting on the cat can no longer pin `petting` on forever. Most of the behaviour already existed — `hunt()` has chased and sat *beside* the pointer for versions — so this closes all the way instead of stopping 26px short, holds while the pointer is still instead of drifting off after 1.5s, and needed a second timestamp because `prey.t` is re-stamped by every move and so can say "recently seen" but never "has stopped". Arrive at 4px, hold until 22px: the same hysteresis §7.3's tiers needed, or drift too small to break the perch still exceeds the snap and the cat walks while curled up. No new art — `.perched` carries pointer-events and nothing else, and the pose is lv6's existing `.dozing`.<br><br>**Then a full review pass, which found seven real bugs — five of them older than this version.** (1) **The idle truce was ending fights that were being played well.** §11 says a fight ends when "the pointer leaves for 20s", and that was implemented as "the pointer stops moving" — the opposite thing, because §5.2's core verb is holding the pointer *still* and 1.0 measured flee-and-hold as the counter the fight is built on. Hold one claim against a cat that keeps interrupting and the game quietly quit under you. It hid for four versions because **a truce and a win look identical from outside** — empty board, restored page — and every harness asked "are the claims gone" rather than "who won". (2) **The ending beat's timer was never cancelled**, so closing a fight during the beat and starting another could have the old timer shut the new one down. (3) **A fight could cost you a find** (§7.2): the paw row's restore *toggled* to its snapshot instead of only filling from it, so a treat credited on arrival — which happens before the fight's own page-load handler — was taken straight back off. (4) **The ribbon could speak invisibly**: a line arriving inside the previous one's 220ms fade could be hidden by the outgoing timer, and §8's no-repeats rule then suppressed the retry. (5) Releasing the perch keyed on the pointer having moved rather than on the perch being held, so a scamper, a treat or a wall climb left the cat running across the screen curled up and click-through. (6) Parking the cat cleared the perch's *classes* but not its *flag* — the `arena.want` desync again, one file over: reduce-motion off-and-on left the cat frozen a few pixels from the cursor with none of the pose it thought it was wearing. (7) And §7.4’s ending promises the cat takes **one** element and leaves — but the beat only silenced the *dialogue*, so inside it the cat could pounce again, a siege board went on regrowing, a click still spent a paw, and the one re-claimed element could be scrubbed back off under the line announcing it. Nothing new starts once the fight is decided now; a pounce already in flight still lands, because it was committed before the ending. Two of the seven are the same shape as bugs this document already records, which is the argument for the review pass rather than against it.<br><br>**And five harness faults came out with them**, every one of which had been accusing the code. §12 step 3's A/B never moved the cursor off the claim between its arms, so arm A's hold quietly completed during arm B's setup and arm B was then measured on ground already won — a game bug's exact symptom, about one run in five. The ribbon-placement check waited twelve seconds inside one `evaluate` without touching the mouse, and a parked cursor gives the cat almost nothing to say, so the window could pass in silence and the check failed on the game working correctly. `arena8`'s rung-lifetime section fought on `/timeline/` — the page section 1 of the same file had already written down as the one where this harness's flight cannot resolve — and its two §7.2 checks sat inside `if (won.won)`, so they were silently *skipped* rather than failed. §12 step 4’s closing check had been right by luck for five versions: it asks whether SiteCat has the cat back and measures displacement, but the win loop leaves the pointer resting low on the page and an ambient cat’s answer to that is to come and sit *beside* it — so standing still was the correct behaviour and the check was sampling it. And two harnesses reported a **legitimate loss** as a broken feature, which is how §9.4's floor note above got measured: every treatless run with zero stalls won, every run with one stall lost, and that is `isLost` doing exactly what §2 specifies. A retry — which is what §9.4 says a rematch *is* — was the honest fix, not a wider timeout. |
 | 1.2 | **Touch mode — §5.2's refusal, overturned rather than worked around.** The build has said "needs a mouse or trackpad" since 0.3, and §5.2 gave two specific reasons rather than waving at "no hover": a press-and-hold has **no aim**, and **a finger covers what it holds**. Both are correct. Reading them against 1.0's flee-and-hold measurement turns up a **third and fatal one that neither 0.1 nor I had noticed**: the fight's counter is holding further away than `SAFE_FLEE_PX` (≈423px), a mouse pays **travel time** to get there, and a finger teleports — so a naive port is not a weaker fight, it is a fight with **no decisions at all**. The two stated objections describe a worse game; the third describes no game.<br><br>**One measured fact answers all three.** The cat is `position: fixed` at the bottom of the viewport and claims are in document flow, so **scroll position *is* distance**: scrolling moves the claim relative to the cat without the cat moving. Measured at 390×844 across three pages, a claim scrolled high sits **683–687px from the cat (safe, 15 of 15)**, centred **413–420px (0 of 16)**, low **161–178px (0 of 16)** — the 423px threshold falling *between* the top band and the middle one, with nothing tuned to put it there. So aim is back, fleeing costs a flick, and §5.2's oldest edge case — "a scroll while channelling is movement, interrupt" — turns out to be the rule that prices it. The same clause written to stop scroll-scrubbing is what makes touch mode a game.<br><br>**Occlusion is answered by moving the feedback, not the finger:** the 40px ring sits exactly where a fingertip is, so on a coarse pointer progress goes *into the claim*, §5.1's wash deepening 7% → 26% so a filling claim arrives at the tint `cat-freed`'s drain begins from. No new art (§0). **Long-press and scroll are suppressed on claimed elements only, only while claimed** — and `touch-action: pinch-zoom`, **not** `none`, because `none` refuses a pinch that begins on a claim and §11 makes zoom a no-exceptions row. None of the three properties affects layout, which is what §11 was restated in 0.3 to admit; the page still restores byte-identically after a touch fight.<br><br>**The code was smaller than the design.** `scrub.x/y` was fed only by `pointermove`, and the one thing a finger does that a cursor cannot is arrive and then emit nothing — so a finger held perfectly still fired `pointerdown`, no `pointermove`, and no hold could register. Everything else was already portable because `stepScrub` polls position per frame instead of reacting to events, and `pointerout` with a null `relatedTarget` turns out to fire on finger *lift*, so §5.3's whiff-on-leaving rule transferred for free. Three genuinely new rules, and they are one discovery: **on touch a hold ends in gestures a dwell never did.** A cursor resting on a link does nothing; a finger resting on one is a click, a text selection, a context menu *and* a drag — and §5.1 deliberately allows a claim *inside* a link, so on a portfolio the core verb landed on link after link. `isTap` decides whether a lift throws. `isWorking` swallows the click that ends a hold on a claim, and reads a flag recorded *during* the hold because a completed hold frees the element, so “is there a claim here” is already false by the time the click arrives — which is why the first attempt still navigated away. And `dragstart` is refused on claims, because a long press on a link is the native link-drag gesture: it fires `pointercancel` and released the hold a few hundred ms in, surfacing as `8 → 8 claims` from a hold that plainly should have taken one. Each needed a browser to find and none of them exists on a mouse.<br><br>**No difficulty lever was added.** Step 0 was run to decide whether a phone fight needed one and the answer was no, so none shipped — the plan reserved the right to a coarse `MIN_BOARD` or an aggression factor, and both would have been magic numbers. One thing is recorded rather than fixed: Chromium applies *touch adjustment* on mobile, snapping a tap that lands near a clickable target onto it, so throwing is fuzzier on a phone than the crosshair makes it on a desktop. Nothing can be done about that from here — but it makes §7.4’s `support-bribe` the only teaching for §5.4 that survives losing the cursor. |
 | 1.3 | **The fight can be learned cold — the playtest finding, fixed.** The review that closed 1.2 measured what 1.2's checklist had assumed: on the homepage a cold visitor did nothing for the whole opening grace, ~61% of fights had no clock to feel (ambush/trickster/sleepy sat at `regrowMs: 0`), the cat's mood tier and stance were invisible (the boss looked exactly like the ambient cat), and there was no audio. Four fixes, one per pillar of the finding. **Legibility** — a teach line ("hold still on it. it comes back.") opens the fight inside the opening grace (measured at 1412–1648ms in the harness, inside `OPENING_GRACE_MS` 2500), gated to the cold case (no frees, no spends); a dead-band filler ends the silent-fight defect where a fight opened with no line at all (territory 0.5–0.75, previously `pickLine` returned null); support-idle re-gated to fights with actual history so it can't swallow the teach line. **Tempo** — every stance now has a clock; §9.3's derivation is 4000→6000→8000→12000→15000ms, each step a measured response to the arena8 harness (at 8000 the harness reclaimed ~6s/claim against an 8s regrow — a dead-even treadmill; 15000 is the slowest clock that still counts as a clock per §9.3's own "beyond 15000 it is decoration" line). **Presence** — §7.3's tiers and the stances now *show*: mood colour/scale/posture and stance tell classes on the boss, `--boss-scale` wired to territory, cleaned up on fight end. **Sound** — §11's opt-in row is answered with a WebAudio synth (`src/lib/cat-sfx.ts`, no assets, §0's art constraint overturned for audio only): telegraph, landing, reclaim, win/lose cues, all silent until the HUD's sound toggle is pressed, with `aria-pressed` on the button. **Ship gate** — `scratchpad/first-run.mjs`: a cold visitor does nothing → the cat must teach the verb inside the opening grace; then playing only what it was taught must win a treatless fight. The gate is green: 4 consecutive full passes (wins at 21–40s, 5–7 reclaims), 414/414 tests, `astro check` clean, build clean. Two measurement notes the harness left behind: the fight rolls a random stance each rematch so the gate needs §9.4's rematch budget (~25–50% per-fight win rate converts with the 6-try loop), and the harness's own scroll path taught a §11 bug — `mouse.wheel` does not refresh `scrub.seen`, so a harness wheeling for 20s triggered the idle truce mid-fight; fixed in the harness by scrolling via `scrollIntoView`. Board tightened to 10–14 (§10) and hysteresis widened to keep bands ≥2 claims on it. Next: a person — the gate proves winnability, not fun. |
+| 1.4 | **More fight: the last stand, a signature move per stance, and a counter.** Asked for after 1.3 ("even more battle with the cat mechanics/elements") and built as three additions on machinery that already existed. **§7.3's desperate tier is finally the whole tier, and a 0.9 decision is retracted to get there.** 0.9 delivered "faster telegraph" exactly as the table says, but 1.0 then measured that the fight's counter is *fleeing* — so the tier escalated the one threat a good player has opted out of, while the regrow clock, the only pressure that reaches a distant player, stayed fixed. The fight was calmest precisely where it should tighten, which is where the tester's "the pace is slow" is loudest. A cornered cat now keeps `LAST_STAND_REGROW` of its clock (**measured: 4975ms against siege's 9000ms**), the tier's entry raises a line and a two-note rising sting, and 0.9's objection is answered rather than ignored — the mood and the stance stay separate factors, so the last stand cannot quietly retune §9.3. **§9.3 gets one identity move each** ("same verbs, different counter-play", which was still four sets of coefficients): siege sweeps **two adjacent** claims on a beat, a landed ambush pounce **pins** the cat over what it took for 2600ms within 90px (reusing the treat leash), and the trickster's feint can now be followed straight away by a real telegraph. **§5.4 gains a second target rather than a fourth verb** — a treat landing within 64px of a cat in `recover` stuns it, which is the trade §3 demands of any addition: spend the treat to make your next window safe, or spend it to punish a whiff you read. The window is a *consequence*, not a constant: `RECOVER_MS − THROW_ARC_MS` = **380ms**, and nothing teaches it (§7.4 now has a *second* mechanic found by exploration, and it is the same knowledge §5.3 already gave the player, used the other way round).<br><br>**One balance finding, caught by measurement and fixed by arithmetic.** The sweep first took two claims for free, which raised siege's rate to 1.5 claims per 9000ms — and flee-and-scrub then **plateaued at six claims for ten straight exchanges**, 0.167 claims/s of regrow against 0.164 of reclaiming: a fight that could be neither won nor lost, which is worse than either. `regrowInterval` now charges **one interval per claim taken**, so a sweep of two waits twice and the long-run rate is identical to 1.3's whatever the cadence (**9000ms vs 9001ms per claim, measured**). §9.4's floor is therefore safe by construction, and `SIEGE_SWEEP_EVERY` tunes feel only. **And a finding about siege that nine versions of harness had hidden: it has to be played as siege.** `arena8` forces an ambush, so every browser measurement had fought a cat that *leaps*, and flee-and-hold is the leaper's counter; against a floor-bound cat it is four of every six seconds spent luring something that cannot come. Played as its own table describes, the same fight is **7 reclaims and a win in 21–23s**.<br><br>**Four harness faults, and the first had been true since 0.4:** every `waitForFunction` bound in the fleet was fiction — 22 call sites passed `{ timeout: N }` in Playwright's *arg* position, so a wait asking for 4000ms took **30104ms**, and 20 of those seconds belong to §11's idle truce. A siege roll therefore ended `arena8` section 1 with "0 reclaimed, 0 left", which reads exactly like a broken game: **a truce, a loss and a win look identical from outside**, the same blind spot that hid 1.1's truce bug. A watched fight with empty paws *loses itself* (§2 working correctly: a loss is a full board **and** no ammo). A regrow rate averaged across the harness's own play reported 18333ms for a 9000ms clock, because the gaps that spanned the holding included it. And "claims went up" is a proxy for "the cat hit me" that **1.3's own feature invalidated** — every stance has a clock now, so a regrow forged the pin's trigger and a working 90px leash was reported as 388px. <br><br>**Then a review pass over 1.4's own code, which found three bugs no harness had caught — all three about *when* rather than *what*.** (1) A trickster feint that re-commits was not gated on the ending, so a bluff could turn into a fresh telegraph inside the beat that says the cat takes one thing and leaves; 1.1 fixed exactly this for the pounce and the distinction is that a feint is the cat *declining* to jump, so re-committing is starting something new rather than finishing something started. (2) The last stand's event was cleared by whichever code read the fight state first — and the mood pass reads it every frame while the dialogue returns early during §8's talk gap, so the mood ate the event and threw it away: the climax line could only ever be said if the tier was entered inside a ~16ms window. Only the dialogue spends it now, and the event is dropped if the cat stops being cornered before it is said. (3) The swat's stun was written as a new *length* for the recovery, but the FSM scales `RECOVER_MS` by the stance's `recover` — so it silently restarted the stance clock and one treat bought 580ms against siege and 895ms against ambush. It is additive now, which is what `SWAT_STUN_MS`'s own derivation had said all along; **the bug was found by reading the code against its own constant's documentation**, which is a review technique worth naming. **Ship gate:** 435 unit tests, a new 22-check `scratchpad/battle.mjs` measuring each addition on machine state, every earlier harness, `astro check` clean, warning-free build. Still not playtested by a person — the tester who could not read 1.2 is the gate that matters. |
 
 ---
 
@@ -162,6 +168,19 @@ treats, the pounce is too weak. If they throw immediately every time, too strong
 > risk the pounce, or work far and lose ground.* The numbers were derived, not
 > invented — 4000→6000→8000→12000→15000ms, each a measured response to the
 > arena8 harness (see §9.3).
+
+> **Extended in 1.4 — the throw now has two targets, and this section is the test it
+> had to pass.** The decision above was "scrub now, or spend a treat to make the next
+> window safe". It is now "scrub now, spend a treat to make the next window safe, **or**
+> spend it to punish the whiff you just read" (§5.4's counter). No new input: the same
+> click, the same resource, aimed at the cat instead of away from it. It earns its place
+> by the standard this section sets — an addition that adds a *decision* rather than a
+> button — and the two intentions compete, because there is only ever one treat to spend.
+>
+> The paragraph above is also its own balance rule, and 1.4 keeps both halves: if players
+> never throw, the pounce is too weak; if they throw immediately every time, too strong.
+> The counter is deliberately gated to a 380ms window so that "throw at the cat" cannot
+> become the default answer to everything.
 
 ---
 
@@ -440,6 +459,18 @@ the ink wash already does this at `Math.min(250, now - lastTick)`.
 > its body), which is characterisation and also load-bearing — a cat parked on the
 > cursor is what `elementFromPoint` returns, so without it scrubbing became
 > impossible at exactly the moment the game got interesting.
+>
+> **1.4 — the recovery window is now punishable, and this section is why it can be.**
+> §5.4's counter lets a treat landing on a recovering cat stun it, and everything that
+> makes that fair was already written here: the aim locks at the *start* of the
+> wind-up, so the commitment is legible; a whiff costs the cat more than the attack
+> gained it (§9.3's invariant), so a recovery is a real interval and not a frame; and
+> the tell the player has been reading since 0.4 is the same tell that says "now".
+> Nothing about the pounce changed — the counter is a *use* of it. Note the sequencing
+> the two mechanics create together: the aim locks 680ms before the landing and the
+> treat flies for 320ms, so the player who reads the wind-up correctly can already be
+> throwing at ground the cat has not reached yet. The cat's own commitment is what
+> makes it catchable.
 
 ### 5.4 Mechanic: Throw treat
 
@@ -502,6 +533,37 @@ explored)
 > "3 / 7 treats" next to a paw row showing 2 — the row is ammo during a fight, so the
 > two were contradicting each other in the same chip. The arena now re-asserts its line
 > once a frame, which is self-healing against anything else that writes there.
+>
+> **1.4 — the counter: a second *target* for this throw, and the recover deviation above
+> is now load-bearing.** A treat that lands **within `SWAT_RADIUS` of a cat that is in
+> `recover`** swats it: `SWAT_STUN_MS` is **added** to the recovery it interrupted, and the cat
+> cannot telegraph out of a recovery it has not finished. Added rather than *set* — the build got
+> that wrong once and §10's row now says why, because "set the recovery to 900ms" hands the price
+> of a §5.4 mechanic to whatever §9.3 chose for that stance's `recover` multiplier.
+>
+> This is not a fourth verb, and §3 is the section that has to be satisfied rather than
+> worked around. §3 is proud of three inputs and rejects any addition that adds no
+> decision — but this adds one exactly where §3 asks for it: spend the treat to make your
+> **next** window safe (the lure, since 0.5) or spend it to **punish a whiff you just
+> read**. Same input, same resource, two intentions, and they compete for one treat.
+>
+> **Two guards, both quoted from this document.** It works *only* in the recovery window,
+> so it is a read rather than a button; and it costs a treat, so "throw at the cat every
+> time" is not dominant — spending it on a punish is spending it *instead of* a safe hold.
+>
+> **The window is real, and it is `RECOVER_MS − THROW_ARC_MS` = 380ms.** The swat resolves
+> on the treat's **landing**, not on the click, which is what makes it a skill window
+> rather than a spell: the treat is in the air for 320ms, so you are aiming at where the
+> cat will still be, during a recovery you had to see coming. Measured in the browser
+> (`scratchpad/battle.mjs`): a throw at a recovering cat swats and the next telegraph is
+> held off; the same throw at the same distance while the cat is *stalking* does nothing
+> but lure — the control check reads the phase log and sees `eat`, which is 0.5's
+> deviation doing its job.
+>
+> **Nothing teaches it.** §7.4 wants one mechanic found by exploration, and the tell §5.3
+> already trained the player to read is the same tell that marks the punishable moment —
+> so the knowledge the game has already given them is what unlocks it. The teach line
+> still teaches only the scrub.
 
 ---
 
@@ -718,8 +780,45 @@ which is in character, funnier, and does the same job as an invisible fudge.
 > Which is the right answer in fiction too: mercy that evaporates the instant you
 > take one thing back was never mercy.
 >
-> **Deliberately not scaled:** siege's `regrowMs`. It is board-level rather than
-> behaviour, and this section is explicitly about what you can read off the animal.
+> ~~**Deliberately not scaled:** siege's `regrowMs`. It is board-level rather than
+> behaviour, and this section is explicitly about what you can read off the animal.~~
+>
+> **1.4 — that decision is retracted, and it was the missing half of this tier.**
+> 0.9 delivered the desperate tier as "faster telegraph", which is exactly what the
+> table above says. But 1.0 then measured the fight's real counter and it is
+> **fleeing**: hold further away than `SAFE_FLEE_PX` and the pounce provably cannot
+> reach you. So the tier's one escalation escalated the threat a good player has
+> already opted out of, while the regrow clock — the only pressure that reaches a
+> *distant* player — stayed fixed at whatever the stance set. The fight was calmest
+> exactly where it should tighten, and the tester's "the pace is slow" is loudest at
+> the end, when the cat is cornered and out of ideas.
+>
+> So a cornered cat keeps `LAST_STAND_REGROW` of its regrow interval: **the walls
+> close faster instead**, which is the one form of pressure that does not care where
+> you stand. Measured in the browser at siege's 9000ms clock: **4975ms per claim
+> once cornered against 9000ms even** (design says ×0.55, arithmetic says 4950).
+>
+> The 0.9 objection is answered rather than ignored. It is still readable off the
+> animal — the tier already carries 1.3's colour, scale and posture; entering it now
+> also raises a line ("the walls come in now") and a two-note rising sting, so the
+> player *hears* the fight change gear at the moment the clock does. And it is still
+> the mood, not the stance, doing the scaling: `regrowInterval` keeps the stance's
+> identity (siege's 9000 vs a leaper's 15000) and the mood's urgency as separate
+> factors, so the last stand cannot quietly retune §9.3 — the same separation 0.9
+> protected when it clamped `telegraphScale`.
+>
+> **What bounds it:** §9.4's floor. Too small and a treatless fight stops being
+> winnable; too near 1 and the tier is decorative again, which is the state this
+> fixes. 0.55 is 8250ms at a leaper's clock, against a player who reclaims about
+> one claim per 2s of holding plus travel — felt and out-run, which is the intent.
+>
+> **The last stand is an *event*, not a state, in the dialogue table** — and that
+> distinction was forced by arithmetic. A climax line gated on "desperate **and**
+> territory ≤ 20%" shadowed `rattled-20` completely, because the tier *enters* at
+> 0.2; narrowing the band was not available either, since territory steps by
+> `1/board` and any band under ~0.07 is **narrower than one claim** — the same trap
+> 0.9's hysteresis fell into, in the same units. So the line fires on the
+> *transition* into the tier, once, via a consumed flag.
 >
 > **1.3 — the tiers now show on the cat itself, because the playtest could not
 > read them off the fight.** The finding was that the boss was indistinguishable
@@ -763,6 +862,15 @@ which is in character, funnier, and does the same job as an invisible fudge.
 - [x] One mechanic found by exploration: nothing says the cat can't pounce during
       `fetch`. Players discover the safe window themselves — the best moment
       available, so it must not be spoiled by UI
+      *(**A second one in 1.4, and it is the same knowledge used the other way
+      round.** §5.4's counter — a treat landing on a cat in `recover` stuns it —
+      is taught by nothing. The tell §5.3 already trained the player to read is
+      exactly the tell that marks the punishable moment, so the discovery is not
+      new information but a new *use* for information the game already handed
+      over. That is why it does not need a line: the teach line still teaches
+      only the scrub, and a player who never throws still wins (`first-run.mjs`
+      is the check on that). The rule "must not be spoiled by UI" applies
+      unchanged — there is no crosshair change, no dimming, no hint.)*
 - [x] Ends on a hook: on a win, the cat re-claims **one** element and walks off.
       Unfinished business, no modal, no "play again?" button
       *(**Still true in 1.0**, and §9.4's ladder was built around it rather than through it.
@@ -877,6 +985,27 @@ admit it.
 | Territory 10% | `fine. fine.` |
 | Last claim being scrubbed | `wait —` |
 
+> **1.4 adds one line here, and it had to be an *event* to be allowed in at all.**
+> "the walls come in now." marks §7.3's last stand — the moment the cornered cat's
+> regrow clock speeds up. Written first as a *state* ("desperate **and** territory
+> ≤ 20%") it shadowed `rattled-20` completely, because the tier is *entered* at 0.2
+> and then lasts: every rattled line below it became unreachable in real play while
+> remaining reachable in the abstract state space a test sweep explores. Narrowing
+> the band was not available either — territory steps by `1/board`, so any band
+> under ~0.07 is **narrower than one claim**, which is 0.9's hysteresis arithmetic
+> in the same units. So the line fires on the *transition* into the tier, once.
+>
+> That distinction has a cost the build had to pay properly. An event needs a
+> handover, and the first handover was "cleared by whoever reads the fight state
+> first" — but the mood pass reads it every frame while the dialogue returns early
+> during §8's talk gap, so the mood ate the event and dropped it, and the loudest
+> line in the game could only be said if the tier happened to be entered inside one
+> of the ~16ms windows where the cat was already free to speak. **Only the dialogue
+> spends it now**, so the line arrives late rather than never, and it is dropped if
+> the cat stops being cornered before it is said — a line about the walls closing
+> has no business arriving after they have opened again. The sound sting still marks
+> the exact moment, because it fires where the clock actually changes.
+
 ### 8.4 Endings
 
 | Ending | Line |
@@ -988,6 +1117,74 @@ Same verbs, different counter-play. This is where the fight gets legs.
 > presence fix (§7.3): stance tell classes on the boss so a fight's stance is
 > readable at a glance, and the trickster's feint has the tell §9.3 always
 > promised ("a bluff gathers without dropping its shoulders").
+>
+> **1.4 — one signature move each, so the stances differ in what they *do* and not
+> only in what they are multiplied by.** Every stance was still the same cat with
+> different coefficients, and this table's own promise is "same verbs, different
+> counter-play". Three moves, each built on machinery that already existed:
+>
+> - **Siege — the sweep ("the walls close").** Every `SIEGE_SWEEP_EVERY`-th regrow
+>   takes **two** claims instead of one, and they are **adjacent in document
+>   order**, so it reads as a wall moving rather than as the clock ticking twice.
+>   Siege's whole premise is that the board fights for it, and until now that was
+>   one clock and nothing else — the most distinctive stance had the least
+>   distinctive moment.
+> - **Ambush — the pin.** A *landed* pounce anchors the cat on the spot for
+>   `AMBUSH_PIN_MS` within `AMBUSH_PIN_PX`, reusing the leash a thrown treat
+>   already uses. Ambush is the one that actually hunts you, and a hit paid it
+>   exactly what a siege clock tick pays — one element — despite costing it a read,
+>   a commitment and a whiff risk. Now it *stands over what it took*: re-scrubbing
+>   that claim means waiting the pin out or spending a treat to lure it off, which
+>   turns a hit from a subtraction into a problem the player has verbs for. Ambush
+>   only: siege is already pinned, sleepy is a gift, and a second signature would
+>   blur the trickster's.
+> - **Trickster — the double tell.** A feint is sometimes followed immediately by a
+>   real telegraph (`TRICKSTER_DOUBLE`), so its tell is the one you cannot fully
+>   trust. Reuses `boss.feint`; nothing new drawn. It needs no new visual either,
+>   and that is a happy accident of how the tell was already built: the feint's
+>   class going false **is** the shoulders dropping, so a re-commit is a visible
+>   state change arriving exactly when the real wind-up starts, and `boss.since`
+>   resets so the player still gets a full telegraph to read. What is taken away is
+>   the safety of having read the *first* one.
+>
+>   **And it repairs the second-order cost recorded above, which is worth naming
+>   because that cost was never intentional.** 0.9 noticed that a bluff spends the
+>   cat's time and takes nothing, so against a still player the trickster *loses*
+>   ground faster than it gains — the stance whose gimmick is deception was the
+>   weakest one for having it. A third of its feints now convert into real attacks,
+>   so the gimmick costs it less. This does make trickster stronger than in 1.3, on
+>   purpose, and `arena5` caught the size of it from the side: with more of its
+>   wind-ups converting, the board fills faster, and a harness that never frees
+>   anything now reaches §2's loss inside its own observation window. Once that was
+>   fixed (treats in hand, never thrown), the rate measures where it should:
+>   **11 feints in 33 wind-ups — 33% against the spec's 30%** — with three of them
+>   going straight back into a real telegraph, which is the double tell showing up
+>   in a phase log for the first time.
+>
+> **The sweep's bill, which is the load-bearing part.** The first version simply
+> took two on the beat and left the clock alone. Measured in a browser, that raised
+> siege's rate to 1.5 claims per 9000ms against flee-and-scrub's 0.164 claims/s —
+> and the fight **plateaued at six claims for ten straight exchanges**, neither won
+> nor lost, which is worse than either. So `regrowInterval` now charges the cat
+> **one interval per claim it takes**: a sweep of two waits twice. The long-run rate
+> is then identical to 1.3's whatever the cadence — 3 claims per 3 intervals — so
+> the sweep buys *texture* (a squeeze, then a lull) and provably not difficulty, and
+> §9.4's floor is safe by construction rather than by hoping. Measured after the
+> fix: **9001ms per claim on the sweep against 9000ms on a single tick.**
+> `SIEGE_SWEEP_EVERY` therefore tunes feel only, which is the whole reason it can be
+> tuned by feel.
+>
+> **And a finding about siege that nine versions of harness missed: it has to be
+> played as siege.** `arena8`'s floor section forces an **ambush**, so every
+> browser measurement of the fight has been against a cat that *leaps* — and the
+> flee-and-hold counter 1.0 discovered is the counter to a leaper. Against siege,
+> luring is 4 of every 6 seconds spent waiting for a cat that physically cannot
+> come. Played that way it plateaus; played the way its own premise implies (take
+> whatever is furthest from the floor it is stuck on, hold, repeat) the same fight
+> is **7 reclaims and a win in 23s**. That is this table's promise coming true —
+> the stances demand different play, and a harness that plays them all the same way
+> is measuring its own strategy. `scratchpad/battle.mjs` now measures siege as
+> siege.
 
 ### 9.4 Handicap ladder
 ~~**Unbuilt as of 0.7**, and the only piece of §9 that is. It needs an ending that asks a
@@ -1176,6 +1373,19 @@ Added in 0.5, from building the treat:
 | `FETCH_REACH` | 14px | How close it has to get before eating starts | Too large: it eats from across the room |
 | `RECLAIM_ON_HIT` | 1 | A landed pounce takes back the most recent thing you earned — legible as cause and effect where a random element is not | >1: one mistake undoes a minute of play |
 
+Added in 1.4, from the last stand, the signature moves and the counter:
+
+| Var | `[PH]` | Rationale | "Broken" looks like |
+|---|---|---|---|
+| `LAST_STAND_REGROW` | 0.55 | How much of its regrow clock a cornered cat keeps (§7.3). The tier's *other* half: 0.9 gave it a faster wind-up, and 1.0 then measured that the counter is fleeing — so the only pressure that reaches a distant player is the clock. Bounded by §9.4's floor above and "no felt climax" below; 8250ms at a leaper's 15000 against a player reclaiming ~1 claim per 2s of hold plus travel. Measured in the browser at 4975ms against siege's 9000 | ≤0.3: the endgame is a treadmill and the treatless floor fails. ≥0.85: the tier is decorative again, which is the state this fixes |
+| `SIEGE_SWEEP_EVERY` | 2 | Siege takes **two** adjacent claims every this-many-th regrow (§9.3) — a beat that can be anticipated rather than a faster clock in a costume. Tunable purely by feel *because* it cannot change difficulty: `regrowInterval` charges one interval per claim, so every cadence bills out to the same rate (9001ms vs 9000ms per claim, measured) | 1: it is just `regrowMs` halved, with extra code. Very large: the signature never shows up in a 90–180s fight |
+| Sweep bill | 1 interval per claim | The invariant that keeps §9.3's moment out of §9.4's floor. Not a lever — a rule. Derived after the free version plateaued a fleeing player at six claims for ten exchanges (0.167 claims/s of regrow against 0.164 of reclaiming) | Free sweeps: the board out-paces the player at exactly the rate that makes a fight neither winnable nor losable |
+| `AMBUSH_PIN_MS` / `AMBUSH_PIN_PX` | 2600 / 90 | A landed pounce holds the cat on the spot it took, reusing the treat leash (§9.3). Long enough that re-scrubbing *that* claim is a decision (≈2× `SCRUB_MS`); `PX` = `POUNCE_RANGE`, so the pinned cat threatens exactly the ground it is standing over and no more. Measured: 90px during the window, 523px after | Much longer: a hit removes a claim from the game rather than costing you tempo. `PX` ≫ `POUNCE_RANGE`: the pin is a leash in name only |
+| `SWAT_RADIUS` | 64px | How near a landing treat has to be to count as a counter (§5.4). Under `HIT_RADIUS` 46 + a treat's own body, so it reads as *hitting the cat* rather than landing nearby | ≫`POUNCE_RANGE`: any throw in the neighbourhood counters, and the read stops mattering |
+| `SWAT_STUN_MS` | 900 | Time **added** to the recovery a swat interrupts — not the recovery's new length, and the difference is a bug this version made and fixed. The FSM measures recovery as `RECOVER_MS × spec.recover`, so "set the recovery to 900" restarts the stance's own clock and one treat then buys 580ms against siege and 895ms against ambush: a §9.3 multiplier leaking into a §5.4 price. Additive is uniform in the quantity the player feels — *how much longer than it would have been* — and cannot shorten a recovery by construction. 700 + 900 = 1600ms of stillness against a 1400ms hold: enough to finish a claim already part-way through, not enough to start and finish a fresh one | ≤`RECOVER_MS`: the counter does nothing at all. >2000: one treat removes the cat from the fight, and the lure was already that. Stated as a *length* rather than an addition: the price of the counter silently becomes whatever §9.3 set `recover` to |
+| Counter window | `RECOVER_MS − THROW_ARC_MS` = 380ms | Not a constant — a *consequence*, and the reason the counter is a skill. The swat resolves on landing and the treat flies for 320ms, so the player must read the whiff and commit inside 380ms | ≤0 (`THROW_ARC_MS ≥ RECOVER_MS`): the window closes before the treat lands and the mechanic is unreachable |
+| `TRICKSTER_DOUBLE` | 0.35 | How often a feint is followed straight away by a real telegraph (§9.3), making the trickster's tell the one you cannot fully trust. Under the 0.5 that would make its tell a coin toss, and above the 0.2 that would never be met in one fight | ≥0.5: the tell carries no information and §9.3's "learn the tell" counter is gone |
+
 Build these as a spreadsheet with formulas before writing the code, per §Balance
 Process — `SCRUB_MS`, `RECOVER_MS` and `lureDuration` are *coupled*, and hardcoding
 them independently is how this gets unbalanced.
@@ -1273,6 +1483,15 @@ them independently is how this gets unbalanced.
   the audio would ship without visuals and the audio half would be dropped. It
   stayed silent — the toggle gates the audio context's first resume — so both
   halves ship.**
+  > **1.4 adds two cues, and both obey the same rule.** §5.4's counter connecting
+  > gets a thud with a bright tick over it — the thump borrows the landing's
+  > vocabulary and the tick is the only rising note in the set that the player
+  > causes to happen *to the cat*. §7.3's last stand beginning gets two low notes
+  > rising, the only ascending figure the cat plays about itself, pitched under
+  > everything else so it reads as a threat and not a fanfare: it is the audible
+  > half of "the walls come in now", and it fires at the moment the regrow clock
+  > actually changes gear. Both have visuals (the swat's squash, the tier's own
+  > 1.3 body tell), so nothing audible exists without something to see.
 - **Auto-truce** — if the tab is hidden `[PH 10s]`, or the pointer leaves for
   `[PH 20s]`, the fight ends itself and restores. Nobody returns to a page mid-
   invasion.
@@ -1495,6 +1714,76 @@ resource exploration gave them.
 >
 > Recorded at length because it is the second time this build has mistaken a harness's rhythm
 > for a property of the game, and both times the wrong version was the more interesting story.
+
+**1.4 ship gate, actual:** 435 unit tests, a new 22-check browser harness
+(`scratchpad/battle.mjs`) that measures each of 1.4's additions on machine state, plus every
+earlier harness, `first-run.mjs`, `astro check` clean and a warning-free build. No new step: 1.4
+adds mechanics to §5.4, §7.3 and §9.3 rather than building an unbuilt section.
+
+**Four harness lessons, and the first one had been silently true since 0.4.**
+
+**Every `waitForFunction` bound in the fleet was fiction.** Playwright's signature is
+`waitForFunction(pageFunction, arg, options)`, and 22 call sites across eleven harnesses passed
+`{ timeout: N }` in the *second* position — where it becomes the page function's argument and the
+bound falls back to Playwright's 30s default. Measured: a wait asking for 4000ms took **30104ms**.
+That is not a tidiness problem, because 20 of those seconds belong to a *game rule* — §11 ends a
+fight `IDLE_TRUCE_MS` after the last input, so a wait that overruns 20s **ends the fight it is
+waiting on**. It surfaced as `arena8` section 1 reporting "0 reclaimed, 0 left" on any run that
+rolled a siege cat: siege never leaves the floor, so the harness's lure-the-cat-to-the-top step
+waited for an arrival that was physically impossible, and the game correctly declared a truce
+underneath it. The report reads exactly like a broken feature. **A loss and a truce and a win all
+look the same from outside** — §7.1's note says this about 1.1's truce bug, and the same blind spot
+cost a second afternoon in 1.4, which is the argument for asserting on *who won* every single time.
+
+**A harness that plays every stance the same way is measuring its own strategy.** `arena8` forces
+an ambush for the floor check, so nine versions of measurement had only ever fought a cat that
+leaps — and flee-and-hold is the counter to a leaper. Applied to siege it is four of every six
+seconds spent waiting for a cat that cannot come, and the fight plateaus. The same siege fight,
+played the way §9.3's own table describes, is 7 reclaims and a win in 21–23s. The plateau was real
+and the diagnosis was not.
+
+**A watched fight loses itself, and that is §2 working.** `battle.mjs` section 2 needs to watch a
+board regrow for a minute without playing, and the first version did it with empty paws — so the
+board filled and the fight *ended*, because §2 defines a loss as every claim taken **and** nothing
+left to throw. The recording stopped early and the check reported "never reached the desperate
+tier" while the game had done nothing wrong. Arming treats and never spending them removes the
+loss without touching the clock being measured. Ammo really is the thing standing between a full
+board and defeat.
+
+**A rate measured across your own play is a measurement of your own play.** The same section first
+averaged every regrow gap it saw and reported 18333ms for a 9000ms clock: the gaps that spanned
+the harness's own reclaiming included the holding, and a saturated board has no clock at all. Both
+are the measurer leaking into the measurement — §12's oldest trap. The fix is to stamp each
+interval with the phase it fell inside and average only the ones taken while nothing else touched
+the board; the contaminated span shows up in the log as `1×37.0s/straddles`, which is a useful
+thing to be able to see rather than a thing to hide.
+
+**And then three older harnesses had to change, none of them because anything regressed** — the
+same thing 0.7 recorded when stances first made "the cat will pounce" conditional. `arena5`
+deduped its phase log on the phase *string*, so §9.3's double tell was invisible to it: a feint
+that re-commits stays in `telegraph` and only drops `boss-feint`, so the second wind-up left no
+record and the harness reported five wind-ups against its own floor of six. Keyed on phase **and**
+feint it sees both, which is also the right key on the merits — the shoulders dropping is the tell.
+`arena7` collected *zero* desperate samples, and its own comment predicted why: the tier's window
+"closes behind you", and 1.4 makes it close faster because the last stand regrows the very board
+that ends the tier. The tier measuring itself out of existence is the feature; the harness now
+pushes back down as far as it takes instead of one claim per round. And `arena8`'s ladder section
+was playing the lure strategy against a *random* stance, so a siege roll turned a ladder check into
+the plateau above (14 reclaims, 3 left, 121s) — it pins a leaper now, exactly as its own floor
+section already did, and siege's winnability is measured in `battle.mjs` where the strategy fits.
+
+**A gate that never ran is the quietest failure in a sweep of green ones.** `first-run.mjs` exited
+2 before its first check because its Chrome candidate list did not include the browser a cloud
+session actually has. Nothing printed a FAIL; the line was simply blank. It now looks where this
+environment keeps Chromium, which is where the gate is usually run.
+
+**The whole fleet, on one build:** `check-ink` 20/20, `cycle` green, `arena` 63/63, `arena2` 27/27,
+`arena3` 36/36, `arena4` 39/39, `arena5` 22/22, `arena6` 46/46, `arena7` 25/25, `arena8` 26/26,
+`top-state` 20/20, `touch-fight` 43/43, `first-run` all green, `battle` 22/22. Two of those counts
+went *up* because a check that used to abort now runs to the end — `arena8` from 16 to 26 once its
+ladder fight stopped being fought with the wrong strategy, and `arena5` from 21 to 22 with the
+§2 guard added. §7.3's tiers re-measured clean on the new clock: a desperate cat commits **97ms**
+into a hold against **514ms** even, and winds up in 250ms against 334ms.
 
 **Step 8 ship gate, actual:** 397 unit tests and a 25-check harness
 (`scratchpad/arena8.mjs`), plus every earlier harness, the ink harness, the cycle check and a

@@ -15,6 +15,16 @@ import {
   TAP_MS,
   isTap,
   isWorking,
+  regrowInterval,
+  LAST_STAND_REGROW,
+  swatLands,
+  SWAT_RADIUS,
+  SWAT_STUN_MS,
+  sweepPartner,
+  SIEGE_SWEEP_EVERY,
+  AMBUSH_PIN_MS,
+  AMBUSH_PIN_PX,
+  TRICKSTER_DOUBLE,
   HIDDEN_TRUCE_MS,
   IDLE_TRUCE_MS,
   TELEGRAPH_MS,
@@ -950,6 +960,193 @@ describe('stances (§9.3)', () => {
   });
 });
 
+describe('the last stand (§7.3 completed, 1.4)', () => {
+  /*
+   * The defect this closes: `telegraphScale` made the desperate tier shorten the *wind-up*, but
+   * 1.0 measured fleeing as the counter the fight is actually built on — so the tier escalated
+   * the one threat a good player has already opted out of, and the regrow clock that *does*
+   * reach a distant player never moved. The fight got calmest exactly when it should tighten.
+   */
+  it('shortens the regrow clock when the cat is cornered, and only then', () => {
+    expect(regrowInterval(15000, 'desperate')).toBeLessThan(15000);
+    expect(regrowInterval(15000, 'even')).toBe(15000);
+  });
+
+  it('leaves the bored tier alone — a sulking cat does less, not more', () => {
+    // §7.3: the bored cat's tell is that it *does less*. A bored cat regrowing faster than an
+    // even one would be doing more while pretending to sulk.
+    expect(regrowInterval(15000, 'bored')).toBe(15000);
+  });
+
+  it('never gives sleepy a clock it was designed not to have', () => {
+    // §9.3 calls sleepy "a gift, and rare enough to be a story". A gift with a clock is not one,
+    // and 0 must survive the multiply rather than becoming a very fast clock.
+    expect(STANCES.sleepy.regrowMs).toBe(0);
+    expect(regrowInterval(0, 'desperate')).toBe(0);
+  });
+
+  it('is pressure, not a treadmill — the §9.4 floor is the binding constraint', () => {
+    /*
+     * The bound that matters, stated as arithmetic rather than trusted to the browser. §9.4
+     * promises the bottom rung is winnable with no treats, and `arena8` section 4 measures it.
+     * A player reclaims one claim per `SCRUB_MS` plus travel; if a cornered clock ticked faster
+     * than that, the endgame would be unwinnable by positioning alone and the floor would fail.
+     */
+    for (const s of Object.keys(STANCES) as (keyof typeof STANCES)[]) {
+      const base = STANCES[s].regrowMs;
+      if (base === 0) continue;
+      expect(regrowInterval(base, 'desperate'), s).toBeGreaterThan(SCRUB_MS);
+    }
+    // ...and it has to actually change something, or the tier is decorative again.
+    expect(LAST_STAND_REGROW).toBeLessThan(0.85);
+    expect(LAST_STAND_REGROW).toBeGreaterThan(0.3);
+  });
+});
+
+describe('the sweep pays for itself (§9.3 vs §9.4, 1.4)', () => {
+  /*
+   * The defect this closes was found in a browser and is the reason `regrowInterval` takes a third
+   * argument at all. §9.3's sweep took two claims on the beat and left the clock alone, which
+   * raised siege's rate from 1 claim per 9000ms to 1.5 — and flee-and-scrub then plateaued at six
+   * claims for ten straight exchanges, 0.167 claims/s of regrow against 0.164 of reclaiming. A
+   * fight that can be neither won nor lost is worse than one that can be lost.
+   *
+   * The fix is arithmetic rather than tuning: the cat waits one interval per claim it took, so the
+   * long-run rate is what 1.3 measured however the cadence is set. These tests are that invariant,
+   * because it is the thing protecting §9.4's floor from §9.3's moment.
+   */
+  it('charges one interval per claim taken', () => {
+    expect(regrowInterval(9000, 'even', 2)).toBe(2 * regrowInterval(9000, 'even', 1));
+    expect(regrowInterval(9000, 'desperate', 2)).toBe(2 * regrowInterval(9000, 'desperate', 1));
+  });
+
+  it('defaults to one, so every caller that does not sweep is unchanged', () => {
+    expect(regrowInterval(9000, 'even')).toBe(regrowInterval(9000, 'even', 1));
+    // ...and a tick that took nothing still pays a full interval rather than none: a free retry
+    // every frame is how a clock stops being a clock.
+    expect(regrowInterval(9000, 'even', 0)).toBe(regrowInterval(9000, 'even', 1));
+  });
+
+  it('keeps siege’s long-run rate equal to a stance that never sweeps', () => {
+    /*
+     * The invariant stated the way the plateau disproved it: claims per millisecond over a whole
+     * sweep cycle. `SIEGE_SWEEP_EVERY` sets the texture, and this says it cannot set the
+     * difficulty — every cadence has to bill out to the same rate.
+     */
+    const base = STANCES.siege.regrowMs;
+    const rate = (every: number) => {
+      let claims = 0;
+      let ms = 0;
+      for (let tick = 1; tick <= every; tick++) {
+        const took = tick % every === 0 ? 2 : 1;
+        claims += took;
+        ms += regrowInterval(base, 'even', took);
+      }
+      return claims / ms;
+    };
+    const plain = 1 / base;
+    for (const every of [2, 3, 4]) expect(rate(every)).toBeCloseTo(plain, 10);
+    expect(rate(SIEGE_SWEEP_EVERY)).toBeCloseTo(plain, 10);
+  });
+
+  it('still lets the last stand be the one thing that raises the rate', () => {
+    // The sweep is rate-neutral; §7.3's cornered clock is not, and that asymmetry is the design.
+    // Pressure comes from the mood the player *caused* by winning, never from the stance roll.
+    expect(regrowInterval(9000, 'desperate', 2)).toBeLessThan(regrowInterval(9000, 'even', 2));
+  });
+});
+
+describe('the counter — a second target for the throw (§5.4, 1.4)', () => {
+  it('only lands during recovery, which is the whole design', () => {
+    // §5.3 spends the telegraph teaching you to read a wind-up, and until 1.4 that reading
+    // only bought a dodge. This gives the same tell a second use: it marks the punishable
+    // moment. Any other phase must refuse, or "throw at the cat" becomes a spell.
+    expect(swatLands('recover', 10)).toBe(true);
+    for (const p of ['stalk', 'telegraph', 'leap', 'fetch', 'eat'] as const) {
+      expect(swatLands(p, 10), p).toBe(false);
+    }
+  });
+
+  it('has to be aimed', () => {
+    expect(swatLands('recover', SWAT_RADIUS)).toBe(true);
+    expect(swatLands('recover', SWAT_RADIUS + 1)).toBe(false);
+  });
+
+  it('is more forgiving than the cat’s own pounce, deliberately', () => {
+    // The cat commits blind (§5.3) and gets the tighter radius; the player is throwing at a
+    // stationary animal and paying a treat for the attempt.
+    expect(SWAT_RADIUS).toBeGreaterThan(HIT_RADIUS);
+  });
+
+  it('buys most of a hold, never a guaranteed one', () => {
+    /*
+     * §3 rejects any addition that does not add a decision, so this must not dominate fleeing.
+     * A stun long enough to guarantee a fresh claim from nothing would make the counter
+     * strictly better than positioning; long enough to finish a hold already under way is a
+     * trade. `RECOVER_MS + SWAT_STUN_MS` therefore straddles `SCRUB_MS`.
+     */
+    expect(RECOVER_MS + SWAT_STUN_MS).toBeGreaterThan(SCRUB_MS);
+    expect(SWAT_STUN_MS).toBeLessThan(SCRUB_MS);
+  });
+});
+
+describe('signature moves (§9.3, 1.4)', () => {
+  it('takes the neighbour next door, so a sweep reads as a wall moving', () => {
+    // `arena.order` is document order, so neighbouring indices are neighbouring page furniture.
+    expect(sweepPartner(3, [3], 10)).toBe(4);
+  });
+
+  it('falls back to the other side when the next one is already held', () => {
+    expect(sweepPartner(3, [3, 4], 10)).toBe(2);
+  });
+
+  it('reaches past a run of held claims rather than giving up at the first', () => {
+    /*
+     * Asserted as the *property*, because my first version of this hardcoded `6` and the
+     * function correctly returned `1` — it expands outward from the seed and 1 is two steps
+     * away where 6 is three. Both extend the wall (2 is already held, so taking 1 grows the
+     * block {2,3,4,5} to {1..5}); the nearer one makes the tighter wall. What actually matters
+     * is that it found a free index at all and grew the run, which is what this now says.
+     */
+    const taken = [3, 4, 5, 2];
+    const got = sweepPartner(3, taken, 10);
+    expect(taken).not.toContain(got);
+    expect(got).toBeGreaterThanOrEqual(0);
+    // contiguous with the block it is extending, on one side or the other
+    expect(taken.includes(got - 1) || taken.includes(got + 1)).toBe(true);
+  });
+
+  it('reports no partner rather than inventing one, at the edges and when full', () => {
+    expect(sweepPartner(0, [0], 1)).toBe(-1);
+    expect(sweepPartner(2, [0, 1, 2, 3, 4], 5)).toBe(-1);
+  });
+
+  it('never returns the claim it was given, or anything out of bounds', () => {
+    for (let i = 0; i < 12; i++) {
+      const got = sweepPartner(i, [i], 12);
+      expect(got, `i=${i}`).not.toBe(i);
+      expect(got >= 0 && got < 12, `i=${i} → ${got}`).toBe(true);
+    }
+  });
+
+  it('sweeps on a beat the player can learn, not every tick', () => {
+    // Every tick is just a faster clock wearing a costume, and `regrowMs` already exists for
+    // that. A beat can be anticipated, which is what makes it a signature rather than a rate.
+    expect(SIEGE_SWEEP_EVERY).toBeGreaterThan(1);
+  });
+
+  it('pins for less than the reward the player buys with a feather', () => {
+    // A punishment the player suffered should not out-last an effect they spent a treat on.
+    expect(AMBUSH_PIN_MS).toBeLessThan(TREAT_SPECS.feather.anchorMs);
+    expect(AMBUSH_PIN_PX).toBeGreaterThan(0);
+  });
+
+  it('doubles only a minority of feints, or the tell stops carrying information', () => {
+    expect(TRICKSTER_DOUBLE).toBeLessThan(0.5);
+    expect(STANCES.trickster.feint).toBeGreaterThan(0);
+  });
+});
+
 describe('loadout (§9.5)', () => {
   const kinds = Object.keys(TREAT_SPECS);
 
@@ -1366,12 +1563,16 @@ describe('the cat’s writing (§8)', () => {
                 for (const idleMs of [0, 9000])
                   for (const staleMs of [0, 25_000])
                     for (const interrupts of [0, 1, 2, 3])
-                      for (const [rung, found] of [
-                        [0, 0],
-                        [0, 3],
-                        [1, 3],
-                        [3, 3],
-                      ] as const) {
+                      // Its own axis, not derived from another. Tying it to `interrupts === 2`
+                      // hid `bluff-misses`, which needs exactly that value — the same coupling
+                      // mistake as pinning `staleMs`, one loop over.
+                      for (const lastStand of [false, true])
+                        for (const [rung, found] of [
+                          [0, 0],
+                          [0, 3],
+                          [1, 3],
+                          [3, 3],
+                        ] as const) {
                         const id = pickLine({
                           territory,
                           ammo,
@@ -1384,12 +1585,74 @@ describe('the cat’s writing (§8)', () => {
                           mood,
                           rung,
                           found,
+                          // 1.4: an *event* axis, so this sweep can reach an event line at all.
+                          // It reported `last-stand` unreachable until it varied this, and was
+                          // right to — a field it never sets is a branch it never takes.
+                          lastStand,
                           ...(ending ? { ending } : {}),
                         });
                         if (id) seen.add(id);
                       }
     const unreachable = LINES.filter((l) => !seen.has(l.id)).map((l) => l.id);
     expect(unreachable, `unreachable: ${unreachable.join(', ')}`).toEqual([]);
+  });
+
+  /*
+   * The sweep above cannot catch this, and 1.4 proved it by nearly shipping the bug.
+   *
+   * That sweep varies `mood` and `territory` **independently**, but the game *derives* one from
+   * the other — `mood()` enters the desperate tier at territory ≤ 0.2. So a line gated on
+   * `desperate` with no upper territory bound is reachable in the sweep's abstract state space
+   * and, in play, wins every single time a deeper `rattled-*` line is due. 1.4's `last-stand`
+   * was written exactly that way first, and would have silently killed `rattled-10`.
+   *
+   * This is the same defect as 1.0's `win-clean` shadowing the rematch offer: every line
+   * reachable, every gate correct in isolation, and one branch that real play always takes. So
+   * this sweep uses the **real** `mood()` rather than a free variable, which is the only way to
+   * ask "what does a fight actually say".
+   */
+  it('has no line that only unreachable *combinations* can reach', () => {
+    const seen = new Set<string>();
+    for (const ending of [undefined, 'win', 'lose', 'truce', 'truce-recover'] as const)
+      for (let t = 0; t <= 100; t++)
+        for (const ammo of [0, 2])
+          for (const spent of [0, 2])
+            for (const freed of [0, 3])
+              for (const collared of [false, true])
+                // interrupts 2 exactly: `support-interrupts` fires at >=3 and sits *above*
+                // `bluff-misses`, so 3 alone hides it. staleMs likewise — pinned at 0 the first
+                // time, which reported `support-stale` dead when only the grid was.
+                for (const interrupts of [0, 1, 2, 3])
+                  for (const idleMs of [0, 9000])
+                    for (const staleMs of [0, 25_000])
+                    for (const [rung, found] of [
+                      [0, 0],
+                      [1, 3],
+                      [3, 3],
+                    ] as const) {
+                      const territory = t / 100;
+                      const partial = {
+                        territory,
+                        ammo,
+                        spent,
+                        freed,
+                        interrupts,
+                        idleMs,
+                        staleMs,
+                        collared,
+                        rung,
+                        found,
+                        // the last stand is an event, so it has to be swept as one
+                        lastStand: interrupts === 2 && t <= 20,
+                        ...(ending ? { ending } : {}),
+                      };
+                      // mood is not a free variable in the game — it is a function of this state
+                      const m = mood({ ...partial, mood: 'even' } as FightState);
+                      const id = pickLine({ ...partial, mood: m } as FightState);
+                      if (id) seen.add(id);
+                    }
+    const dead = LINES.filter((l) => !seen.has(l.id)).map((l) => l.id);
+    expect(dead, `never said in a real fight: ${dead.join(', ')}`).toEqual([]);
   });
 });
 

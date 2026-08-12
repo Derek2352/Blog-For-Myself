@@ -19,8 +19,12 @@
  * AudioContext lazily on first use.
  */
 
-/** The five cues the fight can sound, one per visual event. */
-export type SfxCue = 'telegraph' | 'land' | 'reclaim' | 'win' | 'lose';
+/**
+ * Every cue the fight can sound, one per visual event — the rule §11 sets, which is why this list
+ * grows only when something new is visible. 1.4 added `swat` (§5.4's counter connecting, which has
+ * the squash) and `laststand` (§7.3's tier turning, which has the mood tell).
+ */
+export type SfxCue = 'telegraph' | 'land' | 'reclaim' | 'swat' | 'laststand' | 'win' | 'lose';
 
 /* ------------------------------------------------------------------ *
  * Session state — the toggle's only memory
@@ -125,6 +129,26 @@ export function playCue(cue: SfxCue): void {
       blip(ac, 523, 523, 0.12, 'triangle', 0.06);
       blip(ac, 659, 659, 0.12, 'triangle', 0.06, 0.1);
       blip(ac, 784, 784, 0.2, 'triangle', 0.06, 0.2);
+      break;
+    /*
+     * §5.4's counter connecting (1.4). A noise thud with a bright tick over it — the thump says
+     * *contact* and borrows the landing's vocabulary, and the tick above it is the only rising
+     * note in the set that the player causes to happen *to the cat*. Louder than `reclaim`
+     * because it is rarer and deliberate; still under the win.
+     */
+    case 'swat':
+      thud(ac, 0.1, 0.08);
+      blip(ac, 880, 1180, 0.1, 'square', 0.045, 0.02);
+      break;
+    /*
+     * §7.3's last stand beginning (1.4). Two low notes *rising* — the only ascending figure the
+     * cat plays about itself, and pitched under everything else so it reads as a threat rather
+     * than a fanfare. It is the audio half of "the walls come in now": the player should hear the
+     * fight change gear at the moment the regrow clock does.
+     */
+    case 'laststand':
+      blip(ac, 110, 130, 0.3, 'sawtooth', 0.05);
+      blip(ac, 146, 174, 0.4, 'sawtooth', 0.05, 0.16);
       break;
     // lose: two descending notes, no drama
     case 'lose':

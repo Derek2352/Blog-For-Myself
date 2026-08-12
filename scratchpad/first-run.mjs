@@ -22,6 +22,15 @@
  *
  * Depends on playwright-core + a real Chrome (the same bargain the earlier arena
  * harnesses made). Prints PASS/FAIL per check and exits non-zero on failure.
+ *
+ * **Every `waitForFunction` here passes its options in the third position, and that is not a
+ * style rule (fixed in 1.4).** Playwright's signature is `(pageFunction, arg, options)`, so
+ * `{ timeout: N }` in the second slot becomes the page function's *argument* and the bound
+ * silently falls back to Playwright's 30s default — measured, a wait asking for 4000ms took
+ * 30104ms. Twenty of those seconds belong to a game rule: §11 ends a fight `IDLE_TRUCE_MS`
+ * after the last input, so an over-running wait **ends the fight it is waiting on**, and the
+ * harness then reports the emptied board as a loss. It cost 1.4 a red `arena8` section 1 that
+ * read exactly like a broken game.
  */
 import { chromium } from 'playwright-core';
 import { existsSync } from 'node:fs';
@@ -35,6 +44,11 @@ const CHROME_CANDIDATES = [
   'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
   '/usr/bin/google-chrome',
   '/usr/bin/chromium',
+  // The browser a Claude Code cloud session already has, which is where this gate is usually run
+  // (added 1.4: without it the harness exits 2 before a single check, and an unrun gate in a
+  // sweep of green ones is the quietest possible failure).
+  process.env.PLAYWRIGHT_BROWSERS_PATH ? `${process.env.PLAYWRIGHT_BROWSERS_PATH}/chromium` : null,
+  '/opt/pw-browsers/chromium',
 ].filter(Boolean);
 
 const executablePath = CHROME_CANDIDATES.find((p) => existsSync(p));
@@ -65,6 +79,7 @@ async function openFight() {
   // The curtain has a beat; wait until at least one claim is visibly placed.
   await page.waitForFunction(
     () => document.querySelectorAll('.cat-claimed').length > 0,
+    undefined,
     { timeout: 10_000 },
   );
   return Date.now();
@@ -158,7 +173,7 @@ for (let fight = 0; fight < 6 && !won; fight++) {
       await freshToggle.click();
       await page.waitForSelector('html.cat-arena-on', { timeout: 10_000 }).catch(() => {});
       await page
-        .waitForFunction(() => document.querySelectorAll('.cat-claimed').length > 0, { timeout: 10_000 })
+        .waitForFunction(() => document.querySelectorAll('.cat-claimed').length > 0, undefined, { timeout: 10_000 })
         .catch(() => {});
     }
   }
@@ -264,6 +279,7 @@ for (let fight = 0; fight < 6 && !won; fight++) {
     // (§9.4). Wait for the page to restore, then re-open.
     await page.waitForFunction(
       () => !document.documentElement.classList.contains('cat-arena-on'),
+      undefined,
       { timeout: 10_000 },
     ).catch(() => {});
     await page.waitForTimeout(800);
@@ -280,7 +296,7 @@ for (let fight = 0; fight < 6 && !won; fight++) {
         await page.waitForSelector('html.cat-arena-on', { timeout: 10_000 }).catch(() => {});
       }
       await page
-        .waitForFunction(() => document.querySelectorAll('.cat-claimed').length > 0, { timeout: 10_000 })
+        .waitForFunction(() => document.querySelectorAll('.cat-claimed').length > 0, undefined, { timeout: 10_000 })
         .catch(() => {});
     }
   }

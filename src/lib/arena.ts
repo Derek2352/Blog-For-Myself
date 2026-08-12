@@ -521,6 +521,48 @@ export function pounceHit(landX: number, landY: number, curX: number, curY: numb
 }
 
 /* ------------------------------------------------------------------ *
+ * The counter (§5.4, 1.4) — a second target for the throw
+ * ------------------------------------------------------------------ */
+
+/**
+ * `[PH 64]` px — how near the cat a treat has to land to be a swat rather than a lure.
+ *
+ * Slightly wider than `HIT_RADIUS` (46), and deliberately: the cat's own pounce gets the
+ * tighter number because it is the aggressor and §5.3 makes it commit blind. The player is
+ * throwing at a *stationary, recovering* animal and paying a treat for the attempt, so the
+ * window is forgiving in the direction that rewards reading the whiff.
+ */
+export const SWAT_RADIUS = 64;
+
+/**
+ * `[PH 900]` ms added to a recovery that gets swatted.
+ *
+ * Derived from what it has to buy, not chosen for feel: `SCRUB_MS` is 1400, and `RECOVER_MS`
+ * is 700, so a bare whiff already gifts half a hold. This has to turn that into *most* of
+ * one without turning it into all of one — a stun that guarantees a free claim would make the
+ * counter strictly better than fleeing, which is the failure mode §3 warns about. 700 + 900
+ * = 1600ms of stillness against a 1400ms hold: enough to finish a claim you were already
+ * part-way through, not enough to start and finish a fresh one from nothing.
+ */
+export const SWAT_STUN_MS = 900;
+
+/**
+ * Does a treat landing here, now, count as a counter-attack?
+ *
+ * **Recover only**, and that is the whole design rather than a safety check. §5.3 spends the
+ * telegraph teaching you to read a wind-up, and until 1.4 that reading only ever bought you a
+ * dodge — the knowledge had one use. This gives it a second: the same tell now also marks the
+ * moment the cat is *punishable*, so the player who learned §5.3 has something to do with it
+ * besides run. §7.4 wants one mechanic found by exploration; nothing announces this.
+ *
+ * Pure, and separate from `pounceHit`, because they are different questions with different
+ * radii and only one of them is the player's to aim.
+ */
+export function swatLands(phase: Phase, dist: number, radius = SWAT_RADIUS): boolean {
+  return phase === 'recover' && dist <= radius;
+}
+
+/* ------------------------------------------------------------------ *
  * Stances (§9.3) — same verbs, different counter-play
  * ------------------------------------------------------------------ */
 
@@ -613,6 +655,88 @@ export const STANCES: Record<Stance, StanceSpec> = {
  * be told about, not common enough to be what the game *is*.
  */
 export const SLEEPY_CHANCE = 0.08;
+
+/* ------------------------------------------------------------------ *
+ * Signature moves (§9.3, 1.4) — one identity move per stance
+ * ------------------------------------------------------------------ */
+
+/**
+ * `[PH 2]` — siege regrows **two** claims every this-many-th tick, not one.
+ *
+ * §9.3 gives siege the line "it cannot leave the floor, so the board has to do its fighting
+ * for it", and until 1.4 that meant one clock and nothing else — the stance with the most
+ * distinctive premise had the least distinctive *moment*. This is the moment: every other
+ * regrow, the walls come in from two sides at once.
+ *
+ * Every *other* rather than every one, because the point is a beat the player can learn to
+ * anticipate. Every tick is just a faster clock wearing a costume, and `regrowMs` already
+ * exists for that. Adjacency does the rest of the work — see `sweepPartner`.
+ *
+ * This number sets the sweep's *texture* and deliberately not its *rate*: `regrowInterval`
+ * charges the cat one interval per claim it takes, so two-on-the-beat and one-every-tick regrow
+ * the same amount of board per minute. That separation is what lets this be tuned by feel — the
+ * first version of it could not be, because every value of it was also a difficulty setting.
+ */
+export const SIEGE_SWEEP_EVERY = 2;
+
+/**
+ * Which claim a sweep takes alongside the first: the nearest **unclaimed neighbour in document
+ * order**, preferring the side that keeps the pair contiguous.
+ *
+ * Document order is the right adjacency here and it is not an approximation. `arena.order` is
+ * built in document order (`candidates()` preserves it, which `boardSlice` documents as the
+ * reason it sorts), so neighbouring indices are neighbouring *page furniture* — a heading and
+ * the paragraph under it, two cards in a row. Taking a random second claim would read as the
+ * clock ticking twice; taking the one next door reads as a wall moving, which is the fiction
+ * §9.3 asks for.
+ *
+ * Pure and index-based so it is testable without a DOM: `taken` is the set of indices already
+ * claimed, `total` the board size. Returns -1 when the board has no contiguous neighbour left,
+ * which is a normal endgame state and not a failure.
+ */
+export function sweepPartner(index: number, taken: readonly number[], total: number): number {
+  const held = new Set(taken);
+  for (let step = 1; step < total; step++) {
+    const after = index + step;
+    if (after < total && !held.has(after)) return after;
+    const before = index - step;
+    if (before >= 0 && !held.has(before)) return before;
+  }
+  return -1;
+}
+
+/**
+ * `[PH 2600]` ms an ambush cat guards the ground it just took.
+ *
+ * §9.3's ambush is "the one that actually hunts you", and a landed pounce was worth exactly
+ * one element — the same as siege's clock ticking, from a stance that had to earn it by
+ * reading you and committing. So a hit now also *pins* it: it holds position over the claim it
+ * stole, and re-taking that claim means either waiting it out or spending a treat to lure it
+ * off. A hit becomes a positional problem instead of a subtraction.
+ *
+ * Reuses `boss.anchor*` — the machinery treats already use to keep the cat near a biscuit —
+ * so this adds a trigger, not a system. Shorter than the feather's 5000ms anchor because that
+ * one is a reward the player *bought* and this one is a punishment they suffered.
+ */
+export const AMBUSH_PIN_MS = 2600;
+
+/** `[PH 90]` px the pinned cat may stray from the claim it is guarding. Matches biscuit's leash. */
+export const AMBUSH_PIN_PX = 90;
+
+/**
+ * `[PH 0.35]` — how often a trickster follows a bluff *straight* into the real thing.
+ *
+ * §9.3 says the trickster's tell "can be learned, which means it has to be missable the first
+ * few times", and its feint already does that once. This makes the lesson recursive: having
+ * learned that a shallow gather means nothing, you relax — and this is the stance that
+ * punishes relaxing. The double is what stops "read the tell" collapsing into a rule you can
+ * apply without attention.
+ *
+ * Below the feint rate (0.3 → this fires on a third of feints) so the bluff stays mostly a
+ * bluff. If it were common the feint would just *be* the wind-up and §9.3's tell would carry
+ * no information at all.
+ */
+export const TRICKSTER_DOUBLE = 0.35;
 
 /** This fight's stance, deterministic from its seed so a board can be replayed. */
 export function pickStance(seed: number): Stance {
@@ -878,6 +1002,64 @@ export function telegraphScale(a: number): number {
 }
 
 /**
+ * `[PH 0.55]` — how much of its regrow clock a cornered cat keeps.
+ *
+ * **The other half of "desperate", and the half that was missing.** §7.3's table promises the
+ * desperate tier is "faster telegraph, more taunting", and 0.9 delivered exactly that: the
+ * wind-up shortens by `telegraphScale`. But 1.0 then measured the fight's real counter and it
+ * is *fleeing* — hold further away than `SAFE_FLEE_PX` and the pounce provably cannot reach
+ * you. So the tier's one escalation was an escalation of the threat a good player has already
+ * opted out of, and the regrow clock — the only pressure that reaches a distant player — stayed
+ * fixed at whatever the stance set. The result is that the fight got *calmest* at the moment it
+ * should be tightest: the tester's "the pace is slow" is loudest at the end, when the cat is
+ * cornered and out of ideas.
+ *
+ * So the walls close faster instead. This is the pressure that does not care where you stand.
+ *
+ * **Why 0.55 and not less:** the floor is not negotiable. §9.4 promises the bottom rung is "a
+ * pure-skill fight for whoever wants it" and `arena8` section 4 measures it, so this number is
+ * bounded above by "no felt climax" and below by "a treatless fight stops being winnable". At
+ * ambush's 15000ms base that is 8250ms cornered, against a player who reclaims roughly one
+ * claim per 2s of holding plus travel — pressure that is felt and out-run, which is the whole
+ * intent. Verified, not assumed: see 1.4's ship-gate note.
+ *
+ * "Broken looks like": at ≤0.3 the endgame becomes a treadmill and the floor fails; at ≥0.85
+ * nothing changes and the tier is decorative again — which is the state this fixes.
+ */
+export const LAST_STAND_REGROW = 0.55;
+
+/**
+ * The regrow interval this mood deserves.
+ *
+ * A function rather than a constant on the stance, because the clock is now two things
+ * multiplied: the stance's *identity* (siege's 9000 vs a leaper's 15000 — §9.3) and the mood's
+ * *urgency*. Keeping them separate means the last stand cannot quietly retune §9.3, which is
+ * the mistake 0.9 explicitly avoided when it clamped `telegraphScale`.
+ *
+ * Bored is untouched on purpose. §7.3 makes the bored cat's tell that it *does less*, and a
+ * bored cat that regrew faster than an even one would be doing more while pretending to sulk.
+ *
+ * **`claims` is the sweep's price, and it is the reason the sweep is safe.** The cat waits one
+ * interval *per claim it took*, so a sweep of two is followed by a double wait. Measured before
+ * it was written: the first version of §9.3's sweep simply took two on the beat and left the
+ * clock alone, which raised siege's rate to 1.5 claims per 9000ms — and a browser run of
+ * flee-and-scrub against it plateaued dead level at six claims for ten straight exchanges,
+ * 0.167 claims/s of regrow against 0.164 claims/s of reclaiming. The player could not lose and
+ * could not win, which is worse than either.
+ *
+ * Charging an interval per claim makes the long-run rate *identical* to 1.3's — 3 claims per
+ * 3 intervals, whatever the cadence — so the sweep changes the fight's texture (a squeeze, then
+ * a lull) and provably not its arithmetic. §9.4's floor is therefore undisturbed by construction
+ * rather than by measurement, which is the only kind of safety worth having under a rule that
+ * says the bottom rung must stay winnable.
+ */
+export function regrowInterval(baseMs: number, m: Mood, claims = 1): number {
+  if (baseMs <= 0) return baseMs; // sleepy has no clock at all, and keeps not having one
+  const urgency = m === 'desperate' ? LAST_STAND_REGROW : 1;
+  return Math.round(baseMs * urgency * Math.max(1, claims));
+}
+
+/**
  * The most patient a cat is ever allowed to be.
  *
  * `provoked` needs `progress >= POUNCE_THRESHOLD + patience`, and progress is capped at 1
@@ -1013,6 +1195,27 @@ export interface FightState {
    * would be the cat promising something it cannot deliver.
    */
   found: number;
+  /**
+   * True from the moment the cat *enters* the desperate tier until the dialogue spends it (§7.3,
+   * 1.4) — or until the cat stops being cornered, whichever comes first.
+   *
+   * An **event**, not a state, and that distinction is why it exists. §8's table is
+   * priority-ordered over fight *states*, and the last stand is a moment — so writing it as a
+   * territory band put it in direct competition with §8.3's rattled ladder and silently killed
+   * `rattled-20`, whose whole band it occupied. Narrowing the band was not available either:
+   * territory moves in steps of `1 / board`, so on a 14-element board a band under ~0.07 wide is
+   * *narrower than one claim* and can be stepped straight over — which is the bug 0.9 recorded
+   * against the mood hysteresis, in the same units.
+   *
+   * So the transition is signalled instead of inferred, the way `ending` is. `stepMood` already
+   * knows the tier changed; this carries that one fact into the writing.
+   *
+   * **Optional here, one-shot at the caller, and the handover is the part that bit.** An event is
+   * only worth anything if somebody spends it, and the first version let *any* reader clear it —
+   * so the once-a-frame mood pass consumed it while the dialogue was still inside §8's talk gap,
+   * and the line was dropped almost every time. Only the writing side spends it now.
+   */
+  lastStand?: boolean;
   /** Which ending, if the fight is ending. */
   ending?: 'win' | 'lose' | 'truce' | 'truce-recover';
 }
@@ -1179,6 +1382,38 @@ export const LINES: readonly { id: string; text: string; when: (s: FightState) =
   { id: 'support-interrupts', text: 'that one was mine. mostly.', when: (s) => s.interrupts >= 3 },
 
   // ---- 8.3 rattled, while losing
+  /*
+   * The last stand's own line (1.4), and it sits *above* `rattled-10` deliberately.
+   *
+   * §7.3's desperate tier now speeds the regrow clock as well as the wind-up, and a mechanic the
+   * player can feel should be a mechanic the player is told about — otherwise the walls closing
+   * faster reads as the game glitching rather than as the cat trying. The rattled lines below are
+   * about *losing ground*; this one is about the cat deciding not to.
+   *
+   * Gated on the tier rather than on territory alone, so it cannot fire while the cat is merely
+   * behind: `mood` is hysteretic, so this speaks exactly when the faster clock is actually
+   * running. It stays in character — §8's cat bluffs, it does not rage — so this is a threat
+   * delivered flatly, which at seven words is the most menacing register available.
+   *
+   * **Gated on the transition, not on territory — and that is a correction, not a preference.**
+   * Written first as `mood === 'desperate' && territory <= 0.2`, this shadowed §8.3's ladder:
+   * the tier *enters* at 0.2, so in real play every territory low enough for `rattled-20` or
+   * `rattled-10` is also desperate, and an unbounded gate wins every time one of them is due.
+   * `rattled-20` lost its entire band. 1.2's reachability sweep cannot see this — it varies
+   * `mood` and `territory` independently while the game derives one from the other — so 1.4 adds
+   * a second sweep that uses the real `mood()`, and that is what caught it.
+   *
+   * Narrowing the band was not a fix: territory moves by `1 / board`, so on a 14-element board any
+   * band under ~0.07 is narrower than a single claim and can be stepped clean over. 0.9 recorded
+   * that same arithmetic against the mood hysteresis. An event needs an event's signal, so
+   * `lastStand` carries it — and the cat threatens **once**, on the way in, which is the better
+   * read anyway: you announce a last stand, you do not narrate it.
+   */
+  {
+    id: 'last-stand',
+    text: 'the walls come in now.',
+    when: (s) => !s.ending && !!s.lastStand,
+  },
   { id: 'rattled-10', text: 'fine. fine.', when: (s) => s.territory <= 0.1 },
   { id: 'rattled-20', text: 'this was my spot first.', when: (s) => s.territory <= 0.2 },
   { id: 'rattled-35', text: 'i am letting you have it.', when: (s) => s.territory <= 0.35 },

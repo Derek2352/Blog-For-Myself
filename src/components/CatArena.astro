@@ -248,6 +248,20 @@
     transform: scale(1.14, 1.06);
     transition: none;
   }
+  /* Swatted (§5.4's counter, 1.4) — squashed flatter than a plain recovery and tipped the other
+     way, so the player can see that the thing they did landed.
+
+     It has to out-read `boss-recover`, which is the state it extends: a recovering cat is already
+     slumped, so "recovering for longer" is invisible without a distinct pose. Flatter and rotated
+     the opposite direction reads as *knocked* rather than as *landed*, which is the difference
+     between the cat's mistake and the player's hit. Scale and rotation only, like every other
+     boss pose (§0's art constraint, as revised in 1.3). */
+  :global(#site-cat.boss-swatted .cat-svg) {
+    transform: scale(1.1, 0.78) rotate(5deg);
+  }
+  :global(#site-cat.boss-swatted .cat-ear) {
+    transform: rotate(-30deg);
+  }
   /* landed on a paragraph, briefly regretting it */
   :global(#site-cat.boss-recover .cat-svg) {
     transform: scale(1.04, 0.9) rotate(-4deg);
@@ -545,6 +559,14 @@
     mood as moodFor,
     aggression,
     telegraphScale,
+    regrowInterval,
+    swatLands,
+    SWAT_STUN_MS,
+    sweepPartner,
+    SIEGE_SWEEP_EVERY,
+    AMBUSH_PIN_MS,
+    AMBUSH_PIN_PX,
+    TRICKSTER_DOUBLE,
     patienceFor,
     talkGap,
     GROOM_EVERY_MS,
@@ -1075,8 +1097,29 @@
     anchorY: 0,
     anchorPx: 0,
     anchorUntil: 0,
+    /**
+     * Raised for one tick when the desperate tier is entered, so §8 can announce the last stand.
+     * Consumed by `fightState`; see the note on `FightState.lastStand`.
+     */
+    lastStand: false,
     /** Siege regrows the board on this clock. */
     regrowAt: 0,
+    /**
+     * The swat pose's own timer, so a stale one cannot un-pose the *next* swat.
+     *
+     * Held rather than fired and forgotten because 1.1's review found four bugs of exactly this
+     * shape — a timer outliving the thing it was scheduled for — and the ending beat's was one
+     * of them. A swat late in one fight and another early in the next is the reachable case.
+     */
+    swatTimer: 0,
+    /**
+     * Regrow ticks so far this fight, so §9.3's siege sweep can land on a *beat*.
+     *
+     * Counted rather than randomised: a beat is the thing a player can learn to anticipate,
+     * and 1.4's whole argument for the sweep is that a random second claim would read as the
+     * clock ticking twice. Reset with the fight, like every other boss field.
+     */
+    regrows: 0,
     /** How long the cat cannot pounce while at a treat, from the treat's spec. */
     immuneMs: 0,
     lureMs: 0,
@@ -1242,6 +1285,56 @@
     if (k >= 1) {
       t.landed = true;
       placeThrow(node, t.x, t.y);
+      /*
+       * §5.4's counter (1.4): a treat that lands *on a recovering cat* is a swat.
+       *
+       * Not a fourth verb — §3 is proud of having three and rejects inputs that add no decision.
+       * This is a second thing the throw already in the game can do, and it adds the decision §3
+       * asks for: spend the treat to make your next window safe (the lure, since 0.5), or spend
+       * it to punish a whiff you just read. Same button, same resource, two intentions.
+       *
+       * Resolved on *landing* rather than on the click, which is what makes it a skill window
+       * rather than a spell: the treat takes `THROW_ARC_MS` to arrive, so you are aiming at where
+       * the cat will still be, during a recovery you had to see coming. `swatLands` holds the
+       * rule (recover-only, and a radius) in `arena.ts` where it is testable without a DOM.
+       *
+       * Nothing teaches this. §7.4 wants one mechanic found by exploration, and the tell §5.3
+       * already trained you to read is the same tell that marks the punishable moment — so the
+       * knowledge the game already gave you is what unlocks it.
+       */
+      const catRoot = catEl();
+      if (catRoot && !arena.ending) {
+        const dist = Math.hypot(t.x - boss.x, t.y - boss.y);
+        if (swatLands(boss.phase, dist)) {
+          /*
+           * Extends the recovery it interrupted rather than starting a new state: the FSM measures
+           * `now - boss.since` against the phase duration, so moving `since` *is* the stun, and the
+           * cat cannot telegraph out of a recovery it has not finished.
+           *
+           * **One line, and the first version of it quietly meant something else.**
+           * `now + SWAT_STUN_MS - RECOVER_MS` reads like "make this recovery `SWAT_STUN_MS` long",
+           * but the FSM measures against `RECOVER_MS * spec.recover` — so what it did was *restart*
+           * the stance's whole recovery and add 200ms, and one treat then bought 580ms against
+           * siege and 895ms against ambush. Nobody designed that: it is a §9.3 multiplier leaking
+           * into a §5.4 price, and §10 is supposed to be the only place a number like that is set.
+           *
+           * `+=` is the version `SWAT_STUN_MS`'s own derivation already describes — "900ms *added*
+           * to a recovery", 700 + 900 against a 1400ms hold. It is also the version that is uniform
+           * in the quantity the player actually feels, which is not how long the cat is down but
+           * **how much longer than it would have been**. And it cannot shorten a recovery by
+           * construction, so the one way a punish could accidentally reward the cat is closed
+           * without a clamp to get wrong.
+           */
+          boss.since += SWAT_STUN_MS;
+          catRoot.classList.add('boss-swatted');
+          clearTimeout(boss.swatTimer);
+          boss.swatTimer = window.setTimeout(
+            () => catRoot.classList.remove('boss-swatted'),
+            Math.min(SWAT_STUN_MS, 1200),
+          );
+          playCue('swat');
+        }
+      }
       return;
     }
     // reuse the leap's arc: same hop, thrown rather than jumped
@@ -1371,7 +1464,25 @@
   }
 
   /** Gather what the cat is reacting to. */
-  function fightState(now: number, ending?: FightState['ending']): FightState {
+  /**
+   * A snapshot of how the fight is going, for the dialogue table and the mood.
+   *
+   * `consume` exists for exactly one field, and getting it wrong was a bug worth recording.
+   * §7.3's last stand is an *event* rather than a state (see `FightState.lastStand`), and the first
+   * version cleared the flag inside this function — "consumed by whoever reads it first". But this
+   * function is called every frame by `stepMood`, and `stepTalk` returns **before** calling it
+   * whenever §8's talk gap is still open. So the mood pass ate the event on the very next frame
+   * and threw it away, and the climax line could only ever be said if the tier happened to be
+   * entered in one of the ~16ms windows where the cat was already free to speak — otherwise the
+   * loudest line in the game was silently dropped. Only the dialogue consumes it now, so the event
+   * survives the gap and is said late rather than not at all; the sound sting still marks the exact
+   * moment, since it fires from `stepMood` where the clock actually changes.
+   */
+  function fightState(
+    now: number,
+    ending?: FightState['ending'],
+    consume = false,
+  ): FightState {
     return {
       territory: territory(arena.claimed.length, arena.order.length),
       ammo: ammo().length,
@@ -1388,6 +1499,17 @@
       // spending — and "is there another paw left to take" would go false the moment you
       // threw your last treat.
       found: arena.ammoWas.filter(Boolean).length,
+      /*
+       * The event, handed over once (§7.3, 1.4). `stepMood` raises it on the way into the tier and
+       * the dialogue takes it — see `consume` above. A boolean that stayed true for the whole tier
+       * instead would be the territory-band bug again in a different type: the tier is entered at
+       * ≤20% and lasts, so a *state* here shadows every rattled line for the rest of the fight.
+       */
+      lastStand: (() => {
+        const raised = boss.lastStand;
+        if (consume) boss.lastStand = false;
+        return raised;
+      })(),
       ending,
     };
   }
@@ -1403,6 +1525,22 @@
     const next = moodFor(fightState(now), boss.mood);
     if (next === boss.mood) return;
     boss.mood = next;
+    /*
+     * §7.3's last stand (1.4): raise the event exactly once, on the way in. `stepMood` is the only
+     * place that knows the tier *changed*, and the faster regrow clock starts on this same tick.
+     *
+     * Dropped again on the way *out*, because the event can now outlive the frame it was raised in
+     * (see `fightState`'s `consume`) and a line about the walls closing has no business arriving
+     * after they have opened again. The board can push the cat back over the line on its own — the
+     * last stand regrows the very territory that ends it, which is the tier measuring itself out
+     * of existence.
+     */
+    if (next === 'desperate') {
+      boss.lastStand = true;
+      playCue('laststand');
+    } else {
+      boss.lastStand = false;
+    }
     // Published the same way and for the same reasons as `data-stance`: the tier is a real
     // piece of fight state, it is worth being able to see from outside the closure, and a
     // stylesheet may eventually want it. Written only on change — this runs every frame.
@@ -1423,7 +1561,9 @@
       ? LINE_MS + talkGap(aggression(boss.mood))
       : OPENING_LINE_MS;
     if (now - arena.spokeAt < gap) return;
-    const id = pickLine(fightState(now), arena.lastLine);
+    // The one consuming read: this is the only place a `[PH]`-free event like the last stand can
+    // actually become words, so it is the only place entitled to spend it.
+    const id = pickLine(fightState(now, undefined, true), arena.lastLine);
     if (id) say(id);
   }
 
@@ -1458,6 +1598,46 @@
         // No leap, no recovery — the cost of a feint is the time, which is what makes
         // spending a treat on one feel like being had.
         boss.feint = false;
+        /*
+         * §9.3's double tell (1.4). Sometimes the bluff goes *straight* into the real thing.
+         *
+         * §9.3 says the trickster's tell "can be learned, which means it has to be missable the
+         * first few times" — and once you have learned that a shallow gather means nothing, you
+         * relax. This is the stance that punishes relaxing, so a third of its feints re-commit
+         * immediately instead of returning to the stalk.
+         *
+         * The aim is re-locked here rather than reused, and that keeps §5.3's promise intact: a
+         * wind-up is a commitment to a *place*, and the second one is a second commitment you
+         * get the full telegraph to read. What is taken away is the safety of having read the
+         * first one — not the ability to read this one.
+         *
+         * `!arena.ending` for §7.4's rule, and the distinction matters here: 1.1 lets a pounce
+         * *already in flight* land during the ending because it was committed beforehand — but a
+         * feint is the opposite of a commitment, it is the cat explicitly declining to jump. So a
+         * bluff that re-commits inside the ending beat would be starting something new, which is
+         * exactly what "one element, then it leaves" forbids.
+         */
+        if (
+          Math.random() < TRICKSTER_DOUBLE &&
+          !arena.ending &&
+          arena.claimed.length > 0 &&
+          scrub.inside
+        ) {
+          const moving = now - scrub.at < 90;
+          const aim = predict(
+            scrub.x,
+            scrub.y,
+            moving ? scrub.vx : 0,
+            moving ? scrub.vy : 0,
+            AIM_LEAD_MS,
+          );
+          boss.ax = boss.x;
+          boss.ay = boss.y;
+          boss.bx = aim.x;
+          boss.by = aim.y;
+          bossPhase(root, 'telegraph', now);
+          return;
+        }
         bossPhase(root, 'stalk', now);
         return;
       }
@@ -1655,17 +1835,74 @@
       now > boss.regrowAt &&
       arena.claimed.length < arena.order.length
     ) {
-      boss.regrowAt = now + spec.regrowMs;
+      /*
+       * §7.3's last stand (1.4): the clock, not just the wind-up.
+       *
+       * 0.9 gave the desperate tier a faster telegraph and 1.0 then measured that the fight's
+       * real counter is *fleeing* — so the tier was escalating the one threat a good player has
+       * already opted out of, while the regrow clock that does reach a distant player stayed
+       * fixed. The fight was calmest exactly where it should tighten. `regrowInterval` is where
+       * that is fixed, and it lives in `arena.ts` so the bound against §9.4's floor is testable.
+       *
+       * The interval is charged at the *end* of this block rather than here, because what it costs
+       * now depends on what the tick took — see the sweep below and `regrowInterval`'s third
+       * argument. Charged either way, taken or not: a tick that finds nothing to take still has to
+       * push the clock forward, or the block re-runs every frame for the rest of the fight.
+       */
+      let took = 0;
       const back = takeGround();
       if (back) {
+        took = 1;
         claim(back, arena.order.indexOf(back), arena.seed);
         arena.claimed.push(back);
         arena.total = Math.max(arena.total, arena.claimed.length);
+        /*
+         * §9.3's siege sweep (1.4): every other tick, the walls come in from two sides.
+         *
+         * Siege's premise is "it cannot leave the floor, so the board does its fighting for it",
+         * and that was one clock and nothing else — the most distinctive stance had the least
+         * distinctive moment. `sweepPartner` picks the neighbour *in document order*, so the pair
+         * is adjacent page furniture and reads as a wall moving rather than as the clock ticking
+         * twice. On a beat rather than every tick, so it can be anticipated.
+         */
+        boss.regrows++;
+        if (spec.pin && boss.regrows % SIEGE_SWEEP_EVERY === 0) {
+          const held = arena.claimed.map((n) => arena.order.indexOf(n)).filter((i) => i >= 0);
+          const partner = sweepPartner(arena.order.indexOf(back), held, arena.order.length);
+          const alsoTake = partner >= 0 ? arena.order[partner] : undefined;
+          if (alsoTake?.isConnected && !arena.claimed.includes(alsoTake)) {
+            /*
+             * **Out of `freed` before into `claimed`.** The two lists are disjoint by contract and
+             * `takeGround` relies on it: it pops `freed` and returns without checking `claimed`,
+             * so an element left in both gets claimed a *second* time later — and `open()` already
+             * writes down what that costs, because `claim()` snapshots the element's style into
+             * `wasStyled` and claiming an already-claimed node therefore records the **tilted**
+             * style as the original, which `free()` then faithfully restores. That is pillar 2
+             * failing, from a bookkeeping slip two lines long.
+             *
+             * The first version of this sweep took its partner straight out of `arena.order` and
+             * skipped this, which is what turned a green `arena8` into 11/13.
+             */
+            const wasFreed = arena.freed.indexOf(alsoTake);
+            if (wasFreed >= 0) arena.freed.splice(wasFreed, 1);
+            claim(alsoTake, partner, arena.seed);
+            arena.claimed.push(alsoTake);
+            arena.total = Math.max(arena.total, arena.claimed.length);
+            took = 2;
+          }
+        }
         arena.movedAt = now;
         caption(arenaCaption(arena.claimed.length, arena.total));
         paintTerritory();
         if (isLost(arena.claimed.length, arena.order.length, ammo().length)) finish('lose', now);
       }
+      /*
+       * The sweep's bill. Two claims cost two intervals, so §9.3's moment is paid for in *time*
+       * and the board's rate is exactly what 1.3 measured as winnable. Found the hard way: the
+       * version that took two for free plateaued a fleeing player at six claims for ten
+       * exchanges — see `regrowInterval`.
+       */
+      boss.regrowAt = now + regrowInterval(spec.regrowMs, boss.mood, took);
     }
   }
 
@@ -1699,6 +1936,26 @@
       arena.claimed.push(back);
       arena.total = Math.max(arena.total, arena.claimed.length);
     }
+    /*
+     * §9.3's ambush pin (1.4): a hit is a *position*, not just a subtraction.
+     *
+     * Ambush is "the one that actually hunts you", and until now a landed pounce paid it exactly
+     * what siege gets for a clock tick — one element — despite costing it a read, a commitment
+     * and a whiff risk. So it now stands over what it took: re-scrubbing that claim means
+     * waiting the pin out or spending a treat to lure it off, which turns a hit into the kind of
+     * problem the player has verbs for.
+     *
+     * Reuses `boss.anchor*` exactly as the biscuit and feather do (see `stepTreat`), so this is a
+     * new *trigger* on existing machinery rather than a new system — and it therefore inherits
+     * the leash logic in `stepBoss` for free. Ambush only: siege is already pinned by `spec.pin`,
+     * sleepy is a gift, and giving the trickster a second signature would blur the one it has.
+     */
+    if (boss.stance === 'ambush') {
+      boss.anchorX = boss.bx;
+      boss.anchorY = boss.by;
+      boss.anchorPx = AMBUSH_PIN_PX;
+      boss.anchorUntil = now + AMBUSH_PIN_MS;
+    }
     arena.movedAt = now;
     caption(arenaCaption(arena.claimed.length, arena.total));
     paintTerritory();
@@ -1719,7 +1976,12 @@
   function takeGround(): HTMLElement | null {
     while (arena.freed.length) {
       const back = arena.freed.pop();
-      if (back?.isConnected) return back;
+      // `!arena.claimed.includes` added in 1.4, as a belt to the braces one line up in the siege
+      // sweep. The two lists are disjoint by contract, and for eight versions nothing could break
+      // that because `stepScrub` was the only writer. 1.4 added a second writer and immediately
+      // broke it — so the reader now refuses a double-claim rather than trusting the invariant,
+      // because the cost of trusting it is `claim()` snapshotting a tilted style as the original.
+      if (back?.isConnected && !arena.claimed.includes(back)) return back;
     }
     const free = arena.order.filter((n) => n.isConnected && !arena.claimed.includes(n));
     if (!free.length) return null;
@@ -1971,6 +2233,10 @@
     boss.lureMs = LURE_MS;
     boss.immuneMs = LURE_MS;
     boss.regrowAt = now + STANCES[pickStance(arena.seed)].regrowMs;
+    // Reset with everything else, or a rematch inherits the last fight's sweep beat and siege's
+    // first tick lands as a double for no reason the player could have read.
+    boss.regrows = 0;
+    boss.lastStand = false;
     // Every fight starts even, whatever the last one ended as: `mood` is hysteretic, so a
     // stale tier would carry the previous board's verdict into the opening of this one.
     boss.mood = 'even';
@@ -1993,7 +2259,10 @@
         'boss-eat',
         'boss-fetch',
         'boss-feint',
+        'boss-swatted',
       );
+      clearTimeout(boss.swatTimer);
+      boss.swatTimer = 0;
       endGrooming(root);
       delete root.dataset.stance;
       delete root.dataset.mood;
