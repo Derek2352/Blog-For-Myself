@@ -1,0 +1,512 @@
+---
+/**
+ * CatCard — GDD §2.2's card model, the foundation.
+ *
+ * **Why this exists.** 2.0→2.1's game plays across the whole page: claims are real DOM
+ * furniture, so every move means scrolling to it. The 2.2 finding: *"the visitor has to go up
+ * and down just to make a click."* The concept is good; playing shouldn't mean scrolling.
+ * This component is the self-contained alternative — a collapsed cat icon in the bottom-right
+ * corner that expands into a floating card with a mini-board of tiles.
+ *
+ * **Foundation scope (this file today):** the card shell and the tile board. Collapsed icon,
+ * expanded card, header controls (close, sound, mode), territory strip, and a tile grid dealt
+ * from the site's own navigation structure. Tile states (unclaimed / claimed / being-scrubbed /
+ * freed) are wired with CSS classes. **No game loop yet** — the boss, kittens, treats and
+ * stances migrate here in later steps of the plan. The existing page-board game in CatArena.astro
+ * is untouched and keeps working until the migration drops it.
+ *
+ * **The page stays readable and completely unaffected.** The card is `position: fixed` chrome;
+ * it never touches `html.cat-arena-on`, never scrolls, never captures window events, and it
+ * leaves the page's DOM and layout alone. Class names are card-scoped (`.cat-card-*`,
+ * `.cat-tile-*`) so the fourteen harnesses that assert on the page game see nothing new.
+ *
+ * **A11y.** The collapsed icon is a real `<button>` with `aria-expanded`; the card is a
+ * `role="dialog"` labelled region; Escape closes and returns focus to the icon. The fight
+ * itself remains `aria-hidden` when it arrives (the arena already is).
+ */
+import { getNavTree } from '@/lib/content';
+
+const nav = await getNavTree();
+
+// The tile pool — "generated from the site's content structure — section headings,
+// navigation categories, or a curated list" (§2.2). Navigation categories ARE the site's
+// structure; they are stable, meaningful, and never the page furniture the old game claimed.
+// Fixed routes the site always has are appended so the pool clears the 10–12 tile floor on
+// every page, including ones where the nav is short.
+const FIXED_TILES = ['About', 'Timeline', 'Search', 'Colophon'];
+const TILE_POOL: string[] = [...nav.map((c) => c.label), ...FIXED_TILES];
+const POOL_JSON = JSON.stringify(TILE_POOL);
+---
+
+<div class="cat-card-root" data-cat-card data-pool={POOL_JSON}>
+  <!-- Collapsed: the tappable cat in the corner. Same sprite shapes as the ambient cat (§0:
+       nothing new is drawn), rendered small, with idle animation beats to signal interactivity. -->
+  <button
+    id="cat-card-toggle"
+    class="cat-card-icon tap-safe"
+    type="button"
+    aria-expanded="false"
+    aria-controls="cat-card-panel"
+    aria-label="Open the cat card game"
+  >
+    <svg viewBox="0 0 64 40" class="cat-card-icon-svg" aria-hidden="true">
+      <g class="cat-card-tail">
+        <path d="M11 23 C4 21 1.5 13 7 7" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"></path>
+      </g>
+      <path class="cat-card-body" d="M14 29.5 C10 28.5 9.5 20 16 16.4 C18.5 15.3 21 15 24 15 L45 15 C52 15.5 55 19 55 23.5 L55 26.5 C55 28.5 53.5 29.5 51.5 29.5 Z"></path>
+      <g class="cat-card-head">
+        <path class="cat-card-ear cat-card-ear-far" d="M48 9 L49.5 1.5 L54 6.5 Z"></path>
+        <g class="cat-card-ear cat-card-ear-near">
+          <path d="M56.5 6.5 L61 1.5 L62.5 9 Z"></path>
+        </g>
+        <circle class="cat-card-eye" cx="50" cy="18" r="1.3"></circle>
+        <circle class="cat-card-eye" cx="56" cy="18" r="1.3"></circle>
+        <path class="cat-card-muzzle" d="M52 22.5 Q54 24.5 56 22.5" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"></path>
+      </g>
+    </svg>
+  </button>
+
+  <!-- Expanded: the floating card. Scales up from the icon position; no ink curtain — §14.6
+       makes the curtain optional and the card's own transition is the simpler open/close. -->
+  <section
+    id="cat-card-panel"
+    class="cat-card-panel"
+    role="dialog"
+    aria-modal="false"
+    aria-label="Cat card game"
+    hidden
+  >
+    <!-- Territory: thin strip at the top of the card. Filled by the game when it lands. -->
+    <div class="cat-card-territory" aria-hidden="true">
+      <div class="cat-card-territory-fill" data-territory style="--territory: 0.55"></div>
+    </div>
+
+    <!-- Header: controls live inside the card (the HUD chips move here in the migration). -->
+    <header class="cat-card-header">
+      <span class="cat-card-title rail">cat card</span>
+      <div class="cat-card-controls">
+        <button
+          id="cat-card-sound"
+          class="cat-card-btn"
+          type="button"
+          aria-pressed="true"
+        >
+          <span class="cat-card-pip" aria-hidden="true"></span>
+          <span>sound</span>
+        </button>
+        <button
+          id="cat-card-mode"
+          class="cat-card-btn"
+          type="button"
+          aria-pressed="false"
+        >
+          <span class="cat-card-pip" aria-hidden="true"></span>
+          <span>play it yourself</span>
+        </button>
+        <button
+          id="cat-card-close"
+          class="cat-card-btn"
+          type="button"
+          aria-label="Close the cat card game"
+        >
+          <span aria-hidden="true">×</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- The board: a mini-grid of tiles. Dealt from TILE_POOL by the script; each tile is a
+         labelled rectangle with the same visual language as §5.1's claims (wash + dashed edge,
+         tilt) but on card chrome, so nothing about the page changes. -->
+    <div class="cat-card-board" data-board aria-label="Tile board" role="group"></div>
+
+    <!-- Footer: round/score compact, and the treat ammo the visitor collected from browsing. -->
+    <footer class="cat-card-footer rail">
+      <span data-round>round 1</span>
+      <span class="cat-card-ammo" data-ammo title="Treats collected from browsing"></span>
+    </footer>
+  </section>
+</div>
+
+<style>
+  .cat-card-root {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: 50; /* above the page, below nothing the page needs; card chrome is deliberate */
+    font-size: 14px;
+    line-height: 1.25;
+  }
+
+  /* ---- collapsed icon ---- */
+  .cat-card-icon {
+    display: block;
+    width: 44px;
+    height: 44px;
+    padding: 6px;
+    border: 1px solid color-mix(in srgb, var(--color-ink) 25%, transparent);
+    border-radius: 50%;
+    background: var(--color-ground);
+    color: var(--color-ink);
+    cursor: pointer;
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--color-ink) 18%, transparent);
+  }
+  .cat-card-icon:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+  }
+  .cat-card-icon[aria-expanded='true'] {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 10%, var(--color-ground));
+  }
+  .cat-card-icon-svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Idle animation beats — stretch, yawn, blink — signalling "I'm interactive" (§2.2). */
+  @media (prefers-reduced-motion: no-preference) {
+    .cat-card-icon .cat-card-tail {
+      transform-origin: 7px 7px;
+      animation: cat-card-tail-wag 3.2s ease-in-out infinite;
+    }
+    .cat-card-icon .cat-card-ear-near {
+      animation: cat-card-ear-twitch 6s ease-in-out infinite;
+    }
+    .cat-card-icon .cat-card-eye {
+      animation: cat-card-blink 4.4s ease-in-out infinite;
+    }
+    .cat-card-icon[aria-expanded='false']:hover .cat-card-body {
+      animation: cat-card-stretch 0.9s ease-in-out;
+    }
+  }
+  @keyframes cat-card-tail-wag {
+    0%, 82%, 100% { transform: rotate(0deg); }
+    88%, 94% { transform: rotate(-14deg); }
+  }
+  @keyframes cat-card-ear-twitch {
+    0%, 96%, 100% { transform: rotate(0deg); }
+    97.5% { transform: rotate(8deg); }
+    99% { transform: rotate(-6deg); }
+  }
+  @keyframes cat-card-blink {
+    0%, 90%, 96%, 100% { transform: scaleY(1); }
+    93% { transform: scaleY(0.15); }
+  }
+  @keyframes cat-card-stretch {
+    0%, 100% { transform: scale(1); }
+    45% { transform: scale(1.12, 0.9); }
+  }
+
+  /* ---- expanded card ---- */
+  .cat-card-panel {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 0.6rem);
+    width: min(320px, calc(100vw - 2rem));
+    min-height: 240px;
+    background: var(--color-ground);
+    color: var(--color-ink);
+    border: 1px solid color-mix(in srgb, var(--color-ink) 22%, transparent);
+    border-radius: 12px;
+    box-shadow: 0 8px 28px color-mix(in srgb, var(--color-ink) 28%, transparent);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transform-origin: 100% 100%;
+  }
+  /* Near-full-width on a phone (§2.2): the card IS the game surface on a small screen. */
+  @media (max-width: 480px) {
+    .cat-card-panel {
+      width: calc(100vw - 2rem);
+    }
+  }
+  .cat-card-panel[hidden] {
+    display: none;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .cat-card-root[data-open] .cat-card-panel {
+      animation: cat-card-open 0.18s ease-out;
+    }
+    .cat-card-root[data-closing] .cat-card-panel {
+      animation: cat-card-close 0.14s ease-in forwards;
+    }
+  }
+  @keyframes cat-card-open {
+    from { opacity: 0; transform: scale(0.86); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes cat-card-close {
+    from { opacity: 1; transform: scale(1); }
+    to { opacity: 0; transform: scale(0.86); }
+  }
+
+  /* Territory strip — the fight's axis, drawn on the card instead of the page edge. */
+  .cat-card-territory {
+    height: 3px;
+    background: color-mix(in srgb, var(--color-ink) 14%, transparent);
+  }
+  .cat-card-territory-fill {
+    height: 100%;
+    width: calc(100% * var(--territory, 0.55));
+    background: var(--color-accent);
+  }
+
+  /* Header */
+  .cat-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.5rem 0.6rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-ink) 12%, transparent);
+  }
+  .cat-card-title {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-muted);
+  }
+  .cat-card-controls {
+    display: flex;
+    gap: 0.3rem;
+  }
+  .cat-card-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.22rem 0.5rem;
+    font-size: 0.72rem;
+    border: 1px solid color-mix(in srgb, var(--color-ink) 25%, transparent);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--color-ink);
+    cursor: pointer;
+  }
+  .cat-card-btn:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+  }
+  .cat-card-btn[aria-pressed='true'] {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: var(--color-accent-ink);
+  }
+  .cat-card-pip {
+    width: 7px;
+    height: 7px;
+    flex: none;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+  }
+  .cat-card-btn[aria-pressed='true'] .cat-card-pip {
+    background: currentColor;
+  }
+
+  /* ---- the board ---- */
+  .cat-card-board {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.45rem;
+    padding: 0.6rem;
+    align-content: start;
+    overflow: auto;
+  }
+
+  .cat-tile {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 0.3rem 0.4rem;
+    border: 1px solid color-mix(in srgb, var(--color-ink) 22%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--color-ground) 92%, var(--color-ink) 8%);
+    font-size: 0.72rem;
+    text-align: center;
+    color: var(--color-ink);
+    /* §5.1's claim language: painted only, never laid out. */
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+
+  /* unclaimed → neutral. claimed → wash + dashed edge + tilt, same as the page game. */
+  .cat-tile[data-state='claimed'] {
+    box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--color-accent) 7%, transparent);
+    outline: 2px dashed color-mix(in srgb, var(--color-accent) 62%, transparent);
+    outline-offset: -3px;
+    transform: rotate(var(--tile-tilt, 0deg)) scale(0.99);
+  }
+
+  /* being-scrubbed → the wash deepens toward the freed tint (§5.2's in-claim progress). */
+  .cat-tile[data-state='scrubbing'] {
+    box-shadow: inset 0 0 0 100vmax
+      color-mix(in srgb, var(--color-accent) calc(7% + 19% * var(--scrub, 0)), transparent);
+    outline: 2px dashed color-mix(in srgb, var(--color-accent) 62%, transparent);
+    outline-offset: -3px;
+  }
+
+  /* freed → the flash, then back to neutral. Same 0.42s ease as the page game. */
+  @media (prefers-reduced-motion: no-preference) {
+    .cat-tile[data-state='freed'] {
+      animation: cat-tile-freed 0.42s ease-out;
+    }
+  }
+  @keyframes cat-tile-freed {
+    0% { box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--color-accent) 26%, transparent); }
+    100% { box-shadow: inset 0 0 0 100vmax transparent; }
+  }
+
+  .cat-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.4rem 0.6rem;
+    border-top: 1px solid color-mix(in srgb, var(--color-ink) 12%, transparent);
+    font-size: 0.72rem;
+    color: var(--color-muted);
+  }
+  .cat-card-ammo::before {
+    content: 'treats: ';
+  }
+</style>
+
+<script>
+  import { primeSfx } from '@/lib/cat-sfx';
+  import { tallyFor } from '@/lib/cat-game';
+
+  const root = document.querySelector<HTMLElement>('.cat-card-root');
+  const toggle = document.querySelector<HTMLButtonElement>('#cat-card-toggle');
+  const panel = document.querySelector<HTMLElement>('#cat-card-panel');
+  const board = document.querySelector<HTMLElement>('[data-board]');
+  const soundBtn = document.querySelector<HTMLButtonElement>('#cat-card-sound');
+  const modeBtn = document.querySelector<HTMLButtonElement>('#cat-card-mode');
+  const closeBtn = document.querySelector<HTMLButtonElement>('#cat-card-close');
+  const ammoEl = document.querySelector<HTMLElement>('[data-ammo]');
+
+  // Mirrored literals (the fleet's convention: one copy, drift shows as a failing check).
+  const INITIAL_CLAIM_FRACTION = 0.55; // src/lib/arena.ts
+  const BOARD_MIN = 10; // §2.2: 10–12 tiles per round
+  const BOARD_MAX = 12;
+
+  if (root && toggle && panel && board) {
+    const boardEl = board; // narrowed once, so nested closures see a non-null board
+    const POOL: string[] = JSON.parse(root.dataset.pool ?? '[]');
+    let open = false;
+
+    const setOpen = (next: boolean) => {
+      open = next;
+      root.dataset.open = next ? '1' : '';
+      toggle.setAttribute('aria-expanded', next ? 'true' : 'false');
+      if (next) {
+        panel.hidden = false;
+        dealBoard();
+        closeBtn?.focus();
+      } else {
+        panel.hidden = true;
+        toggle.focus();
+      }
+    };
+
+    /* ---- the tile board ---- */
+    const tiles: HTMLElement[] = [];
+
+    /** Deal the board: pick 10–12 tiles from the pool and mark ~55% claimed (the invasion). */
+    function dealBoard(): void {
+      boardEl.replaceChildren();
+      tiles.length = 0;
+      const count = Math.min(POOL.length, BOARD_MIN + Math.floor(Math.random() * (BOARD_MAX - BOARD_MIN + 1)));
+      const pool = [...POOL].sort(() => Math.random() - 0.5).slice(0, count);
+      const claimedCount = Math.max(1, Math.round(count * INITIAL_CLAIM_FRACTION));
+      pool.forEach((label, i) => {
+        const tile = document.createElement('button');
+        tile.type = 'button';
+        tile.className = 'cat-tile';
+        tile.textContent = label;
+        tile.dataset.state = i < claimedCount ? 'claimed' : 'unclaimed';
+        // §5.1's tilt, deterministic per label so re-deals of the same board look stable.
+        const hash = [...label].reduce((a, c) => a + c.charCodeAt(0), 0);
+        tile.style.setProperty('--tile-tilt', `${((hash % 7) - 3) * 0.12}deg`);
+        tile.addEventListener('click', () => cycleTile(tile));
+        boardEl.appendChild(tile);
+        tiles.push(tile);
+      });
+    }
+
+    /** Foundation-state demo: claimed → scrubbing → freed → unclaimed, on a tap. */
+    function cycleTile(tile: HTMLElement): void {
+      const s = tile.dataset.state;
+      if (s === 'claimed') {
+        tile.dataset.state = 'scrubbing';
+        tile.style.setProperty('--scrub', '0');
+        let p = 0;
+        const iv = window.setInterval(() => {
+          p += 0.08;
+          tile.style.setProperty('--scrub', String(Math.min(1, p)));
+          if (p >= 1) {
+            window.clearInterval(iv);
+            tile.dataset.state = 'freed';
+            setTimeout(() => {
+              tile.dataset.state = 'unclaimed';
+              tile.style.removeProperty('--scrub');
+            }, 460);
+          }
+        }, 90);
+      } else if (s === 'scrubbing') {
+        // a scrub can be interrupted — §5.3's landing — back to claimed for the foundation demo
+        tile.dataset.state = 'claimed';
+        tile.style.removeProperty('--scrub');
+      }
+    }
+
+    /* ---- header controls ---- */
+    // Sound: forward to the page's own chip so one source of truth stays honest
+    // (the arena reads sfxEnabled(); the chip's aria-pressed must match what the
+    // page game shows, and the page chip is what the harnesses assert on).
+    const pageSoundBtn = document.querySelector<HTMLButtonElement>('#cat-sound-toggle');
+    const syncSound = () =>
+      soundBtn?.setAttribute('aria-pressed', pageSoundBtn?.getAttribute('aria-pressed') ?? 'true');
+    soundBtn?.addEventListener('click', () => {
+      pageSoundBtn?.click();
+      syncSound();
+    });
+    syncSound();
+
+    // Mode: mirrored to the page game's chip so both stay honest about the next fight.
+    const pageModeBtn = document.querySelector<HTMLButtonElement>('#cat-manual-toggle');
+    const syncMode = () => {
+      const manual = pageModeBtn?.getAttribute('aria-pressed') === 'true';
+      modeBtn?.setAttribute('aria-pressed', manual ? 'true' : 'false');
+    };
+    modeBtn?.addEventListener('click', () => {
+      pageModeBtn?.click();
+      syncMode();
+    });
+    syncMode();
+
+    /* ---- ammo: what the visitor collected from browsing ---- */
+    function syncAmmo(): void {
+      // The HUD's paw row is the source of truth: each `.cat-paw.got` is one found treat.
+      const found = document.querySelectorAll('.cat-paw.got').length;
+      const total = document.querySelectorAll('.cat-paw[data-slug]').length || 7;
+      if (ammoEl) ammoEl.textContent = tallyFor(found, total);
+    }
+    syncAmmo();
+
+    /* ---- open / close ---- */
+    toggle.addEventListener('click', () => {
+      primeSfx(); // the gesture unlocks audio (§2.1's lesson, kept)
+      setOpen(!open);
+    });
+    closeBtn?.addEventListener('click', () => setOpen(false));
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && open) {
+        e.stopPropagation(); // the page game's Esc is the truce; the card's is the close
+        setOpen(false);
+      }
+    });
+  }
+</script>
