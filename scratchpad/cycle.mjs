@@ -1,6 +1,7 @@
-import { chromium } from 'playwright-core';
+import { launch } from './lib/fixture.mjs';
+
 const URL = 'http://localhost:4416/?ink=20260802';
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const b = await launch();
 const mk = async (o = {}) => {
   const c = await b.newContext({ viewport: { width: 1280, height: 800 }, ...o });
   await c.addInitScript(() => localStorage.setItem('welcomed', '1'));

@@ -23,117 +23,84 @@
  *   npm run build && npx astro preview --port 4416 &
  *   node scratchpad/battle.mjs
  */
-import { chromium } from 'playwright-core';
+import {
+  BASE,
+  IDLE_TRUCE_MS,
+  RECOVER_MS,
+  SCRUB_MS,
+  SIEGE_REGROW_MS,
+  armAmmo,
+  bounded,
+  deal,
+  fresh as context,
+  launch,
+  press as sharedPress,
+  release as sharedRelease,
+  report,
+  wants,
+} from './lib/fixture.mjs';
+
+/*
+ * Shared with the rest of the fleet through `lib/fixture.mjs` (§12.1's charter): the reporter with its
+ * fixture/assertion split, the context factory that declares the mode, the launcher, and the waits
+ * that open and close a fight. This file used to carry its own copy of each.
+ */
+const browser = await launch();
+const { ok, note, fixture, done } = report();
+
 
 /* Mirrors src/lib/arena.ts — kept as literals so a drift shows up as a failure, not a pass. */
-const SCRUB_MS = 1400;
-const RECOVER_MS = 700;
 const THROW_ARC_MS = 320;
 const SWAT_RADIUS = 64;
 const SWAT_STUN_MS = 900;
 const AMBUSH_PIN_MS = 2600;
 const AMBUSH_PIN_PX = 90;
-const SIEGE_REGROW_MS = 9000;
 const LAST_STAND_REGROW = 0.55;
-const IDLE_TRUCE_MS = 20_000;
 
-const BASE = 'http://localhost:4416';
-const results = [];
-const ok = (name, pass, detail = '') => {
-  results.push({ name, pass, detail });
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
-};
-const note = (s) => console.log(`      · ${s}`);
 
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const CLAIMS = `document.querySelectorAll('.cat-claimed').length`;
 const AMMO = `document.querySelectorAll('#cat-score .cat-paw.got').length`;
 const ON = `document.documentElement.classList.contains('cat-arena-on')`;
 const WON = `document.getElementById('site-cat').classList.contains('notched')`;
 
-async function fresh() {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  await ctx.addInitScript(() => localStorage.setItem('welcomed', '1'));
-  /*
-   * 2.0: this harness measures **manual mode** (§3's fight). Commander mode is now the default, so
-   * say which game before opening one — otherwise the pointer is not the verb and half these checks
-   * are asking a spectator to hold still. Presses the HUD chip the way a visitor does, and waits for
-   * `aria-pressed` rather than for a timeout.
-   */
-  await ctx.addInitScript(() => {
-    const pick = () => {
-      const b = document.getElementById('cat-manual-toggle');
-      if (!b) return false;
-      if (b.getAttribute('aria-pressed') === 'true') return true;
-      b.click();
-      return b.getAttribute('aria-pressed') === 'true';
-    };
-    addEventListener('DOMContentLoaded', () => {
-      if (pick()) return;
-      const t = setInterval(() => {
-        if (pick()) clearInterval(t);
-      }, 40);
-      setTimeout(() => clearInterval(t), 8000);
-    });
-  });
-  return ctx;
-}
+/** A desktop context playing **manual mode** — 1.4's additions are all pointer-and-treat mechanics. */
+const fresh = (opts = {}) => context(browser, { mode: 'manual', ...opts });
+
+
+
+/** Shared with the fleet; this file has always allowed 8000ms either way. */
+const press = (page) => sharedPress(page, { timeout: 8000 });
+const release = async (page) => {
+  await sharedRelease(page, { timeout: 8000 });
+  await page.waitForTimeout(200);
+};
+
+
+
 
 /**
- * Every wait in this file passes its options in the **third** position.
+ * The stance a section is about, dealt for rather than hoped for.
  *
- * Playwright's signature is `waitForFunction(pageFunction, arg, options)`, and the whole harness
- * fleet had been passing `{ timeout: N }` in the second — where it becomes the page function's
- * *argument* and the bound silently defaults to 30s. That is not a style point here: §11 ends a
- * fight `IDLE_TRUCE_MS` after the last input, so a wait that overruns 20s **ends the fight it is
- * waiting on**, and the harness then reports the emptied board as a loss. It cost 1.4 a red
- * `arena8` section 1 that read exactly like a broken game: "0 reclaimed, 0 left".
+ * Twenty-four deals is this file's own budget kept — §9.3 weights the roll, so a named stance takes
+ * several fights to see. Every section here pins one, because 1.4's additions are *per stance*: only
+ * siege sweeps, only ambush pins, only a trickster feints.
  */
-const bounded = (page, fn, ms, arg = undefined) =>
-  page.waitForFunction(fn, arg, { timeout: ms }).then(
-    () => true,
-    () => false,
-  );
+const stanceDeal = (page, want) =>
+  deal(page, wants.stance([want], { claims: 'any' }), {
+    deals: 24,
+    settle: 0,
+    // **This file's own open and close, not the defaults.** `release` here carries a 200ms tail, and
+    // without it a re-deal presses the toggle again while the previous intent is still standing — which
+    // toggles the wrong way and leaves the arena *off*. Measured: one commitment in forty seconds and a
+    // treat that never left the HUD, because there was no fight to throw into.
+    reopen: async () => {
+      await release(page);
+      await press(page);
+    },
+  });
 
-async function press(page) {
-  const was = await page.evaluate(() => !!document.querySelector('.cat-claimed'));
-  await page.click('#cat-arena-toggle');
-  await bounded(page, (w) => !!document.querySelector('.cat-claimed') !== w, 8000, was);
-}
 
-async function release(page) {
-  await page.keyboard.press('Escape');
-  await bounded(page, () => !document.querySelector('.cat-claimed'), 8000);
-  await page.waitForTimeout(200);
-}
 
-/** Roll until the stance is the one under test. Nothing here is true of every cat. */
-async function forceStance(page, want, tries = 24) {
-  for (let i = 0; i < tries; i++) {
-    const got = await page.evaluate(`document.getElementById('site-cat')?.dataset.stance ?? ''`);
-    if (got === want && (await page.evaluate(CLAIMS)) > 0) return true;
-    await release(page);
-    await press(page);
-  }
-  return false;
-}
-
-/** Collect treats by walking the tabs, then come home: `/` is the board every harness fights on. */
-async function armAmmo(page) {
-  const hrefs = await page.evaluate(() =>
-    [...document.querySelectorAll('.tabbar a[href]')]
-      .filter((a) => !a.closest('.tab-flyout') && a.offsetParent !== null)
-      .map((a) => a.getAttribute('href'))
-      .slice(0, 5),
-  );
-  for (const href of hrefs) {
-    await page.click(`.tabbar a[href="${href}"]`);
-    await page.waitForTimeout(650);
-  }
-  await page.click('a[href="/"]');
-  await page.waitForTimeout(1200);
-  return page.evaluate(AMMO);
-}
 
 /** Settle the site's scroll-reveal before any hit-testing (1.2's lesson, in one line). */
 async function settlePage(page) {
@@ -286,8 +253,9 @@ async function farTarget(page) {
   await page.waitForTimeout(1500);
   await settlePage(page);
   await press(page);
-  const isSiege = await forceStance(page, 'siege');
-  ok('a siege cat to fight (§9.3)', isSiege, isSiege ? '' : 'no siege in 24 rolls');
+  const isSiegeDeal = await stanceDeal(page, 'siege');
+  const isSiege = !!isSiegeDeal.value;
+  fixture('a siege cat to fight (§9.3)', isSiegeDeal);
 
   /*
    * No decoy, on purpose, and this is the finding that made this file exist.
@@ -362,12 +330,13 @@ async function farTarget(page) {
    * regrow clock does not read the paw row. Which is also a neat confirmation of §2's rule —
    * ammo really is the thing standing between a full board and defeat.
    */
-  const armedToWatch = await armAmmo(page);
+  const armedToWatch = await armAmmo(page, { hops: 5, pool: 5, dwell: 650, settle: 1200, home: '/' });
   ok('treats in hand, so a watched fight cannot lose itself (§2)', armedToWatch >= 3, `${armedToWatch} found`);
   await settlePage(page);
   await press(page);
-  const isSiege = await forceStance(page, 'siege');
-  ok('a siege cat to watch', isSiege, isSiege ? '' : 'no siege in 24 rolls');
+  const isSiegeDeal = await stanceDeal(page, 'siege');
+  const isSiege = !!isSiegeDeal.value;
+  fixture('a siege cat to watch', isSiegeDeal);
 
   await page.evaluate(RECORD, 100);
   // Watch the board grow while playing nothing: every increase is a regrow, and its size is the
@@ -507,12 +476,13 @@ async function farTarget(page) {
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
   await page.waitForTimeout(1500);
-  const armed = await armAmmo(page);
+  const armed = await armAmmo(page, { hops: 5, pool: 5, dwell: 650, settle: 1200, home: '/' });
   ok('treats in hand to spend on a counter', armed >= 3, `${armed} found`);
   await settlePage(page);
   await press(page);
-  const isAmbush = await forceStance(page, 'ambush');
-  ok('an ambush cat, which is the one that whiffs at you', isAmbush, isAmbush ? '' : 'no ambush in 24 rolls');
+  const isAmbushDeal = await stanceDeal(page, 'ambush');
+  const isAmbush = !!isAmbushDeal.value;
+  fixture('an ambush cat, which is the one that whiffs at you', isAmbushDeal);
   await page.evaluate(RECORD, 60);
 
   /**
@@ -644,15 +614,21 @@ async function farTarget(page) {
     await page.waitForTimeout(THROW_ARC_MS + 500);
   }
   const after = (await readRec(page)).phases.slice(beforeControl);
-  ok(
-    'a throw at a cat that is not recovering is a lure, not a counter (§3’s cost)',
-    stalking && threw && !after.some((p) => p.phase.includes('swatted')),
-    !stalking
-      ? 'never caught it stalking'
-      : !threw
-        ? `the control throw never left the HUD (${ammoBefore} in hand) — nothing was measured`
-        : `treat thrown, phases after it: ${after.map((p) => p.phase).join(' → ') || 'none'}`,
-  );
+  /*
+   * **Three statements, not one.** Catching the cat stalking and getting a treat out are what this
+   * check needs *before* it can measure anything, and folding them into the assertion meant a run that
+   * never caught the cat stalking reported "a throw at a stalking cat swats it" — a sentence about the
+   * build, on evidence about the harness.
+   */
+  fixture('caught the cat stalking, so the control throw has a target', stalking || null);
+  fixture('and the control treat left the HUD', threw || null, `${ammoBefore} in hand`);
+  if (stalking && threw) {
+    ok(
+      'a throw at a cat that is not recovering is a lure, not a counter (§3’s cost)',
+      !after.some((p) => p.phase.includes('swatted')),
+      `treat thrown, phases after it: ${after.map((p) => p.phase).join(' → ') || 'none'}`,
+    );
+  }
   await stopRec(page);
   ok('no console errors around the counter', errors.length === 0, errors.slice(0, 2).join(' | '));
   await ctx.close();
@@ -670,8 +646,9 @@ async function farTarget(page) {
   await page.waitForTimeout(1500);
   await settlePage(page);
   await press(page);
-  const isAmbush = await forceStance(page, 'ambush');
-  ok('an ambush cat, the only stance that pins', isAmbush, isAmbush ? '' : 'no ambush in 24 rolls');
+  const isAmbushDeal = await stanceDeal(page, 'ambush');
+  const isAmbush = !!isAmbushDeal.value;
+  fixture('an ambush cat, the only stance that pins', isAmbushDeal);
 
   /*
    * Take a hit on purpose. Holding still on a claim inside the cat's reach is the one thing the
@@ -784,10 +761,4 @@ async function farTarget(page) {
 }
 
 await browser.close();
-const failed = results.filter((r) => !r.pass);
-console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
-if (failed.length) {
-  console.log('failed:');
-  for (const f of failed) console.log(`  - ${f.name}${f.detail ? '  — ' + f.detail : ''}`);
-  process.exit(1);
-}
+if (!done()) process.exit(1);

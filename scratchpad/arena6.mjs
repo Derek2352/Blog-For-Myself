@@ -11,44 +11,29 @@
  * That is a claim about two subsystems agreeing on a clock, which is exactly the kind of
  * thing that is true in the arithmetic and false in the build.
  */
-import { chromium } from 'playwright-core';
+import {
+  BASE,
+  fresh as context,
+  launch,
+  report,
+} from './lib/fixture.mjs';
 
-const BASE = 'http://localhost:4416';
-const results = [];
-const ok = (name, pass, detail = '') => {
-  results.push({ name, pass, detail });
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
-};
+/*
+ * The reporter, the context factory, the launcher and the open/close waits come from
+ * `lib/fixture.mjs` (§12.1's charter). This file carried its own copy of each, which is how one
+ * idea ended up with eleven implementations and a fix at one call site could never be a fix.
+ */
+const browser = await launch();
+const { ok, note, fixture, done } = report();
 
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+/**
+ * A desktop context. This file measures the ink curtain, which belongs to the toggle rather than to
+ * either mode — but manual mode is declared anyway, so the fights it opens are §3's fights and the
+ * pillar-2 snapshots have no squad in them.
+ */
+const fresh = (opts = {}) => context(browser, { mode: 'manual', ...opts });
 
-async function fresh(opts = { viewport: { width: 1280, height: 900 } }) {
-  const ctx = await browser.newContext(opts);
-  await ctx.addInitScript(() => localStorage.setItem('welcomed', '1'));
-  /*
-   * 2.0: this harness measures **manual mode** (§3's fight). Commander mode is now the default, so
-   * say which game before opening one — otherwise the pointer is not the verb and half these checks
-   * are asking a spectator to hold still. Presses the HUD chip the way a visitor does, and waits for
-   * `aria-pressed` rather than for a timeout.
-   */
-  await ctx.addInitScript(() => {
-    const pick = () => {
-      const b = document.getElementById('cat-manual-toggle');
-      if (!b) return false;
-      if (b.getAttribute('aria-pressed') === 'true') return true;
-      b.click();
-      return b.getAttribute('aria-pressed') === 'true';
-    };
-    addEventListener('DOMContentLoaded', () => {
-      if (pick()) return;
-      const t = setInterval(() => {
-        if (pick()) clearInterval(t);
-      }, 40);
-      setTimeout(() => clearInterval(t), 8000);
-    });
-  });
-  return ctx;
-}
+
 
 /*
  * `#cat-curtain` joins the excluded furniture for the same reason the ribbon and the
@@ -552,9 +537,10 @@ function reversals(values, eps = 0.004) {
     });
 
   const a = await digest();
-  if (a === null) {
-    ok('the hero wash canvas was found', false, 'no matching canvas — selector needs updating');
-  } else {
+  // Not a roll and not a check on the build: if the selector stops matching, this harness cannot
+  // measure anything, and saying so as a `FIXTURE` keeps it from reading as the wash being broken.
+  fixture('the hero wash canvas was found', a === null ? null : true, a === null ? 'selector needs updating' : '');
+  if (a !== null) {
     await page.waitForTimeout(900);
     const b = await digest();
     ok('control: the wash is painting before the fight', a !== b, `${a} → ${b}`);
@@ -660,21 +646,33 @@ function reversals(values, eps = 0.004) {
    * against short ones (mid-flood), which is what actually found the bug: a press during the
    * *exit* transition, whose `close()` arrived after the new intent and cancelled it.
    */
+  /*
+   * **Reported once, always** — this loop used to call `ok(..., false)` only when it found something
+   * stranded, so a clean run left no record that the check had happened at all. Silence is not
+   * success: a green suite has to be able to show what it looked at.
+   */
   const beats = [90, 220, 350, 480, 610, 740, 1150, 200, 1300, 320, 950, 160];
+  let stranded = 0;
+  let strandedAt = 0;
   for (const wait of beats) {
     await page.evaluate(() => document.getElementById('cat-arena-toggle').click());
     await page.waitForTimeout(wait);
-    const stranded = await page.evaluate(
+    stranded = await page.evaluate(
       () =>
         [...document.querySelectorAll('[style*="--claim-tilt"]')].filter(
           (el) => !el.classList.contains('cat-claimed'),
         ).length,
     );
     if (stranded) {
-      ok(`no claim styling is stranded (after a ${wait}ms beat)`, false, `${stranded} stranded`);
+      strandedAt = wait;
       break;
     }
   }
+  ok(
+    'no claim styling is stranded at any beat',
+    stranded === 0,
+    stranded ? `${stranded} stranded after a ${strandedAt}ms beat` : `clean across ${beats.length} beats`,
+  );
   await page.evaluate(() => {
     const b = document.getElementById('cat-arena-toggle');
     if (b.getAttribute('aria-pressed') === 'true') b.click();
@@ -700,10 +698,4 @@ function reversals(values, eps = 0.004) {
 }
 
 await browser.close();
-const failed = results.filter((r) => !r.pass);
-console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
-if (failed.length) {
-  console.log('failed:');
-  for (const f of failed) console.log(`  - ${f.name}${f.detail ? '  — ' + f.detail : ''}`);
-  process.exit(1);
-}
+if (!done()) process.exit(1);

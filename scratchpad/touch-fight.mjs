@@ -14,55 +14,36 @@
  *   against 413–420px centred (0/16) and 161–178px low. That gradient is the fight, and a flick
  *   is what it costs — which §5.2 already ruled interrupts a hold.
  */
-import { chromium } from 'playwright-core';
-
-const BASE = 'http://localhost:4416';
-const SCRUB_MS = 1400;
-const SAFE_FLEE_PX = 90 + 170 * 1.0 * 1.4 * (SCRUB_MS / 1000); // 423px, per arena8
-
-let pass = 0;
-const failed = [];
-function ok(name, cond, detail = '') {
-  if (cond) pass++;
-  else failed.push(`${name}${detail ? '  — ' + detail : ''}`);
-  console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
-}
-
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+import {
+  BASE,
+  SAFE_FLEE_PX,
+  SCRUB_MS,
+  deal,
+  finger,
+  fresh as context,
+  launch,
+  report,
+  wants,
+} from './lib/fixture.mjs';
 
 /*
- * 2.0: these checks measure **manual mode** (§3's fight — a pointer that holds). Commander mode is
- * the default now, so the mode has to be chosen before a fight is opened, or the pointer is not the
- * verb any more. Pressed the way a visitor presses it, and waited on `aria-pressed` rather than on a
- * timeout, because the chip's handler is attached by CatArena's own init.
+ * Everything shared lives in `lib/fixture.mjs` now (§12.1's charter): the constants, the reporter
+ * with its fixture/assertion split, the context factory that declares the mode, `deal()` and the
+ * `wants.*` predicates, and the CDP finger. What stays local is what is genuinely only true here —
+ * `openGround`'s touch-adjustment clearance, `findLink`'s size and band, and the snapshot's
+ * exclusion list.
  */
-const PICK_MANUAL = () => {
-  const pick = () => {
-    const b = document.getElementById('cat-manual-toggle');
-    if (!b) return false;
-    if (b.getAttribute('aria-pressed') === 'true') return true;
-    b.click();
-    return b.getAttribute('aria-pressed') === 'true';
-  };
-  addEventListener('DOMContentLoaded', () => {
-    if (pick()) return;
-    const t = setInterval(() => {
-      if (pick()) clearInterval(t);
-    }, 40);
-    setTimeout(() => clearInterval(t), 8000);
-  });
-};
+const browser = await launch();
+const { ok, note, fixture, done } = report();
 
-const phone = async () => {
-  const ctx = await browser.newContext({
-    viewport: { width: 390, height: 844 },
-    hasTouch: true,
-    isMobile: true,
-    deviceScaleFactor: 2,
-  });
-  await ctx.addInitScript(PICK_MANUAL);
-  return ctx;
-};
+/**
+ * A phone, playing **manual mode**.
+ *
+ * 2.0 made commander mode the default, and this file's whole subject is what a *finger* does — so
+ * the mode is declared before any fight opens, or every check here is asking a spectator to hold
+ * still. `fresh` does the pressing; the chip is pressed the way a visitor presses it.
+ */
+const phone = () => context(browser, { phone: true, mode: 'manual' });
 
 const CLAIMS = `document.querySelectorAll('.cat-claimed').length`;
 const ARMED = `document.documentElement.classList.contains('cat-arena-on')`;
@@ -181,82 +162,17 @@ async function findLink(page) {
   });
 }
 
-/** A finger: down, wait, up. `hold` in ms. */
-async function finger(cdp, x, y, hold) {
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
-  if (hold) await new Promise((r) => setTimeout(r, hold));
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-}
-
 /**
  * Scroll a claim's centre to `at` px down the screen and return the point to hold.
  *
- * Two things in here are load-bearing, and I got both wrong first time.
- *
- * **The tolerance.** A first version returned the first claim it could hit without checking
- * whether the scroll had actually put it where it was asked to, so a claim near the top of the
- * document — which cannot be pushed down the screen, because `want` clamps to 0 — came back
- * reported as "high" while sitting 188px from the cat. Every conclusion was then wrong in the
- * same direction: the fight was played in the danger band and the harness called it the safe one.
- *
- * **The settle.** The next version hit-tested immediately after `scrollTo`, and got `NAV.tabbar`
- * at every height — the site's chrome is a `sticky` header that has not finished repositioning
- * yet. Measured properly the header scrolls away to `bottom: 0` and the page owns the band from
- * y=4, giving 166–402px of usable safe band depending on scroll depth. §12 has recorded this
- * twice already in the other direction (0.8's scroll baseline read on a timer); a scroll-dependent
- * hit-test needs the scroll to be finished, and `getBoundingClientRect` forcing layout is not the
- * same as sticky having settled.
+ * The logic moved to `wants.placed` in `lib/fixture.mjs`, where its two load-bearing details are
+ * documented — the **tolerance** (a claim near the document top cannot be pushed down, and the first
+ * version reported one as "high" while it sat 188px from the cat, so every conclusion was wrong in
+ * the same direction) and the **settle** (this site reveals content with a `translateY`, so a claim
+ * scrolled into view keeps travelling for a few hundred ms; a scroll-dependent hit-test needs the
+ * scroll to be finished). It was one of three copies.
  */
-async function place(page, at, tol = 60) {
-  return page.evaluate(
-    async ([atPx, tolPx]) => {
-      /*
-       * **Wait for the element to stop moving, not for a fixed number of milliseconds.**
-       *
-       * A 90ms pause was not enough and no pause would have been reliable: this site reveals
-       * content on scroll with a `translateY` transition, so a claim scrolled into view keeps
-       * *travelling* for a few hundred ms afterwards. Measured mid-flight, a claim spanning
-       * y 137..156 was y 126..145 sixty milliseconds later — so the point chosen at its centre
-       * was below its bottom edge by the time the finger arrived, `elementFromPoint` returned
-       * the parent link, and the hold scrubbed nothing. §12 recorded this exact mistake in 0.8
-       * against the site's smooth-scroll; the scroll-reveal is the same trap one layer over.
-       */
-      const stable = async (el) => {
-        let last = null;
-        for (let i = 0; i < 40; i++) {
-          await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 25)));
-          const t = el.getBoundingClientRect().top;
-          if (last !== null && Math.abs(t - last) < 0.5) return;
-          last = t;
-        }
-      };
-      const claims = [...document.querySelectorAll('.cat-claimed')];
-      const maxScroll = document.documentElement.scrollHeight - innerHeight;
-      for (const el of claims) {
-        const r0 = el.getBoundingClientRect();
-        const want = Math.max(0, Math.min(maxScroll, Math.round(r0.top + scrollY + r0.height / 2 - atPx)));
-        scrollTo({ top: want, behavior: 'instant' });
-        await stable(el);
-        const r = el.getBoundingClientRect();
-        const x = Math.round(Math.min(Math.max(r.left + r.width / 2, 40), innerWidth - 40));
-        const y = Math.round(r.top + r.height / 2);
-        // Did the scroll actually get it there? Anything else is a different measurement.
-        if (Math.abs(y - atPx) > tolPx) continue;
-        if (y < 110 || y > innerHeight - 70) continue;
-        // The same question `claimUnder` asks, at the point the finger will actually land.
-        if (document.elementFromPoint(x, y)?.closest('.cat-claimed') !== el) continue;
-        const c = document.getElementById('site-cat').getBoundingClientRect();
-        return {
-          x,
-          y,
-          d: Math.round(Math.hypot(x - (c.left + c.width / 2), y - (c.top + c.height / 2))),
-        };
-      }
-      return null;
-    },
-    [at, tol],
-  );
-}
+const place = (page, at, opts = {}) => wants.placed(at, opts)(page);
 
 // ---- 1. the toggle no longer refuses a phone, and a held finger reclaims
 {
@@ -284,8 +200,9 @@ async function place(page, at, tol = 60) {
   ok('and it says it is on', (await btn.getAttribute('aria-pressed')) === 'true');
 
   // The core verb, on a finger. Held high, where step 0 says the cat cannot reach.
-  const high = await place(page, 150);
-  ok('found a claim to hold high on the screen', !!high, high ? `${high.d}px from the cat` : 'none');
+  const highDeal = await deal(page, wants.placed(150), { deals: 6, tap: true });
+  const high = highDeal.value;
+  fixture('found a claim to hold high on the screen', highDeal, high ? `${high.d}px from the cat` : '');
   if (high) {
     ok('and holding it high really is out of the cat’s reach', high.d >= SAFE_FLEE_PX, `${high.d}px vs ${SAFE_FLEE_PX.toFixed(0)}px`);
     // `.cat-freed` rather than a board count: siege regrows the element a completed hold just
@@ -315,7 +232,9 @@ async function place(page, at, tol = 60) {
   await page.locator('#cat-arena-toggle').tap();
   await page.waitForFunction(() => !!document.querySelector('.cat-claimed'), undefined, { timeout: 9000 }).catch(() => {});
 
-  const spot = await place(page, 150);
+  const fillDeal = await deal(page, wants.placed(150), { deals: 6, tap: true });
+  const spot = fillDeal.value;
+  fixture('found a claim to watch fill', fillDeal, spot ? `${spot.d}px from the cat` : '');
   if (spot) {
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: spot.x, y: spot.y }] });
     await page.waitForTimeout(Math.round(SCRUB_MS * 0.55));
@@ -355,8 +274,6 @@ async function place(page, at, tol = 60) {
       () => [...document.querySelectorAll('[style*="--scrub"]')].length,
     );
     ok('no --scrub is left on the page after the finger lifts', left === 0, `${left} elements`);
-  } else {
-    ok('found a claim to watch fill', false, 'none placeable');
   }
   await ctx.close();
 }
@@ -450,8 +367,9 @@ async function place(page, at, tol = 60) {
    *
    * `#cat-throw` hidden is the direct state: nothing was thrown, whatever the paw row says.
    */
-  const spot = await place(page, 150);
-  ok('found a claim to hold', !!spot, spot ? `${spot.d}px from the cat` : 'none');
+  const holdDeal = await deal(page, wants.placed(150), { deals: 6, tap: true });
+  const spot = holdDeal.value;
+  fixture('found a claim to hold', holdDeal, spot ? `${spot.d}px from the cat` : '');
   if (spot) {
     // Observed, not counted — see the note in section 4a: siege's regrow puts back the element a
     // completed hold just freed, so a board count says `n → n` for a hold that worked perfectly.
@@ -478,7 +396,9 @@ async function place(page, at, tol = 60) {
    * fight, and the throw then failed for a reason that had nothing to do with throwing.
    */
   const ground2 = await openGround(page);
-  ok('found open ground to tap, measured after the scrolling', !!ground2, ground2 ? `${ground2.x},${ground2.y}` : 'none');
+  // A *scan*, not a roll: every viewport has open ground, so there is nothing to re-deal — but it is
+  // still a fixture, and saying so keeps "I could not set up" from reading as "the game is broken".
+  fixture('found open ground to tap, measured after the scrolling', ground2, ground2 ? `${ground2.x},${ground2.y}` : '');
   if (ground2) {
     await finger(cdp, ground2.x, ground2.y, 90);
     await page.waitForTimeout(250);
@@ -490,14 +410,13 @@ async function place(page, at, tol = 60) {
 
   // A link still navigates, mid-fight, on a tap. §11 promises the page keeps working.
   const link = await findLink(page);
+  fixture('found a link in the band to tap mid-fight', link, link?.href ?? '');
   if (link) {
     const from = page.url();
     await finger(cdp, link.x, link.y, 90);
     await page.waitForTimeout(1400);
     ok('a tap on a link still navigates during a fight', page.url() !== from, `${link.href} → ${new URL(page.url()).pathname}`);
     ok('and navigating ended the fight', !(await page.evaluate(ARMED)));
-  } else {
-    ok('a tap on a link still navigates during a fight', false, 'no link in the band');
   }
   await ctx.close();
 }
@@ -526,64 +445,24 @@ async function place(page, at, tol = 60) {
   /*
    * Find a claim that really does sit inside a link — the case §5.1 permits.
    *
-   * **Re-roll the board rather than assert the roll.** `pickClaims` seeds from the clock, so which
-   * elements a fight claims is different every time, and "is one of them inside a link" is a
-   * property of the *deal*, not of the build. Asserted once, this reported "none on this board" on
-   * a build that had not touched touch mode — a red that says nothing about the game. 2.0 hit the
-   * identical shape twice in one sweep (commander.mjs aiming at a link-wrapped claim, arena8
-   * plateauing on an unpinned stance), so: deal again, up to DEALS times, and only fail if no deal
-   * ever offers the case.
+   * **Deal again rather than assert the deal.** `pickClaims` seeds from the clock, so "is one of this
+   * fight's claims inside a link" is a property of the deal and not of the build. Asserted once, it
+   * reported "none on this board" and took five checks down with it, on a build that had not touched
+   * touch mode. This was the third of 2.0's three faults of that shape, and the last one written by
+   * hand: the loop lives in `deal()` now, and the band and offset below are the ones this check has
+   * always used.
+   *
+   * The tolerance is deliberately slack here (400px) rather than `wants.placed`'s default 60. The band
+   * is the real constraint for this case, and tightening it would quietly shrink the candidate set —
+   * changing what the check measures, which a consolidation is not allowed to do.
    */
-  const findInLink = () => page.evaluate(async () => {
-    // Same reveal trap as `place()`: wait for the element to stop travelling, not for a clock.
-    const stable = async (el) => {
-      let last = null;
-      for (let i = 0; i < 40; i++) {
-        await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 25)));
-        const t = el.getBoundingClientRect().top;
-        if (last !== null && Math.abs(t - last) < 0.5) return;
-        last = t;
-      }
-    };
-    const maxScroll = document.documentElement.scrollHeight - innerHeight;
-    for (const el of document.querySelectorAll('.cat-claimed')) {
-      if (!el.closest('a[href]')) continue;
-      const r0 = el.getBoundingClientRect();
-      const want = Math.max(0, Math.min(maxScroll, Math.round(r0.top + scrollY + r0.height / 2 - 150)));
-      scrollTo({ top: want, behavior: 'instant' });
-      await stable(el);
-      const r = el.getBoundingClientRect();
-      const x = Math.round(Math.min(Math.max(r.left + r.width / 2, 40), innerWidth - 40));
-      const y = Math.round(r.top + r.height / 2);
-      if (y < 110 || y > innerHeight - 70) continue;
-      if (document.elementFromPoint(x, y)?.closest('.cat-claimed') !== el) continue;
-      return { x, y, href: el.closest('a[href]').getAttribute('href') };
-    }
-    return null;
-  });
-
-  const DEALS = 6;
-  let inLink = await findInLink();
-  let deals = 1;
-  while (!inLink && deals < DEALS) {
-    // Toggle out and back in: a fresh fight is a fresh deal, and it exercises the restore each time.
-    await page.locator('#cat-arena-toggle').tap();
-    await page
-      .waitForFunction(() => !document.documentElement.classList.contains('cat-arena-on'), undefined, { timeout: 9000 })
-      .catch(() => {});
-    await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
-    await page.locator('#cat-arena-toggle').tap();
-    await page
-      .waitForFunction(() => !!document.querySelector('.cat-claimed'), undefined, { timeout: 9000 })
-      .catch(() => {});
-    deals++;
-    inLink = await findInLink();
-  }
-  ok(
-    'found a claim that sits inside a link (§5.1 allows this)',
-    !!inLink,
-    inLink ? `${inLink.href} on deal ${deals} of ${DEALS}` : `no deal in ${DEALS} offered one`,
+  const inLinkDeal = await deal(
+    page,
+    wants.placed(150, { tol: 400, insideLink: true, band: { top: 110, bottom: 70 } }),
+    { deals: 6, tap: true },
   );
+  const inLink = inLinkDeal.value;
+  fixture('found a claim that sits inside a link (§5.1 allows this)', inLinkDeal, inLink?.href ?? '');
 
   if (inLink) {
     const from = page.url();
@@ -612,7 +491,7 @@ async function place(page, at, tol = 60) {
 
     // ...while a *tap* on the same thing still navigates, because §11 promises the page works.
     const link2 = await findLink(page);
-    ok('found a link to tap', !!link2, link2 ? link2.href : 'none');
+    fixture('found a link to tap', link2, link2?.href ?? '');
     if (link2) {
       await finger(cdp, link2.x, link2.y, 90);
       await page.waitForTimeout(1400);
@@ -633,12 +512,9 @@ async function place(page, at, tol = 60) {
    *
    * `hasTouch` with a fine pointer is that machine. Touch first, then click with the mouse.
    */
-  const ctx = await browser.newContext({
-    viewport: { width: 1280, height: 900 },
-    hasTouch: true,
-    isMobile: false,
-  });
-  await ctx.addInitScript(PICK_MANUAL);
+  // Not `phone: true`: that profile sets `isMobile`, and the point of this one is a *desktop* that
+  // also has a touchscreen. `fresh` passes any extra context option through for exactly this.
+  const ctx = await context(browser, { mode: 'manual', hasTouch: true });
   const page = await ctx.newPage();
   await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
   await page.waitForTimeout(1200);
@@ -759,9 +635,4 @@ async function place(page, at, tol = 60) {
 }
 
 await browser.close();
-console.log(`\n${pass}/${pass + failed.length} checks passed`);
-if (failed.length) {
-  console.log('failed:');
-  for (const f of failed) console.log('  - ' + f);
-  process.exit(1);
-}
+if (!done()) process.exit(1);

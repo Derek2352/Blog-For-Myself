@@ -8,34 +8,33 @@
  *
  * Mirrors src/lib/arena.ts:
  */
-const SCRUB_MS = 1400;
 
-import { chromium } from 'playwright-core';
+import {
+  BASE,
+  SCRUB_MS,
+  armAmmo,
+  deal,
+  fresh as context,
+  idlePoint,
+  launch,
+  overFor,
+  press,
+  reachClaim,
+  release,
+  report,
+  throwSpot,
+  wants,
+} from './lib/fixture.mjs';
 
-const BASE = 'http://localhost:4416';
-const results = [];
-const ok = (name, pass, detail = '') => {
-  results.push({ name, pass, detail });
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
-};
-
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
-
-/**
- * Esc, and wait for the fight to actually be gone.
- *
- * Same reason as `press`: the exit goes out through the curtain now, so the arena is still
- * live for ~700ms after the key. The re-roll loops below press Esc and immediately press the
- * toggle again — against an instant swap that was two clean transitions, and against a
- * transition it is a press landing while the previous intent is still standing, which toggles
- * the wrong way and leaves the loop rolling the same fight forever.
+/*
+ * The reporter, the context factory, the launcher and the open/close waits come from
+ * `lib/fixture.mjs` (§12.1's charter). This file carried its own copy of each, which is how one
+ * idea ended up with eleven implementations and a fix at one call site could never be a fix.
  */
-async function release(page, timeout = 7000) {
-  await page.keyboard.press('Escape');
-  await page
-    .waitForFunction(() => !document.querySelector('.cat-claimed'), undefined, { timeout })
-    .catch(() => {});
-}
+const browser = await launch();
+const { ok, note, fixture, done } = report();
+
+
 
 /**
  * Wait for a fight to be genuinely over, not merely conceded.
@@ -47,18 +46,6 @@ async function release(page, timeout = 7000) {
  * `<html>` and reported 15 differences. What the page being restored looks like is the
  * *claims* being gone.
  */
-async function overFor(page, ms = 8000) {
-  await page
-    .waitForFunction(
-      () =>
-        !document.querySelector('.cat-claimed') &&
-        !document.documentElement.classList.contains('cat-arena-on'),
-      undefined,
-      { timeout: ms },
-    )
-    .catch(() => {});
-  await page.waitForTimeout(120);
-}
 
 /**
  * Press the toggle and wait for the state change to have actually landed.
@@ -69,41 +56,12 @@ async function overFor(page, ms = 8000) {
  * null `.cat-claimed`. Waiting on the observable rather than on a stopwatch is both correct
  * and, on the close path, usually shorter.
  */
-async function press(page, timeout = 7000) {
-  const was = await page.evaluate(() => !!document.querySelector('.cat-claimed'));
-  await page.click('#cat-arena-toggle');
-  await page
-    .waitForFunction((w) => !!document.querySelector('.cat-claimed') !== w, was, { timeout })
-    .catch(() => {});
-}
 
-async function fresh(opts = {}) {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, ...opts });
-  await ctx.addInitScript(() => localStorage.setItem('welcomed', '1'));
-  /*
-   * 2.0: this harness measures **manual mode** (§3's fight). Commander mode is now the default, so
-   * say which game before opening one — otherwise the pointer is not the verb and half these checks
-   * are asking a spectator to hold still. Presses the HUD chip the way a visitor does, and waits for
-   * `aria-pressed` rather than for a timeout.
-   */
-  await ctx.addInitScript(() => {
-    const pick = () => {
-      const b = document.getElementById('cat-manual-toggle');
-      if (!b) return false;
-      if (b.getAttribute('aria-pressed') === 'true') return true;
-      b.click();
-      return b.getAttribute('aria-pressed') === 'true';
-    };
-    addEventListener('DOMContentLoaded', () => {
-      if (pick()) return;
-      const t = setInterval(() => {
-        if (pick()) clearInterval(t);
-      }, 40);
-      setTimeout(() => clearInterval(t), 8000);
-    });
-  });
-  return ctx;
-}
+/**
+ * A desktop context playing **manual mode**: this file plays two whole fights with a pointer, so the
+ * mode is declared before either of them opens.
+ */
+const fresh = (opts = {}) => context(browser, { mode: 'manual', ...opts });
 
 const CLAIMS = `document.querySelectorAll('.cat-claimed').length`;
 const AMMO = `document.querySelectorAll('#cat-score .cat-paw.got').length`;
@@ -156,21 +114,6 @@ async function snapDiff(page, clean) {
   };
 }
 
-async function armAmmo(page, hops = 5) {
-  const hrefs = await page.evaluate(() =>
-    [...document.querySelectorAll('.tabbar a[href]')]
-      .filter((a) => !a.closest('.tab-flyout') && a.offsetParent !== null)
-      .map((a) => a.getAttribute('href'))
-      .slice(0, 6),
-  );
-  for (const href of hrefs.slice(0, hops)) {
-    await page.click(`.tabbar a[href="${href}"]`);
-    await page.waitForTimeout(650);
-  }
-  await page.click('a[href="/timeline/"]');
-  await page.waitForTimeout(750);
-  return page.evaluate(AMMO);
-}
 
 /**
  * A claim to work on, re-rolling the board if this fight dealt none in view.
@@ -191,40 +134,24 @@ async function armAmmo(page, hops = 5) {
  * Stance and board are chosen in the same loop on purpose: separate helpers that each re-roll
  * the fight spend their time undoing each other.
  */
-async function forceFighter(page, want = ['ambush', 'trickster'], tries = 40) {
-  for (let i = 0; i < tries; i++) {
-    const state = await page.evaluate(() => ({
-      stance: document.getElementById('site-cat').dataset.stance ?? '',
-      board: [...document.querySelectorAll('.cat-claimed')]
-        .map((n) => n.getBoundingClientRect())
-        .filter((r) => r.top > 160 && r.bottom < innerHeight - 40 && r.height < 420).length,
-    }));
-    if (state.board > 0 && want.includes(state.stance)) return state.stance;
-    await release(page);
-    await press(page);
-    await page.waitForTimeout(190);
-  }
-  return null;
-}
+/**
+ * Roll the fight until it is both winnable-by-measurement and losable at all.
+ *
+ * Step 5's stances made both endings conditional on the opponent, which is what stances are *for* and
+ * also why three harnesses started timing out: a **sleepy** cat will not interrupt a hold (it waits
+ * until 70%, by which point the hold is done) and takes no ground, so standing still empty-handed
+ * *wins*; a **siege** cat cannot reach anything off the floor. Neither is a bug, but a check that says
+ * "a fight can be lost" has to be given a cat that can win one.
+ *
+ * Stance and board in the same deal, for the reason §12.1 records: separate re-rollers spend their
+ * time undoing each other. Forty deals is this file's own budget kept — a named stance is one of four
+ * weighted rolls, so six is not enough to be sure of it.
+ */
+const fighter = (page, want = ['ambush', 'trickster']) =>
+  deal(page, wants.stance(want, { claims: 'inView', top: 160, bottom: 40, maxHeight: 420 }), { deals: 40, settle: 190 });
 
-async function pickSpot(page, tries = 6) {
-  const find = () =>
-    page.evaluate(() => {
-      const c = [...document.querySelectorAll('.cat-claimed')]
-        .map((n) => n.getBoundingClientRect())
-        .filter((r) => r.top > 160 && r.bottom < innerHeight - 40 && r.height < 420)[0];
-      return c ? { x: Math.round(c.left + c.width / 2), y: Math.round(c.top + c.height / 2) } : null;
-    });
-  for (let i = 0; i < tries; i++) {
-    const hit = await find();
-    if (hit) return hit;
-    await press(page);
-    await page.waitForTimeout(200);
-    await press(page);
-    await page.waitForTimeout(240);
-  }
-  return null;
-}
+/** A claim the pointer can sit on, re-dealing the board if this fight dealt none in view. */
+const spotDeal = (page) => deal(page, wants.spot({ top: 160, bottom: 40, maxHeight: 420 }), { deals: 6, settle: 240 });
 
 /**
  * Scroll until a claim is somewhere the pointer can sit on it, and return that point.
@@ -235,66 +162,7 @@ async function pickSpot(page, tries = 6) {
  * scrolls; so does this. It walks candidate scroll positions rather than trusting one,
  * because a claim taller than the band is reachable from a different offset.
  */
-async function reachClaim(page) {
-  const cands = await page.evaluate(() =>
-    [...document.querySelectorAll('.cat-claimed')]
-      .map((n) => n.getBoundingClientRect().top + scrollY)
-      .sort((a, b) => a - b),
-  );
-  for (const top of cands) {
-    await page.evaluate((y) => scrollTo({ top: Math.max(0, y), behavior: 'instant' }), top - 320);
-    await page.waitForTimeout(130);
-    const hit = await page.evaluate(() => {
-      const band = [...document.querySelectorAll('.cat-claimed')]
-        .map((n) => n.getBoundingClientRect())
-        .filter((r) => r.top > 170 && r.bottom < innerHeight - 50 && r.width > 30);
-      if (!band.length) return null;
-      const cat = document.getElementById('site-cat').getBoundingClientRect();
-      const cx = cat.left + cat.width / 2;
-      const cy = cat.top + cat.height / 2;
-      // farthest from the cat, which is how the design says to play it
-      band.sort(
-        (a, b) =>
-          Math.hypot(b.left + b.width / 2 - cx, b.top + b.height / 2 - cy) -
-          Math.hypot(a.left + a.width / 2 - cx, a.top + a.height / 2 - cy),
-      );
-      const r = band[0];
-      return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
-    });
-    if (hit) return hit;
-  }
-  return null;
-}
 
-async function throwSpot(page, near) {
-  return page.evaluate(
-    ([nx, ny]) => {
-      // Mirrors INTERACTIVE in src/lib/arena.ts, and *not* PROTECTED. Using the
-      // protected list here is what let three harnesses agree that throwing worked:
-      // it matches `<main tabindex="-1">`, so every scan skipped the entire content
-      // area and settled on the strip above it.
-      const PROT = 'a[href], button, input, select, textarea, summary, label, [contenteditable]';
-      const okAt = (x, y) => {
-        const el = document.elementFromPoint(x, y);
-        return el && !el.closest(PROT) && !el.closest('#cat-hud') ? { x, y } : null;
-      };
-      let best = okAt(nx, ny);
-      if (best) return best;
-      let bestD = Infinity;
-      for (let y = 100; y < innerHeight - 50; y += 16)
-        for (let x = 14; x < innerWidth - 14; x += 16) {
-          if (!okAt(x, y)) continue;
-          const d = Math.hypot(x - nx, y - ny);
-          if (d < bestD) {
-            bestD = d;
-            best = { x, y };
-          }
-        }
-      return best;
-    },
-    [near.x, near.y],
-  );
-}
 
 // ---- 1. the bar
 {
@@ -321,8 +189,9 @@ async function throwSpot(page, near) {
   ok('it opens showing the visitor’s minority share', opening > 20 && opening < 60, `${opening.toFixed(1)}% mine`);
 
   // free one claim and watch the bar move
-  const spot = await pickSpot(page);
-  ok('the board dealt a claim in view', !!spot, spot ? `${spot.x},${spot.y}` : 'none');
+  const dealt = await spotDeal(page);
+  const spot = dealt.value;
+  fixture('the board dealt a claim in view', dealt, spot ? `${spot.x},${spot.y}` : '');
   await page.mouse.move(spot.x, spot.y);
   await page.waitForTimeout(SCRUB_MS + 700);
   const after = await page.evaluate(MINE);
@@ -346,8 +215,9 @@ async function throwSpot(page, near) {
   await page.evaluate(WATCH_LINES);
 
   // stand on a claim with no treats: it will interrupt, and it will comment
-  const spot = await pickSpot(page);
-  ok('the board dealt a claim in view', !!spot, spot ? `${spot.x},${spot.y}` : 'none');
+  const dealt = await spotDeal(page);
+  const spot = dealt.value;
+  fixture('the board dealt a claim in view', dealt, spot ? `${spot.x},${spot.y}` : '');
   for (let i = 0; i < 26; i++) {
     await page.mouse.move(spot.x + (i % 2 ? 1 : 0), spot.y);
     await page.waitForTimeout(500);
@@ -447,22 +317,14 @@ async function throwSpot(page, near) {
    * doing. So the losing player here is the one who stops playing: park somewhere harmless,
    * empty-handed, and watch the page close over.
    */
-  const foe = await forceFighter(page, ['siege']);
-  ok('rolled the one stance that can take a page on its own', !!foe, foe ?? 'never rolled one');
+  const foeDeal = await fighter(page, ['siege']);
+  fixture('rolled the one stance that can take a page on its own', foeDeal, foeDeal.value ?? '');
   await page.evaluate(WATCH_LINES);
   const board = await page.evaluate(() => document.querySelectorAll('.cat-claimed').length);
 
-  const idle = await page.evaluate(() => {
-    const PROT = 'a[href], button, input, select, textarea, summary, label, [contenteditable]';
-    for (let y = 150; y < innerHeight - 70; y += 14)
-      for (let x = 30; x < innerWidth - 30; x += 14) {
-        const el = document.elementFromPoint(x, y);
-        if (!el || el.closest(PROT) || el.closest('#cat-hud') || el.closest('.cat-claimed')) continue;
-        return { x, y };
-      }
-    return null;
-  });
-  ok('found somewhere harmless to stand', !!idle, idle ? `${idle.x},${idle.y}` : 'nowhere');
+  // Somewhere the pointer can rest without playing — a scan of the viewport, so nothing to re-deal.
+  const idle = await idlePoint(page);
+  fixture('found somewhere harmless to stand', idle, idle ? `${idle.x},${idle.y}` : '');
 
   const t0 = Date.now();
   let ended = false;
@@ -502,7 +364,7 @@ async function throwSpot(page, near) {
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto(BASE + '/', { waitUntil: 'load' });
   await page.waitForTimeout(600);
-  const armed = await armAmmo(page);
+  const armed = await armAmmo(page, { hops: 5, pool: 6, dwell: 650, settle: 750, home: '/timeline/' });
   ok('armed for a real fight', armed >= 3, `${armed} treats`);
 
   /*
@@ -526,8 +388,8 @@ async function throwSpot(page, near) {
   await page.waitForTimeout(200);
   // Pinned as well, so the duration below is a fight against a cat that fights back rather
   // than whichever one turned up.
-  const opponent = await forceFighter(page);
-  ok('rolled an opponent for the timed win', !!opponent, opponent ?? 'none');
+  const oppDeal = await fighter(page);
+  fixture('rolled an opponent for the timed win', oppDeal, oppDeal.value ?? '');
   await page.evaluate(WATCH_LINES);
   const started = Date.now();
 
@@ -677,6 +539,4 @@ async function throwSpot(page, near) {
 }
 
 await browser.close();
-const failed = results.filter((r) => !r.pass);
-console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
-if (failed.length) process.exit(1);
+if (!done()) process.exit(1);

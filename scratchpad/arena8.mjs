@@ -34,82 +34,42 @@ const AGGRO_DESPERATE = 1.4;
  */
 const SAFE_FLEE_PX = POUNCE_RANGE + STALK_SPEED * 1.0 * AGGRO_DESPERATE * (SCRUB_MS / 1000);
 
-import { chromium } from 'playwright-core';
+import {
+  BASE,
+  armAmmo,
+  deal,
+  fresh as context,
+  launch,
+  overFor,
+  press as sharedPress,
+  release as sharedRelease,
+  report,
+  wants,
+} from './lib/fixture.mjs';
 
-const BASE = 'http://localhost:4416';
-const results = [];
-const ok = (name, pass, detail = '') => {
-  results.push({ name, pass, detail });
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
-};
-
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
-
-async function press(page, timeout = 8000) {
-  const was = await page.evaluate(() => !!document.querySelector('.cat-claimed'));
-  await page.click('#cat-arena-toggle');
-  await page
-    .waitForFunction((w) => !!document.querySelector('.cat-claimed') !== w, was, { timeout })
-    .catch(() => {});
-}
-
-async function release(page, timeout = 8000) {
-  await page.keyboard.press('Escape');
-  await page
-    .waitForFunction(() => !document.querySelector('.cat-claimed'), undefined, { timeout })
-    .catch(() => {});
-}
-
-/**
- * Wait for a fight to be genuinely over.
- *
- * Not `aria-pressed`: 0.9 made that follow the visitor's *intent*, so it flips before the exit
- * curtain has put anything back (§13.5).
+/*
+ * Shared with the rest of the fleet through `lib/fixture.mjs` (§12.1's charter): the reporter with its
+ * fixture/assertion split, the context factory that declares the mode, the launcher, and the waits
+ * that open and close a fight. This file used to carry its own copy of each.
  */
-async function overFor(page, ms = 9000) {
-  await page
-    .waitForFunction(
-      () =>
-        !document.querySelector('.cat-claimed') &&
-        // `.cat-freed` is the 480ms celebration on a reclaimed element, removed by its own
-        // timer — so it outlives the fight and a snapshot taken the instant the arena closes
-        // catches it. `arena.mjs` has waited on this since step 1; leaving it out here cost a
-        // byte-identical check exactly once, on a `nav.rail`.
-        !document.querySelector('.cat-freed') &&
-        !document.documentElement.classList.contains('cat-arena-on'),
-      { timeout: ms },
-    )
-    .catch(() => {});
-  await page.waitForTimeout(150);
-}
+const browser = await launch();
+const { ok, note, fixture, done } = report();
 
-async function fresh() {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  await ctx.addInitScript(() => localStorage.setItem('welcomed', '1'));
-  /*
-   * 2.0: this harness measures **manual mode** (§3's fight). Commander mode is now the default, so
-   * say which game before opening one — otherwise the pointer is not the verb and half these checks
-   * are asking a spectator to hold still. Presses the HUD chip the way a visitor does, and waits for
-   * `aria-pressed` rather than for a timeout.
-   */
-  await ctx.addInitScript(() => {
-    const pick = () => {
-      const b = document.getElementById('cat-manual-toggle');
-      if (!b) return false;
-      if (b.getAttribute('aria-pressed') === 'true') return true;
-      b.click();
-      return b.getAttribute('aria-pressed') === 'true';
-    };
-    addEventListener('DOMContentLoaded', () => {
-      if (pick()) return;
-      const t = setInterval(() => {
-        if (pick()) clearInterval(t);
-      }, 40);
-      setTimeout(() => clearInterval(t), 8000);
-    });
-  });
-  return ctx;
-}
+
+
+
+/** Shared with the fleet; this file has always allowed 8000ms for the curtain. */
+const press = (page) => sharedPress(page, { timeout: 8000 });
+
+
+const release = (page) => sharedRelease(page, { timeout: 8000 });
+
+
+
+
+/** A desktop context playing **manual mode** — §9.4's ladder is a pointer's fight. */
+const fresh = (opts = {}) => context(browser, { mode: 'manual', ...opts });
+
 
 const SNAP_LIST = `(() => [...document.querySelectorAll('*')]
   .filter((el) => !el.closest('#site-cat, #cat-hud, #cat-treat, #cat-scrub, #cat-throw, #cat-ribbon, #cat-territory, #cat-curtain, header'))
@@ -138,33 +98,29 @@ const HELD = `document.querySelectorAll('#cat-score .cat-paw.withheld').length`;
 const FOUND = `document.querySelectorAll('#cat-score .cat-paw.got, #cat-score .cat-paw.withheld').length`;
 const RIBBON = `document.getElementById('cat-ribbon')?.textContent?.trim() ?? ''`;
 
-/** Collect treats by walking the tabs, as arena4/arena7 do. */
-async function armAmmo(page, hops = 5) {
-  const hrefs = await page.evaluate(() =>
-    [...document.querySelectorAll('.tabbar a[href]')]
-      .filter((a) => !a.closest('.tab-flyout') && a.offsetParent !== null)
-      .map((a) => a.getAttribute('href'))
-      .slice(0, 6),
-  );
-  for (const href of hrefs.slice(0, hops)) {
-    await page.click(`.tabbar a[href="${href}"]`);
-    await page.waitForTimeout(650);
-  }
-  await page.click('a[href="/timeline/"]');
-  await page.waitForTimeout(750);
-  return page.evaluate(AMMO);
-}
 
-/** Re-roll until the cat is one that can actually leave the floor (0.9's lesson). */
-async function forceLeaper(page, want = 'ambush', tries = 14) {
-  for (let i = 0; i < tries; i++) {
-    const stance = await page.evaluate(`document.getElementById('site-cat')?.dataset.stance ?? ''`);
-    if (stance === want && (await page.evaluate(CLAIMS)) > 0) return stance;
-    await release(page);
-    await press(page);
-  }
-  return null;
-}
+
+/**
+ * A cat that leaps, on a board with something to work — one deal, both conditions.
+ *
+ * 1.4 measured that flee-and-hold is the *leaper's* counter: against a floor-bound siege cat it is
+ * four of every six seconds spent luring something that cannot come, and this file's strategy is
+ * flight. So every section that plays it pins a leaper — 1.4 pinned section 1 and left section 2
+ * rolling, which is how section 2 failed on a build that had not touched a manual fight. Siege's own
+ * winnability is measured where the strategy fits it, in `scratchpad/battle.mjs`.
+ *
+ * Fourteen deals is this file's own budget kept.
+ */
+const leaper = (page, want = 'ambush') =>
+  deal(page, wants.stance([want], { claims: 'any' }), {
+    deals: 14,
+    settle: 0,
+    reopen: async () => {
+      await release(page);
+      await press(page);
+    },
+  });
+
 
 /**
  * Scroll so that a claim sits **low on the screen**, as far as possible from the decoy at the
@@ -318,7 +274,7 @@ async function playByFleeing(page, budgetMs = 150_000) {
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
   await page.waitForTimeout(1500);
-  const armed = await armAmmo(page);
+  const armed = await armAmmo(page, { hops: 5, pool: 6, dwell: 650, settle: 750, home: '/timeline/' });
   ok('armed with treats to be withheld', armed >= 3, `${armed} found`);
   const found0 = await page.evaluate(FOUND);
   /*
@@ -363,8 +319,9 @@ async function playByFleeing(page, budgetMs = 150_000) {
    * section 4 pins a leaper for the floor measurement for the same reason. Siege's own winnability
    * is measured where it belongs, in `scratchpad/battle.mjs`.
    */
-  const ladderStance = await forceLeaper(page);
-  ok('against a cat the flight strategy actually answers', !!ladderStance, ladderStance ?? 'no leaper in 14 rolls');
+  const ladderStanceDeal = await leaper(page);
+  const ladderStance = ladderStanceDeal.value;
+  fixture('against a cat the flight strategy actually answers', ladderStanceDeal, ladderStance ?? '');
   const first = await playByFleeing(page, 150_000);
   ok(
     'a fight can be won by fleeing and scrubbing',
@@ -379,7 +336,7 @@ async function playByFleeing(page, budgetMs = 150_000) {
       /again/i.test(said),
       JSON.stringify(said),
     );
-    await overFor(page);
+    await overFor(page, 9000);
 
     ok(
       'the found-set is intact after the fight',
@@ -421,7 +378,7 @@ async function playByFleeing(page, budgetMs = 150_000) {
       JSON.stringify(opening),
     );
     await release(page);
-    await overFor(page);
+    await overFor(page, 9000);
     ok(
       'the paw comes back when that fight ends too',
       (await page.evaluate(FOUND)) === found0 && (await page.evaluate(HELD)) === 0,
@@ -439,7 +396,7 @@ async function playByFleeing(page, budgetMs = 150_000) {
   const page = await ctx.newPage();
   await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
   await page.waitForTimeout(1500);
-  await armAmmo(page);
+  await armAmmo(page, { hops: 5, pool: 6, dwell: 650, settle: 750, home: '/timeline/' });
   /*
    * Back to `/` before fighting, for the reason section 1 already wrote down and this section
    * then didn't act on: `armAmmo` finishes on `/timeline/`, whose board is tall entries queued
@@ -470,11 +427,12 @@ async function playByFleeing(page, budgetMs = 150_000) {
    * refresh. Which stance rolled is not part of that question, and siege's own winnability is
    * measured where the strategy fits it, in `scratchpad/battle.mjs`.
    */
-  const rungStance = await forceLeaper(page);
-  ok('against a cat the flight strategy answers', !!rungStance, rungStance ?? 'no leaper in 14 rolls');
+  const rungStanceDeal = await leaper(page);
+  const rungStance = rungStanceDeal.value;
+  fixture('against a cat the flight strategy answers', rungStanceDeal, rungStance ?? '');
   const won = await playByFleeing(page, 150_000);
   ok('won a fight to put a rung on the ladder', won.won, `${won.took} reclaimed, ${won.left} left, stalls: ${won.why}`);
-  await overFor(page);
+  await overFor(page, 9000);
 
   if (won.won) {
     // Client-side navigation: the script is module-scoped, so the rung should ride along.
@@ -488,7 +446,7 @@ async function playByFleeing(page, budgetMs = 150_000) {
       `${heldAfterNav} withheld on /about/`,
     );
     await release(page);
-    await overFor(page);
+    await overFor(page, 9000);
 
     // A refresh is a new session, and §7.2 says nothing persists.
     await page.reload({ waitUntil: 'load' });
@@ -505,7 +463,7 @@ async function playByFleeing(page, budgetMs = 150_000) {
       `${await page.evaluate(FOUND)} found`,
     );
     await release(page);
-    await overFor(page);
+    await overFor(page, 9000);
   }
   await ctx.close();
 }
@@ -517,7 +475,7 @@ async function playByFleeing(page, budgetMs = 150_000) {
   await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
   await page.waitForTimeout(1500);
   // Deliberately explore almost nothing: one hop, so the found-set is tiny.
-  await armAmmo(page, 1);
+  await armAmmo(page, { hops: 1, pool: 6, dwell: 650, settle: 750, home: '/timeline/' });
   const found = await page.evaluate(FOUND);
   ok('a barely-explored session has few treats', found <= 2, `${found} found`);
 
@@ -530,7 +488,7 @@ async function playByFleeing(page, budgetMs = 150_000) {
   const hand = await page.evaluate(AMMO);
   ok('so the hand is never negative', hand >= 0, `${hand} in hand`);
   await release(page);
-  await overFor(page);
+  await overFor(page, 9000);
   await ctx.close();
 }
 
@@ -547,8 +505,9 @@ async function playByFleeing(page, budgetMs = 150_000) {
   ok('starting with nothing in hand', (await page.evaluate(FOUND)) === 0);
 
   await press(page);
-  const stance = await forceLeaper(page);
-  ok('against a cat that can actually pounce', !!stance, stance ?? 'no ambush in 14 rolls');
+  const stanceDeal = await leaper(page);
+  const stance = stanceDeal.value;
+  fixture('against a cat that can actually pounce', stanceDeal, stance ?? '');
 
   const run = await playByFleeing(page, 150_000);
   ok(
@@ -588,10 +547,4 @@ async function playByFleeing(page, budgetMs = 150_000) {
 }
 
 await browser.close();
-const failed = results.filter((r) => !r.pass);
-console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
-if (failed.length) {
-  console.log('failed:');
-  for (const f of failed) console.log(`  - ${f.name}${f.detail ? '  — ' + f.detail : ''}`);
-  process.exit(1);
-}
+if (!done()) process.exit(1);

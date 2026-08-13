@@ -32,64 +32,27 @@
  * harness then reports the emptied board as a loss. It cost 1.4 a red `arena8` section 1 that
  * read exactly like a broken game.
  */
-import { chromium } from 'playwright-core';
-import { existsSync } from 'node:fs';
+import { fresh, launch } from './lib/fixture.mjs';
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:4416';
 const OPENING_GRACE_MS = 2500;
 const SCRUB_MS = 1400;
-const CHROME_CANDIDATES = [
-  process.env.CHROME_PATH,
-  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-  '/usr/bin/google-chrome',
-  '/usr/bin/chromium',
-  // The browser a Claude Code cloud session already has, which is where this gate is usually run
-  // (added 1.4: without it the harness exits 2 before a single check, and an unrun gate in a
-  // sweep of green ones is the quietest possible failure).
-  process.env.PLAYWRIGHT_BROWSERS_PATH ? `${process.env.PLAYWRIGHT_BROWSERS_PATH}/chromium` : null,
-  '/opt/pw-browsers/chromium',
-].filter(Boolean);
-
-const executablePath = CHROME_CANDIDATES.find((p) => existsSync(p));
-if (!executablePath) {
-  console.error('No Chrome found. Set CHROME_PATH or install Chrome.');
-  process.exit(2);
-}
-
 let failures = 0;
 const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
   if (!ok) failures++;
 };
 
+const browser = await launch();
 /*
- * 2.0: these checks measure **manual mode** (§3's fight — a pointer that holds). Commander mode is
- * the default now, so the mode has to be chosen before a fight is opened, or the pointer is not the
- * verb any more. Pressed the way a visitor presses it, and waited on `aria-pressed` rather than on a
- * timeout, because the chip's handler is attached by CatArena's own init.
+ * **A cold visitor, in manual mode.** `welcomed: false` is the whole subject of this file — nothing
+ * stored, no treats found, the welcome never dismissed — and the viewport is Playwright's own default
+ * rather than the fleet's 1280×900, because that is what these measurements were taken at. The mode
+ * declaration (§13.8's chip, pressed the way a visitor presses it) is `fresh`'s job now; this file
+ * carried the third copy of it.
  */
-const PICK_MANUAL = () => {
-  const pick = () => {
-    const b = document.getElementById('cat-manual-toggle');
-    if (!b) return false;
-    if (b.getAttribute('aria-pressed') === 'true') return true;
-    b.click();
-    return b.getAttribute('aria-pressed') === 'true';
-  };
-  addEventListener('DOMContentLoaded', () => {
-    if (pick()) return;
-    const t = setInterval(() => {
-      if (pick()) clearInterval(t);
-    }, 40);
-    setTimeout(() => clearInterval(t), 8000);
-  });
-};
-
-const browser = await chromium.launch({ executablePath, headless: true });
-const context = await browser.newContext();
-await context.addInitScript(PICK_MANUAL);
-const page = await context.newPage();
+const ctx = await fresh(browser, { mode: 'manual', welcomed: false, viewport: { width: 1280, height: 720 } });
+const page = await ctx.newPage();
 
 /** A cold visitor: fresh context, no treats found yet, nothing stored. */
 await page.goto(BASE, { waitUntil: 'networkidle' });

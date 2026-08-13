@@ -10,32 +10,28 @@
 const TELEGRAPH_MS = 420;
 const SCRUB_MS = 1400;
 
-import { chromium } from 'playwright-core';
+import {
+  BASE,
+  armAmmo,
+  deal,
+  fresh as context,
+  idlePoint,
+  launch,
+  press,
+  release,
+  report,
+  wants,
+} from './lib/fixture.mjs';
 
-const BASE = 'http://localhost:4416';
-const results = [];
-const ok = (name, pass, detail = '') => {
-  results.push({ name, pass, detail });
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
-};
-
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
-
-/**
- * Esc, and wait for the fight to actually be gone.
- *
- * Same reason as `press`: the exit goes out through the curtain now, so the arena is still
- * live for ~700ms after the key. The re-roll loops below press Esc and immediately press the
- * toggle again — against an instant swap that was two clean transitions, and against a
- * transition it is a press landing while the previous intent is still standing, which toggles
- * the wrong way and leaves the loop rolling the same fight forever.
+/*
+ * The reporter, the context factory, the launcher and the open/close waits come from
+ * `lib/fixture.mjs` (§12.1's charter). This file carried its own copy of each, which is how one
+ * idea ended up with eleven implementations and a fix at one call site could never be a fix.
  */
-async function release(page, timeout = 7000) {
-  await page.keyboard.press('Escape');
-  await page
-    .waitForFunction(() => !document.querySelector('.cat-claimed'), undefined, { timeout })
-    .catch(() => {});
-}
+const browser = await launch();
+const { ok, note, fixture, done } = report();
+
+
 
 /**
  * Press the toggle and wait for the state change to have actually landed.
@@ -46,41 +42,9 @@ async function release(page, timeout = 7000) {
  * null `.cat-claimed`. Waiting on the observable rather than on a stopwatch is both correct
  * and, on the close path, usually shorter.
  */
-async function press(page, timeout = 7000) {
-  const was = await page.evaluate(() => !!document.querySelector('.cat-claimed'));
-  await page.click('#cat-arena-toggle');
-  await page
-    .waitForFunction((w) => !!document.querySelector('.cat-claimed') !== w, was, { timeout })
-    .catch(() => {});
-}
 
-async function fresh() {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  await ctx.addInitScript(() => localStorage.setItem('welcomed', '1'));
-  /*
-   * 2.0: this harness measures **manual mode** (§3's fight). Commander mode is now the default, so
-   * say which game before opening one — otherwise the pointer is not the verb and half these checks
-   * are asking a spectator to hold still. Presses the HUD chip the way a visitor does, and waits for
-   * `aria-pressed` rather than for a timeout.
-   */
-  await ctx.addInitScript(() => {
-    const pick = () => {
-      const b = document.getElementById('cat-manual-toggle');
-      if (!b) return false;
-      if (b.getAttribute('aria-pressed') === 'true') return true;
-      b.click();
-      return b.getAttribute('aria-pressed') === 'true';
-    };
-    addEventListener('DOMContentLoaded', () => {
-      if (pick()) return;
-      const t = setInterval(() => {
-        if (pick()) clearInterval(t);
-      }, 40);
-      setTimeout(() => clearInterval(t), 8000);
-    });
-  });
-  return ctx;
-}
+/** A desktop context playing **manual mode** — the stances are measured against a pointer. */
+const fresh = (opts = {}) => context(browser, { mode: 'manual', ...opts });
 
 const STANCE = `document.getElementById('site-cat').dataset.stance ?? ''`;
 const AMMO = `document.querySelectorAll('#cat-score .cat-paw.got').length`;
@@ -113,31 +77,19 @@ const RECORDER = () => {
   new MutationObserver(push).observe(root, { attributes: true, attributeFilter: ['class'] });
 };
 
-async function armAmmo(page, hops = 5) {
-  const hrefs = await page.evaluate(() =>
-    [...document.querySelectorAll('.tabbar a[href]')]
-      .filter((a) => !a.closest('.tab-flyout') && a.offsetParent !== null)
-      .map((a) => a.getAttribute('href'))
-      .slice(0, 6),
-  );
-  for (const href of hrefs.slice(0, hops)) {
-    await page.click(`.tabbar a[href="${href}"]`);
-    await page.waitForTimeout(650);
-  }
-  await page.click('a[href="/"]').catch(() => {});
-  await page.waitForTimeout(800);
-  return page.evaluate(AMMO);
-}
 
 /** Re-open the fight until the cat rolls the stance we want to look at. */
-async function forceStance(page, want, tries = 120) {
-  for (let i = 0; i < tries; i++) {
-    await press(page);
-    await page.waitForTimeout(90);
-    if ((await page.evaluate(STANCE)) === want) return true;
-    await release(page);
-  }
-  return false;
+/**
+ * Open a fight, and keep re-dealing until the cat rolls the stance this section is about.
+ *
+ * The budgets here are the largest in the fleet and they are not padding: §9.3 weights the roll, and
+ * **sleepy is deliberately rare**, so section 4 asks for two hundred deals to be sure of seeing one.
+ * A named stance is a fixture like any other — `deal()` reports which attempt produced it, so a
+ * section that had to work for its opponent says so instead of looking flaky.
+ */
+async function stanceDeal(page, want, deals = 120) {
+  await press(page);
+  return deal(page, wants.stance([want], { claims: 'ignore' }), { deals, settle: 90 });
 }
 
 /**
@@ -145,24 +97,6 @@ async function forceStance(page, want, tries = 120) {
  * anything and without scrubbing anything. Used for measurements that must not be
  * confounded by the player accidentally playing.
  */
-async function idlePoint(page, avoidClaims = true) {
-  return page.evaluate((avoid) => {
-      // Mirrors INTERACTIVE in src/lib/arena.ts, and *not* PROTECTED. Using the
-      // protected list here is what let three harnesses agree that throwing worked:
-      // it matches `<main tabindex="-1">`, so every scan skipped the entire content
-      // area and settled on the strip above it.
-    const PROT = 'a[href], button, input, select, textarea, summary, label, [contenteditable]';
-    for (let y = 150; y < innerHeight - 70; y += 14)
-      for (let x = 30; x < innerWidth - 30; x += 14) {
-        const el = document.elementFromPoint(x, y);
-        if (!el) continue;
-        if (el.closest(PROT) || el.closest('#cat-hud')) continue;
-        if (avoid && el.closest('.cat-claimed')) continue;
-        return { x, y };
-      }
-    return null;
-  }, avoidClaims);
-}
 
 /**
  * A claim to work on — by **scrolling**, never by re-rolling the fight.
@@ -173,7 +107,15 @@ async function idlePoint(page, avoidClaims = true) {
  * out at 467ms, which is a trickster's, and the check failed for a reason that had nothing to
  * do with sleepy.
  */
-async function pickSpot(page) {
+/**
+ * A claim in the band, found by **scrolling** rather than by re-dealing.
+ *
+ * Deliberately not `deal()`: this file has just spent up to two hundred fights pinning a stance, and
+ * re-dealing the board would throw that away — the trap §12.1 names as two re-rollers undoing each
+ * other. Scrolling changes which claims are reachable without touching the fight at all, so it is the
+ * cheaper and safer of the two moves, and the name says which one this is.
+ */
+async function bandSpot(page) {
   const tops = await page.evaluate(() =>
     [...document.querySelectorAll('.cat-claimed')]
       .map((n) => n.getBoundingClientRect().top + scrollY)
@@ -242,7 +184,7 @@ async function lureCat(page, target, within = 65, budgetMs = 14000) {
   const page = await ctx.newPage();
   await page.goto(BASE + '/', { waitUntil: 'load' });
   await page.waitForTimeout(700);
-  ok('rolled a siege', await forceStance(page, 'siege'));
+  fixture('rolled a siege', await stanceDeal(page, 'siege'));
 
   // chase it with the cursor up near the top: a floor-bound cat cannot follow
   await page.mouse.move(900, 220);
@@ -268,7 +210,7 @@ async function lureCat(page, target, within = 65, budgetMs = 14000) {
    * count sat still — a confounded measurement that read as a broken feature.
    */
   const idle = await idlePoint(page);
-  ok('found somewhere harmless to wait', !!idle, idle ? `${idle.x},${idle.y}` : 'nowhere');
+  fixture('found somewhere harmless to wait', idle, idle ? `${idle.x},${idle.y}` : '');
   await page.mouse.move(idle.x, idle.y);
   const before = await page.evaluate(`document.querySelectorAll('.cat-claimed').length`);
   await page.waitForTimeout(11000);
@@ -283,11 +225,12 @@ async function lureCat(page, target, within = 65, budgetMs = 14000) {
   const page = await ctx.newPage();
   await page.goto(BASE + '/', { waitUntil: 'load' });
   await page.waitForTimeout(700);
-  const rolled = await forceStance(page, 'sleepy', 200);
-  ok('rolled a sleepy cat eventually — it is meant to be rare', rolled);
+  const sleepy = await stanceDeal(page, 'sleepy', 200);
+  const rolled = !!sleepy.value;
+  fixture('rolled a sleepy cat eventually — it is meant to be rare', sleepy);
   if (rolled) {
     await page.evaluate(RECORDER);
-    const spot = await pickSpot(page);
+    const spot = await bandSpot(page);
     await lureCat(page, spot);
     ok('still sleepy when the measurement starts', (await page.evaluate(STANCE)) === 'sleepy');
     await page.mouse.move(spot.x, spot.y);
@@ -320,12 +263,12 @@ async function lureCat(page, target, within = 65, budgetMs = 14000) {
    * to say anything about a 30% feint rate. Arming removes the loss without touching what is being
    * measured — the feint roll does not read the paw row.
    */
-  const held = await armAmmo(page);
+  const held = await armAmmo(page, { hops: 5, pool: 6, dwell: 650, settle: 800, home: '/' });
   ok('treats in hand, so provoking cannot lose the fight (§2)', held >= 3, `${held} found`);
-  ok('rolled a trickster', await forceStance(page, 'trickster'));
+  fixture('rolled a trickster', await stanceDeal(page, 'trickster'));
   await page.evaluate(RECORDER);
 
-  const spot = await pickSpot(page);
+  const spot = await bandSpot(page);
   await lureCat(page, spot);
   /*
    * Provoke over and over without ever finishing.
@@ -389,7 +332,7 @@ async function lureCat(page, target, within = 65, budgetMs = 14000) {
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto(BASE + '/', { waitUntil: 'load' });
   await page.waitForTimeout(600);
-  const armed = await armAmmo(page);
+  const armed = await armAmmo(page, { hops: 5, pool: 6, dwell: 650, settle: 800, home: '/' });
   ok('armed with a kit', armed >= 3, `${armed} treats`);
 
   // which shapes did this visit actually earn? §9.5's whole point.
@@ -404,7 +347,7 @@ async function lureCat(page, target, within = 65, budgetMs = 14000) {
 
   // throw one and watch which shape went out and how long it occupies the cat
   const spot = (await idlePoint(page, false)) ?? (await idlePoint(page, true));
-  ok('found somewhere to throw it', !!spot, spot ? `${spot.x},${spot.y}` : 'nowhere');
+  fixture('found somewhere to throw it', spot, spot ? `${spot.x},${spot.y}` : '');
   await page.mouse.move(spot.x, spot.y);
   await page.mouse.down();
   await page.mouse.up();
@@ -435,6 +378,4 @@ async function lureCat(page, target, within = 65, budgetMs = 14000) {
 }
 
 await browser.close();
-const failed = results.filter((r) => !r.pass);
-console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
-if (failed.length) process.exit(1);
+if (!done()) process.exit(1);

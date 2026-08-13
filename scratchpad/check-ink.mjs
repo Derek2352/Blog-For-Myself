@@ -1,11 +1,13 @@
-import { chromium } from 'playwright-core';
+import { launch, report } from './lib/fixture.mjs';
+
+/*
+ * Only the launcher and the reporter are shared here. This file's contexts deliberately keep
+ * **Playwright's default viewport** rather than the fleet's 1280×900, because the ink canvas is sized
+ * to the viewport and every pixel count below was measured at that size — the kind of difference
+ * between copies that §12.1 says is usually load-bearing.
+ */
 
 const URL = 'http://localhost:4416/?ink=20260802';
-const results = [];
-const ok = (name, pass, detail = '') => {
-  results.push({ name, pass, detail });
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
-};
 
 /** Count non-transparent pixels the ink canvas has actually painted. */
 const inkPixels = `(() => {
@@ -27,7 +29,8 @@ const inkMass = `(() => {
   return s;
 })()`;
 
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const browser = await launch();
+const { ok, done } = report();
 
 /** Skip the first-visit welcome dialog — a real showModal() covers the hero. */
 async function fresh(opts = {}) {
@@ -327,6 +330,4 @@ for (const [label, dark] of [['light', false], ['dark', true]]) {
 
 await browser.close();
 
-const failed = results.filter((r) => !r.pass);
-console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
-process.exit(failed.length ? 1 : 0);
+process.exit(done() ? 0 : 1);

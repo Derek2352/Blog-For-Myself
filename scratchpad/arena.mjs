@@ -5,62 +5,37 @@
  * that matters most is the *restore*: a full snapshot of every element's class
  * list and style attribute before the fight, compared byte-for-byte after Esc.
  */
-import { chromium } from 'playwright-core';
+import {
+  BASE,
+  deal,
+  fresh as context,
+  launch,
+  press,
+  release,
+  report,
+  wants,
+} from './lib/fixture.mjs';
 
-const BASE = 'http://localhost:4416';
-const results = [];
-const ok = (name, pass, detail = '') => {
-  results.push({ name, pass, detail });
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
-};
+/*
+ * Shared with the rest of the fleet through `lib/fixture.mjs` (§12.1's charter): the reporter with its
+ * fixture/assertion split, the context factory that declares the mode, the launcher, and the waits
+ * that open and close a fight. This file used to carry its own copy of each.
+ */
+const browser = await launch();
+const { ok, note, fixture, done } = report();
 
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+
+
+
+
+
 
 /**
- * Press the toggle and wait for the state change to have actually landed.
- *
- * Step 6 put a ~1.9s ink curtain between the press and the fight. Every `click` in these
- * scripts was followed by a fixed 120–200ms wait, which was ample against an instant swap and
- * is now a race the script always loses — the first symptom was `getBoundingClientRect` on a
- * null `.cat-claimed`. Waiting on the observable rather than on a stopwatch is both correct
- * and, on the close path, usually shorter.
+ * A desktop context playing **manual mode** — this is the oldest harness in the fleet and every check
+ * in it is about §3's pointer fight.
  */
-async function press(page, timeout = 7000) {
-  const was = await page.evaluate(() => !!document.querySelector('.cat-claimed'));
-  await page.click('#cat-arena-toggle');
-  await page
-    .waitForFunction((w) => !!document.querySelector('.cat-claimed') !== w, was, { timeout })
-    .catch(() => {});
-}
+const fresh = (opts = {}) => context(browser, { mode: 'manual', ...opts });
 
-
-async function fresh(opts = {}) {
-  const ctx = await browser.newContext(opts);
-  await ctx.addInitScript(() => localStorage.setItem('welcomed', '1'));
-  /*
-   * 2.0: this harness measures **manual mode** (§3's fight). Commander mode is now the default, so
-   * say which game before opening one — otherwise the pointer is not the verb and half these checks
-   * are asking a spectator to hold still. Presses the HUD chip the way a visitor does, and waits for
-   * `aria-pressed` rather than for a timeout.
-   */
-  await ctx.addInitScript(() => {
-    const pick = () => {
-      const b = document.getElementById('cat-manual-toggle');
-      if (!b) return false;
-      if (b.getAttribute('aria-pressed') === 'true') return true;
-      b.click();
-      return b.getAttribute('aria-pressed') === 'true';
-    };
-    addEventListener('DOMContentLoaded', () => {
-      if (pick()) return;
-      const t = setInterval(() => {
-        if (pick()) clearInterval(t);
-      }, 40);
-      setTimeout(() => clearInterval(t), 8000);
-    });
-  });
-  return ctx;
-}
 
 /**
  * Every element's identity + what the arena could have touched.
@@ -632,25 +607,24 @@ for (const theme of ['light', 'dark']) {
   await page.goto(BASE + '/', { waitUntil: 'load' });
   await page.waitForTimeout(600);
 
-  let stance = '';
-  let spot = null;
-  for (let i = 0; i < 16 && !(stance === 'siege' && spot); i++) {
-    await press(page);
-    stance = await page.evaluate(`document.getElementById('site-cat')?.dataset.stance ?? ''`);
-    spot = await page.evaluate(() => {
-      const c = [...document.querySelectorAll('.cat-claimed')]
-        .map((el) => {
-          const r = el.getBoundingClientRect();
-          return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), r };
-        })
-        .find((o) => o.r.top > 170 && o.r.bottom < innerHeight - 90);
-      return c ? { x: c.x, y: c.y } : null;
-    });
-    if (stance === 'siege' && spot) break;
-    await page.keyboard.press('Escape');
-    await settled(page);
-  }
-  ok('rolled a siege fight with somewhere to hold', stance === 'siege' && !!spot, stance || '(none)');
+  /*
+   * A **siege** fight with somewhere to hold, in one deal.
+   *
+   * This loop was already right — it rolled the stance and the placement together, which is the thing
+   * §12.1 says separate re-rollers get wrong — and it is here as a `deal()` so there is one
+   * implementation of it rather than five. Sixteen deals is this file's own budget kept; siege is one
+   * of four weighted stances.
+   */
+  const siege = await deal(
+    page,
+    wants.stance(['siege'], { claims: 'inView', top: 170, bottom: 90, maxHeight: Infinity }),
+    { deals: 16, settle: 0 },
+  );
+  const stance = siege.value ?? '';
+  const spot = siege.value
+    ? await wants.spot({ top: 170, bottom: 90, maxHeight: Infinity })(page)
+    : null;
+  fixture('rolled a siege fight with somewhere to hold', siege, stance);
 
   if (stance === 'siege' && spot) {
     // Exactly one pointer move, then nothing at all for longer than the idle truce.
@@ -708,6 +682,4 @@ for (const theme of ['light', 'dark']) {
 }
 
 await browser.close();
-const failed = results.filter((r) => !r.pass);
-console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
-if (failed.length) process.exit(1);
+if (!done()) process.exit(1);

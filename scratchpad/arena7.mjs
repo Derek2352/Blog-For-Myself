@@ -19,31 +19,36 @@ const TELEGRAPH_MS = 420;
 const SCRUB_MS = 1400;
 const BAIT_MS = 520; // > POUNCE_THRESHOLD * SCRUB_MS (490), < the bored threshold's 910
 
-import { chromium } from 'playwright-core';
+import {
+  BASE,
+  armAmmo,
+  deal,
+  fresh as context,
+  launch,
+  press as sharedPress,
+  release as sharedRelease,
+  report,
+  throwSpot,
+  wants,
+} from './lib/fixture.mjs';
 
-const BASE = 'http://localhost:4416';
-const results = [];
-const ok = (name, pass, detail = '') => {
-  results.push({ name, pass, detail });
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
-};
+/*
+ * Shared with the rest of the fleet through `lib/fixture.mjs` (§12.1's charter): the reporter with its
+ * fixture/assertion split, the context factory that declares the mode, the launcher, and the waits
+ * that open and close a fight. This file used to carry its own copy of each.
+ */
+const browser = await launch();
+const { ok, note, fixture, done } = report();
 
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 
-async function press(page, timeout = 8000) {
-  const was = await page.evaluate(() => !!document.querySelector('.cat-claimed'));
-  await page.click('#cat-arena-toggle');
-  await page
-    .waitForFunction((w) => !!document.querySelector('.cat-claimed') !== w, was, { timeout })
-    .catch(() => {});
-}
 
-async function release(page, timeout = 8000) {
-  await page.keyboard.press('Escape');
-  await page
-    .waitForFunction(() => !document.querySelector('.cat-claimed'), undefined, { timeout })
-    .catch(() => {});
-}
+
+/** Shared with the fleet; this file has always allowed 8000ms for the curtain. */
+const press = (page) => sharedPress(page, { timeout: 8000 });
+
+
+const release = (page) => sharedRelease(page, { timeout: 8000 });
+
 
 async function settled(page, ms = 8000) {
   await page
@@ -59,33 +64,11 @@ async function settled(page, ms = 8000) {
   await page.waitForTimeout(120);
 }
 
-async function fresh() {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  await ctx.addInitScript(() => localStorage.setItem('welcomed', '1'));
-  /*
-   * 2.0: this harness measures **manual mode** (§3's fight). Commander mode is now the default, so
-   * say which game before opening one — otherwise the pointer is not the verb and half these checks
-   * are asking a spectator to hold still. Presses the HUD chip the way a visitor does, and waits for
-   * `aria-pressed` rather than for a timeout.
-   */
-  await ctx.addInitScript(() => {
-    const pick = () => {
-      const b = document.getElementById('cat-manual-toggle');
-      if (!b) return false;
-      if (b.getAttribute('aria-pressed') === 'true') return true;
-      b.click();
-      return b.getAttribute('aria-pressed') === 'true';
-    };
-    addEventListener('DOMContentLoaded', () => {
-      if (pick()) return;
-      const t = setInterval(() => {
-        if (pick()) clearInterval(t);
-      }, 40);
-      setTimeout(() => clearInterval(t), 8000);
-    });
-  });
-  return ctx;
-}
+/**
+ * A desktop context playing **manual mode**: §7.3's tiers are measured against a pointer that plays.
+ */
+const fresh = (opts = {}) => context(browser, { mode: 'manual', ...opts });
+
 
 const SNAP_LIST = `(() => [...document.querySelectorAll('*')]
   .filter((el) => !el.closest('#site-cat, #cat-hud, #cat-treat, #cat-scrub, #cat-throw, #cat-ribbon, #cat-territory, #cat-curtain, header'))
@@ -159,51 +142,9 @@ const MOOD = `document.getElementById('site-cat')?.dataset.mood ?? ''`;
 const CLAIMS = `document.querySelectorAll('.cat-claimed').length`;
 const AMMO = `document.querySelectorAll('#cat-score .cat-paw.got').length`;
 
-/** Collect treats by walking the tabs, as `arena4.mjs` does. */
-async function armAmmo(page, hops = 5) {
-  const hrefs = await page.evaluate(() =>
-    [...document.querySelectorAll('.tabbar a[href]')]
-      .filter((a) => !a.closest('.tab-flyout') && a.offsetParent !== null)
-      .map((a) => a.getAttribute('href'))
-      .slice(0, 6),
-  );
-  for (const href of hrefs.slice(0, hops)) {
-    await page.click(`.tabbar a[href="${href}"]`);
-    await page.waitForTimeout(650);
-  }
-  await page.click('a[href="/timeline/"]');
-  await page.waitForTimeout(750);
-  return page.evaluate(AMMO);
-}
 
-/** Somewhere a treat can legally land, as near to `near` as the page allows. */
-async function throwSpot(page, near) {
-  return page.evaluate(
-    ([nx, ny]) => {
-      // Mirrors INTERACTIVE in src/lib/arena.ts, and *not* PROTECTED — see arena4.mjs.
-      const PROT = 'a[href], button, input, select, textarea, summary, label, [contenteditable]';
-      const okAt = (x, y) => {
-        const el = document.elementFromPoint(x, y);
-        return el && !el.closest(PROT) && !el.closest('#cat-hud') ? { x, y } : null;
-      };
-      const direct = okAt(nx, ny);
-      if (direct) return direct;
-      let best = null;
-      let bestD = Infinity;
-      for (let y = 100; y < innerHeight - 50; y += 16)
-        for (let x = 14; x < innerWidth - 14; x += 16) {
-          if (!okAt(x, y)) continue;
-          const d = Math.hypot(x - nx, y - ny);
-          if (d < bestD) {
-            bestD = d;
-            best = { x, y };
-          }
-        }
-      return best;
-    },
-    [near.x, near.y],
-  );
-}
+
+
 
 /** Throw a treat away from where the player is working, if one is in hand. */
 async function bribe(page, awayFrom) {
@@ -510,26 +451,22 @@ function spanStats(log, spans, guardMs = 400) {
 }
 
 /**
- * Re-roll the fight until the cat is one that actually leaves the floor.
+ * A cat that leaps, on a board with something in reach — one deal, both conditions.
  *
- * The lesson 0.7 wrote down — "stances made 'the cat will pounce' conditional" — and I walked
- * straight back into it with a brand-new harness: a siege cat has `pin: true` and never
- * leaps, so a run that happened to deal one measured 0.00 commitments per second at *every*
- * tier and the comparison was between two zeroes. Aggression moves willingness to commit, so
- * these checks need an opponent that commits.
+ * Fourteen deals is this file's own budget: an ambush is one of four weighted stances, and the band
+ * here is 80px off the bottom rather than 40 because §7.3's measurements park the pointer low.
  */
-async function forceLeaper(page, want = 'ambush', tries = 14) {
-  for (let i = 0; i < tries; i++) {
-    const stance = await page.evaluate(`document.getElementById('site-cat')?.dataset.stance ?? ''`);
-    const reachable = await page.evaluate(
-      `[...document.querySelectorAll('.cat-claimed')].filter((c) => { const r = c.getBoundingClientRect(); return r.top > 160 && r.bottom < innerHeight - 80 && r.height < 420; }).length`,
-    );
-    if (stance === want && reachable > 0) return stance;
-    await release(page);
-    await press(page);
-  }
-  return null;
-}
+const leaper = (page, want = 'ambush') =>
+  deal(page, wants.stance([want], { claims: 'inView', top: 160, bottom: 80, maxHeight: 420 }), {
+    deals: 14,
+    settle: 0,
+    // This file's own 8000ms open and close, so a re-deal waits exactly as long as it always has.
+    reopen: async () => {
+      await release(page);
+      await press(page);
+    },
+  });
+
 
 // ---- 1. bored: the cat eases off a player who is behind and out of options
 {
@@ -562,7 +499,7 @@ async function forceLeaper(page, want = 'ambush', tries = 14) {
   const clean = await page.evaluate(SNAP_LIST);
 
   await press(page);
-  const stance = await forceLeaper(page);
+  const stance = await leaper(page);
   ok('dealt a cat that actually leaves the floor', !!stance, stance ?? 'no ambush in 14 rolls');
   await page.evaluate(RECORDER);
   const opened = await page.evaluate(() => performance.now());
@@ -667,12 +604,12 @@ async function forceLeaper(page, want = 'ambush', tries = 14) {
   // A player who is winning is a player who has been exploring — the desperate tier is only
   // reachable by someone spending the resource §5.4 exists for. Ammo does not gate this tier
   // (unlike bored), so arming up here changes nothing about what is being measured.
-  const armed = await armAmmo(page);
+  const armed = await armAmmo(page, { hops: 5, pool: 6, dwell: 650, settle: 750, home: '/timeline/' });
   ok('armed like a player who has been round the site', armed >= 3, `${armed} treats`);
 
   await press(page);
-  const stance = await forceLeaper(page);
-  ok('dealt a leaping cat for the desperate measurements too', !!stance, stance ?? 'none');
+  const leapDeal = await leaper(page);
+  fixture('dealt a leaping cat for the desperate measurements too', leapDeal, leapDeal.value ?? '');
   await page.evaluate(RECORDER);
   const opened = await page.evaluate(() => performance.now());
 
@@ -913,12 +850,6 @@ async function forceLeaper(page, want = 'ambush', tries = 14) {
 }
 
 await browser.close();
-const failed = results.filter((r) => !r.pass);
-console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
-if (failed.length) {
-  console.log('failed:');
-  for (const f of failed) console.log(`  - ${f.name}${f.detail ? '  — ' + f.detail : ''}`);
-  process.exit(1);
-}
+if (!done()) process.exit(1);
 void TELEGRAPH_MS;
 void SCRUB_MS;

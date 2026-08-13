@@ -13,32 +13,28 @@
 const SCRUB_MS = 1400;
 const LURE_MS = 3000;
 
-import { chromium } from 'playwright-core';
+import {
+  BASE,
+  armAmmo,
+  deal,
+  fresh as context,
+  launch,
+  press,
+  release,
+  report,
+  throwSpot,
+  wants,
+} from './lib/fixture.mjs';
 
-const BASE = 'http://localhost:4416';
-const results = [];
-const ok = (name, pass, detail = '') => {
-  results.push({ name, pass, detail });
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
-};
-
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
-
-/**
- * Esc, and wait for the fight to actually be gone.
- *
- * Same reason as `press`: the exit goes out through the curtain now, so the arena is still
- * live for ~700ms after the key. The re-roll loops below press Esc and immediately press the
- * toggle again — against an instant swap that was two clean transitions, and against a
- * transition it is a press landing while the previous intent is still standing, which toggles
- * the wrong way and leaves the loop rolling the same fight forever.
+/*
+ * The reporter, the context factory, the launcher and the open/close waits come from
+ * `lib/fixture.mjs` (§12.1's charter). This file carried its own copy of each, which is how one
+ * idea ended up with eleven implementations and a fix at one call site could never be a fix.
  */
-async function release(page, timeout = 7000) {
-  await page.keyboard.press('Escape');
-  await page
-    .waitForFunction(() => !document.querySelector('.cat-claimed'), undefined, { timeout })
-    .catch(() => {});
-}
+const browser = await launch();
+const { ok, note, fixture, done } = report();
+
+
 
 /**
  * Press the toggle and wait for the state change to have actually landed.
@@ -49,41 +45,21 @@ async function release(page, timeout = 7000) {
  * null `.cat-claimed`. Waiting on the observable rather than on a stopwatch is both correct
  * and, on the close path, usually shorter.
  */
-async function press(page, timeout = 7000) {
-  const was = await page.evaluate(() => !!document.querySelector('.cat-claimed'));
-  await page.click('#cat-arena-toggle');
-  await page
-    .waitForFunction((w) => !!document.querySelector('.cat-claimed') !== w, was, { timeout })
-    .catch(() => {});
-}
 
-async function fresh(opts = {}) {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, ...opts });
-  await ctx.addInitScript(() => localStorage.setItem('welcomed', '1'));
-  /*
-   * 2.0: this harness measures **manual mode** (§3's fight). Commander mode is now the default, so
-   * say which game before opening one — otherwise the pointer is not the verb and half these checks
-   * are asking a spectator to hold still. Presses the HUD chip the way a visitor does, and waits for
-   * `aria-pressed` rather than for a timeout.
-   */
-  await ctx.addInitScript(() => {
-    const pick = () => {
-      const b = document.getElementById('cat-manual-toggle');
-      if (!b) return false;
-      if (b.getAttribute('aria-pressed') === 'true') return true;
-      b.click();
-      return b.getAttribute('aria-pressed') === 'true';
-    };
-    addEventListener('DOMContentLoaded', () => {
-      if (pick()) return;
-      const t = setInterval(() => {
-        if (pick()) clearInterval(t);
-      }, 40);
-      setTimeout(() => clearInterval(t), 8000);
-    });
-  });
-  return ctx;
-}
+/**
+ * A desktop context playing **manual mode** — commander mode is 2.0's default, and every check here
+ * is about a pointer and a treat, so the mode is declared before any fight opens.
+ */
+const fresh = (opts = {}) => context(browser, { mode: 'manual', ...opts });
+
+/**
+ * This file's own arming numbers, passed explicitly rather than inherited.
+ *
+ * Four hops out of the first five tabs, 700ms each, then home to `/timeline/` — the 24-claim board
+ * every measurement below was calibrated on. The shared helper defaults to five hops and `/`, and
+ * inheriting those silently moved two other harnesses onto a different board (see `armAmmo`'s note).
+ */
+const ARM = { hops: 4, pool: 5, dwell: 700, settle: 800, home: '/timeline/' };
 
 const AMMO = `document.querySelectorAll('#cat-score .cat-paw.got').length`;
 const CLAIMS = `document.querySelectorAll('.cat-claimed').length`;
@@ -108,30 +84,7 @@ const RECORDER = () => {
   }).observe(root, { attributes: true, attributeFilter: ['class'] });
 };
 
-/**
- * Browse a few tabs, client-side, to fill paws.
- *
- * A treat left on the floor of the page you are leaving is credited on the way out
- * ("visiting earns the treat"), so each hop banks the previous page's find.
- */
-async function armAmmo(page, hops = 4) {
-  // Top-level tabs only. `.tabbar` also holds each tab's flyout of entry links,
-  // which are hidden until hover — clicking one of those just times out.
-  const hrefs = await page.evaluate(() =>
-    [...document.querySelectorAll('.tabbar a[href]')]
-      .filter((a) => !a.closest('.tab-flyout') && a.offsetParent !== null)
-      .map((a) => a.getAttribute('href'))
-      .slice(0, 5),
-  );
-  for (const href of hrefs.slice(0, hops)) {
-    await page.click(`.tabbar a[href="${href}"]`);
-    await page.waitForTimeout(700);
-  }
-  // one more hop so the last page's treat is credited too
-  await page.click('a[href="/timeline/"]');
-  await page.waitForTimeout(800);
-  return page.evaluate(AMMO);
-}
+
 
 /**
  * Find a point a treat can actually be thrown at.
@@ -141,41 +94,6 @@ async function armAmmo(page, hops = 4) {
  * thing this harness could do either. It scans for a point whose hit-test is not
  * inside `PROTECTED`, which is exactly what the crosshair cursor tells a player.
  */
-async function throwSpot(page, near) {
-  return page.evaluate(
-    ([nx, ny]) => {
-      // Mirrors INTERACTIVE in src/lib/arena.ts, and *not* PROTECTED. Using the
-      // protected list here is what let three harnesses agree that throwing worked:
-      // it matches `<main tabindex="-1">`, so every scan skipped the entire content
-      // area and settled on the strip above it.
-      const PROT = 'a[href], button, input, select, textarea, summary, label, [contenteditable]';
-      const ok = (x, y) => {
-        const el = document.elementFromPoint(x, y);
-        return el && !el.closest(PROT) && !el.closest('#cat-hud') ? { x, y } : null;
-      };
-      const direct = ok(nx, ny);
-      if (direct) return direct;
-      // Grid-scan the whole viewport and take the throwable point closest to the one
-      // asked for. A spiral out from the request missed entirely on a dense card grid,
-      // which is most of this site.
-      let best = null;
-      let bestD = Infinity;
-      for (let y = 100; y < innerHeight - 50; y += 16) {
-        for (let x = 14; x < innerWidth - 14; x += 16) {
-          if (!ok(x, y)) continue;
-          const d = Math.hypot(x - nx, y - ny);
-          if (d < bestD) {
-            bestD = d;
-            best = { x, y };
-          }
-        }
-      }
-      if (best) return best;
-      return null;
-    },
-    [near.x, near.y],
-  );
-}
 
 /** Bring the cat to the cursor without letting a scrub finish. */
 /**
@@ -188,19 +106,15 @@ async function throwSpot(page, near) {
  * control. That is stances working, not a regression, but the measurement has to pin the
  * opponent for the comparison to mean anything.
  */
-async function forceFighter(page, tries = 40) {
-  for (let i = 0; i < tries; i++) {
-    const stance = await page.evaluate(`document.getElementById('site-cat').dataset.stance ?? ''`);
-    // Ambush only. A trickster bluffs a third of its wind-ups, and a bluff does not
-    // interrupt anything — which made the control arm of the A/B below pass or fail on a
-    // coin toss. The comparison needs an opponent that always commits.
-    if (stance === 'ambush') return stance;
-    await release(page);
-    await press(page);
-    await page.waitForTimeout(180);
-  }
-  return null;
-}
+/**
+ * Ambush only, and up to forty deals to get one.
+ *
+ * A trickster bluffs a third of its wind-ups and a bluff interrupts nothing, which made the control
+ * arm of the A/B below pass or fail on a coin toss. The comparison needs an opponent that always
+ * commits. No board condition here — this section scrolls to whatever it needs — so `claims: 'ignore'`.
+ * Forty rather than `deal()`'s default six because an ambush is one of four weighted stances.
+ */
+const fighter = (page) => deal(page, wants.stance(['ambush'], { claims: 'ignore' }), { deals: 40, settle: 180 });
 
 async function lureCat(page, target, within = 70, budgetMs = 14000) {
   const started = Date.now();
@@ -252,7 +166,7 @@ async function lureCat(page, target, within = 70, budgetMs = 14000) {
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto(BASE + '/', { waitUntil: 'load' });
   await page.waitForTimeout(600);
-  const armed = await armAmmo(page);
+  const armed = await armAmmo(page, ARM);
   ok('browsing tabs fills the paw row', armed >= 2, `${armed} treats in hand`);
 
   await press(page);
@@ -262,7 +176,9 @@ async function lureCat(page, target, within = 70, budgetMs = 14000) {
 
   // throw at a spot away from the cat that is not a link
   const spot = await throwSpot(page, { x: 1150, y: 300 });
-  ok('there is somewhere on the page a treat can go', !!spot, spot ? `${spot.x},${spot.y}` : 'nowhere');
+  // A scan of the viewport, not a roll: there is nothing to re-deal, but it is still the harness
+  // setting itself up rather than the build being measured.
+  fixture('there is somewhere on the page a treat can go', spot, spot ? `${spot.x},${spot.y}` : '');
   await page.mouse.move(spot.x, spot.y);
   await page.mouse.down();
   await page.mouse.up();
@@ -312,7 +228,7 @@ async function lureCat(page, target, within = 70, budgetMs = 14000) {
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto(BASE + '/', { waitUntil: 'load' });
   await page.waitForTimeout(600);
-  const armed = await armAmmo(page);
+  const armed = await armAmmo(page, ARM);
   ok('armed', armed >= 1, `${armed} treats`);
   await press(page);
   await page.waitForTimeout(200);
@@ -356,31 +272,51 @@ async function lureCat(page, target, within = 70, budgetMs = 14000) {
   const page = await ctx.newPage();
   await page.goto(BASE + '/', { waitUntil: 'load' });
   await page.waitForTimeout(600);
-  const armed = await armAmmo(page);
+  const armed = await armAmmo(page, ARM);
   ok('armed for the A/B', armed >= 1, `${armed} treats`);
 
   await press(page);
   await page.waitForTimeout(200);
-  const fighter = await forceFighter(page);
-  ok('rolled a cat that actually fights', !!fighter, fighter ?? 'never rolled one');
+  /*
+   * **One deal for both halves, and the recorder installed after it.**
+   *
+   * This section needs an ambush cat *and* a claim in the reachable band, and it used to ask for them
+   * separately — the stance pinned first, then a target picked from whatever board that fight
+   * happened to deal. Two re-rollers in sequence undo each other (§12.1), and worse, the recorder was
+   * installed before the second one could re-roll, so a re-deal would have written the *previous*
+   * fight's phases into the measurement. So: satisfy both in one deal, then start recording.
+   */
+  const abDeal = await deal(
+    page,
+    wants.all(wants.stance(['ambush'], { claims: 'ignore' }), (pg) =>
+      pg.evaluate(() => {
+        const cat = document.getElementById('site-cat').getBoundingClientRect();
+        const claims = [...document.querySelectorAll('.cat-claimed')]
+          .map((c) => {
+            const r = c.getBoundingClientRect();
+            return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), r };
+          })
+          .filter((c) => c.r.top > 160 && c.r.bottom < innerHeight - 40 && c.r.height < 420);
+        claims.sort(
+          (a, b) =>
+            Math.hypot(a.x - (cat.left + cat.width / 2), a.y - cat.top) -
+            Math.hypot(b.x - (cat.left + cat.width / 2), b.y - cat.top),
+        );
+        return claims[0] ?? null;
+      }),
+    ),
+    { deals: 40, settle: 180 },
+  );
+  const target = abDeal.value ? abDeal.value[1] : null;
+  fixture(
+    'rolled a cat that fights, on a board with a claim for the A/B',
+    abDeal,
+    target ? `ambush, claim at ${target.x},${target.y}` : '',
+  );
+  if (!target) {
+    console.log('      · no deal offered both — the A/B below is skipped');
+  }
   await page.evaluate(RECORDER);
-
-  const target = await page.evaluate(() => {
-    const cat = document.getElementById('site-cat').getBoundingClientRect();
-    const claims = [...document.querySelectorAll('.cat-claimed')]
-      .map((c) => {
-        const r = c.getBoundingClientRect();
-        return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), r };
-      })
-      .filter((c) => c.r.top > 160 && c.r.bottom < innerHeight - 40 && c.r.height < 420);
-    claims.sort(
-      (a, b) =>
-        Math.hypot(a.x - (cat.left + cat.width / 2), a.y - cat.top) -
-        Math.hypot(b.x - (cat.left + cat.width / 2), b.y - cat.top),
-    );
-    return claims[0] ?? null;
-  });
-  ok('found a claim for the A/B', !!target, target ? `at ${target.x},${target.y}` : 'none');
 
   // ---- A: the cat is next to you and you have thrown nothing
   await lureCat(page, target, 70);
@@ -426,7 +362,7 @@ async function lureCat(page, target, within = 70, budgetMs = 14000) {
     x: target.x > 640 ? 120 : 1160,
     y: target.y > 450 ? 220 : 760,
   });
-  ok('found somewhere far to throw it', !!farSpot, farSpot ? `${farSpot.x},${farSpot.y}` : 'nowhere');
+  fixture('found somewhere far to throw it', farSpot, farSpot ? `${farSpot.x},${farSpot.y}` : '');
   await page.mouse.move(farSpot.x, farSpot.y);
   await page.mouse.down();
   await page.mouse.up();
@@ -484,7 +420,7 @@ async function lureCat(page, target, within = 70, budgetMs = 14000) {
   const page = await ctx.newPage();
   await page.goto(BASE + '/', { waitUntil: 'load' });
   await page.waitForTimeout(600);
-  await armAmmo(page);
+  await armAmmo(page, ARM);
   await press(page);
   await page.waitForTimeout(200);
   await page.evaluate(RECORDER);
@@ -522,7 +458,7 @@ async function lureCat(page, target, within = 70, budgetMs = 14000) {
   const page = await ctx.newPage();
   await page.goto(BASE + '/', { waitUntil: 'load' });
   await page.waitForTimeout(600);
-  const armed = await armAmmo(page);
+  const armed = await armAmmo(page, ARM);
   await press(page);
   await page.waitForTimeout(200);
 
@@ -561,6 +497,4 @@ async function lureCat(page, target, within = 70, budgetMs = 14000) {
 }
 
 await browser.close();
-const failed = results.filter((r) => !r.pass);
-console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
-if (failed.length) process.exit(1);
+if (!done()) process.exit(1);

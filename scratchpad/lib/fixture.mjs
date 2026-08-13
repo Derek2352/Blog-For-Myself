@@ -143,12 +143,20 @@ export async function snapDiff(page, snap, clean) {
 /* ------------------------------------------------------------------ *
  * Browser, contexts, reporting
  * ------------------------------------------------------------------ */
+/*
+ * The union of every list the fleet had, so consolidating cannot make an environment worse. The
+ * `PLAYWRIGHT_BROWSERS_PATH` entry was added in 1.4 for the cloud sessions this gate usually runs in —
+ * without it a harness exits 2 before a single check, and an unrun gate in a sweep of green ones is the
+ * quietest possible failure. The Windows paths came from `first-run.mjs`, the only file that had them.
+ */
 const CHROME = [
   process.env.CHROME_PATH,
   '/opt/pw-browsers/chromium',
   '/usr/bin/chromium',
   '/usr/bin/google-chrome',
   process.env.PLAYWRIGHT_BROWSERS_PATH ? `${process.env.PLAYWRIGHT_BROWSERS_PATH}/chromium` : null,
+  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
 ].filter(Boolean);
 
 export async function launch(opts = {}) {
@@ -368,26 +376,36 @@ export const wants = {
       ),
 
   /**
-   * A stance from `list`, and (by default) a claim in view to use it against.
+   * A stance from `list`, and by default a claim **in view** to use it against.
    *
    * Both in one look because §9.3's stances are not interchangeable opponents: a **sleepy** cat will
    * not interrupt a hold at all, and a **siege** cat cannot reach anything off the floor. Neither is
    * a bug, and a check that says "a fight can be lost" has to be given a cat that can win one.
+   *
+   * `claims` is three-valued because the copies this replaced were, and flattening them broke a
+   * harness. `'inView'` is `arena2`/`arena4`/`arena7`'s condition — a claim in the reachable band.
+   * `'any'` is `arena8`/`battle`'s — the board merely has to exist, which mattered because a deal
+   * checked immediately after a re-open can catch a fight whose claims are not placed yet; converting
+   * `battle` to `'ignore'` sent three checks red, including a treat that never left the HUD.
+   * `'ignore'` is `arena3`/`arena5`'s — those sections scroll to whatever they need and only care
+   * which cat turned up. **The distinctions between copies of a helper are usually load-bearing.**
    */
   stance:
-    (list, { spot = true, ...spotOpts } = {}) =>
+    (list, { claims = 'inView', ...spotOpts } = {}) =>
     async (page) => {
       const got = await page.evaluate(
         ([t, b, h]) => ({
           stance: document.getElementById('site-cat')?.dataset.stance ?? '',
-          board: [...document.querySelectorAll('.cat-claimed')]
+          all: document.querySelectorAll('.cat-claimed').length,
+          inView: [...document.querySelectorAll('.cat-claimed')]
             .map((n) => n.getBoundingClientRect())
             .filter((r) => r.top > t && r.bottom < innerHeight - b && r.height < h).length,
         }),
         [spotOpts.top ?? 160, spotOpts.bottom ?? 40, spotOpts.maxHeight ?? 420],
       );
       if (!list.includes(got.stance)) return null;
-      if (spot && got.board === 0) return null;
+      if (claims === 'inView' && got.inView === 0) return null;
+      if (claims === 'any' && got.all === 0) return null;
       return got.stance;
     },
 
@@ -630,16 +648,39 @@ export async function reachClaim(page) {
  * Earn treats the way a visitor does — by browsing. **Never `page.goto`:** a full document load
  * resets the cat's session state and the found set with it.
  *
- * Ends on the homepage on purpose. Arming otherwise finishes on whichever tab was last, and a fight
- * measured there is a fight on an unknown board — the first run of `touch-fight` reported "found a
- * claim to hold — none" because the tab it landed on had nothing placeable in the safe band.
+ * **`home` is not cosmetic — it is which board the fight will be fought on, so pass it.** Arming
+ * otherwise finishes on whichever tab was last, and a fight measured there is a fight on an unknown
+ * board: the first run of `touch-fight` reported "found a claim to hold — none" because the tab it
+ * landed on had nothing placeable in the safe band.
+ *
+ * The copies this replaced did **not** agree. `arena3`, `arena4`, `arena7` and `arena8` end on
+ * `/timeline/` — 24 claims, of which only about four are in view at once, which is the board their
+ * measurements were calibrated against — while `arena5`, `battle` and `touch-fight` end on `/`.
+ * Consolidating them onto one default silently moved two harnesses to a different board, and
+ * `arena7`'s desperate-tier measurement collected zero samples as a result: the fight simply
+ * developed differently. Caught by a red, which is the only reason it is documented here rather than
+ * shipped. **A shared helper's default is a decision, not a convenience** — so every caller states
+ * its own board.
+ *
+ * The same afternoon produced the sibling of that fault, from the other direction: `arena8` called the
+ * old copy as `armAmmo(page, 1)` — a positional `hops` — and against this signature the `1` became an
+ * options object with no `hops` in it, so a section whose entire point was "explore almost nothing"
+ * explored five tabs and found five treats instead of one. It failed loudly only because the check
+ * reads the *treat count* rather than trusting the helper. **Consolidating helpers means converting
+ * call shapes, not just names.** Every knob the copies disagreed on — `pool`, `dwell`, `settle`,
+ * `hops`, `home` — is now a named parameter, and every call site passes the numbers its own
+ * measurements were calibrated against.
  */
-export async function armAmmo(page, { hops = 5, tap = false, home = '/' } = {}) {
-  const hrefs = await page.evaluate(() =>
-    [...document.querySelectorAll('.tabbar a[href]')]
-      .filter((a) => !a.closest('.tab-flyout') && a.offsetParent !== null)
-      .map((a) => a.getAttribute('href'))
-      .slice(0, 6),
+export async function armAmmo(page, { hops = 5, tap = false, home = '/', pool = 6, dwell = 650, settle = 750 } = {}) {
+  const hrefs = await page.evaluate(
+    (n) =>
+      [...document.querySelectorAll('.tabbar a[href]')]
+        // Top-level tabs only. `.tabbar` also holds each tab's flyout of entry links, hidden until
+        // hover — clicking one of those just times out.
+        .filter((a) => !a.closest('.tab-flyout') && a.offsetParent !== null)
+        .map((a) => a.getAttribute('href'))
+        .slice(0, n),
+    pool,
   );
   for (const href of hrefs.slice(0, hops)) {
     if (tap) {
@@ -649,13 +690,15 @@ export async function armAmmo(page, { hops = 5, tap = false, home = '/' } = {}) 
     } else {
       await page.click(`.tabbar a[href="${href}"]`);
     }
-    await page.waitForTimeout(tap ? 700 : 650);
+    await page.waitForTimeout(dwell);
   }
+  // One more hop, so the last page's treat is credited too, and so the fight below happens on a board
+  // this harness has chosen rather than on whichever tab arming ended on.
   await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
   await page.waitForTimeout(120);
   if (tap) await page.locator(`.tabbar a[href="${home}"], a[href="${home}"]`).first().tap();
-  else await page.click(`a[href="${home}"]`);
-  await page.waitForTimeout(900);
+  else await page.click(`a[href="${home}"]`).catch(() => {});
+  await page.waitForTimeout(settle);
   return page.evaluate(AMMO);
 }
 

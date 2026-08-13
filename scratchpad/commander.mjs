@@ -22,65 +22,33 @@
  *   npm run build && npx astro preview --port 4416 &
  *   node scratchpad/commander.mjs
  */
-import { chromium } from 'playwright-core';
-import { existsSync } from 'node:fs';
+import {
+  BASE,
+  BEST_ROUND_KEY,
+  KITTEN_CAP,
+  KITTEN_WORK_MS,
+  ROUND_BEAT_MS,
+  ROUND_REGROW_STEP,
+  SIEGE_REGROW_MS,
+  bounded,
+  deal,
+  fresh as context,
+  launch,
+  report,
+  wants,
+} from './lib/fixture.mjs';
 
-/* Mirrors src/lib/squad.ts and src/lib/arena.ts — literals, so a drift shows up as a failure. */
-const KITTEN_WORK_MS = 1000;
-const KITTEN_CAP = 4;
-const ROUND_REGROW_STEP = 0.82;
-const ROUND_BEAT_MS = 1500;
-const SIEGE_REGROW_MS = 9000;
-const BEST_ROUND_KEY = 'cat-best-round';
+/*
+ * The constants, the reporter, the context factory and the bounded wait all come from
+ * `lib/fixture.mjs` now — §12.1's charter. This file used to carry its own copy of each, which is
+ * how the fleet ended up with eleven context factories and four re-rollers with three different
+ * budgets, and therefore how a fix at one call site could never be a fix.
+ */
+const browser = await launch();
+const { ok, note, fixture, done } = report();
 
-const BASE = process.env.BASE_URL ?? 'http://localhost:4416';
-const CHROME = [
-  process.env.CHROME_PATH,
-  '/usr/bin/google-chrome',
-  '/usr/bin/chromium',
-  process.env.PLAYWRIGHT_BROWSERS_PATH ? `${process.env.PLAYWRIGHT_BROWSERS_PATH}/chromium` : null,
-  '/opt/pw-browsers/chromium',
-].filter(Boolean);
-const executablePath = CHROME.find((p) => existsSync(p));
-if (!executablePath) {
-  console.error('No Chrome found. Set CHROME_PATH or install Chrome.');
-  process.exit(2);
-}
-
-const results = [];
-const ok = (name, pass, detail = '') => {
-  results.push({ name, pass, detail });
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
-};
-const note = (s) => console.log(`      · ${s}`);
-
-const browser = await chromium.launch({ executablePath, headless: true });
-
-/** Bounded wait, options in the position Playwright actually reads them from. */
-const bounded = (page, fn, ms, arg = undefined) =>
-  page.waitForFunction(fn, arg, { timeout: ms }).then(
-    () => true,
-    () => false,
-  );
-
-async function fresh(storage = true) {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  await ctx.addInitScript(() => localStorage.setItem('welcomed', '1'));
-  if (!storage) {
-    // A browser that refuses storage — private mode, a hardened profile, a policy. The round still
-    // has to play; only the record is lost (`readBestRound`/`writeBestRound` swallow it).
-    await ctx.addInitScript(() => {
-      const boom = () => {
-        throw new Error('storage denied');
-      };
-      Object.defineProperty(window, 'localStorage', {
-        get: () => ({ getItem: boom, setItem: boom, removeItem: boom }),
-      });
-    });
-  }
-  return ctx;
-}
-
+/** This harness measures commander mode, which is the default — so no mode is declared. */
+const fresh = (opts = {}) => context(browser, opts);
 const SNAP = `(() => [...document.querySelectorAll('*')]
   .filter((el) => !el.closest('#site-cat, #cat-hud, #cat-squad, #cat-treat, #cat-scrub, #cat-throw, #cat-ribbon, #cat-territory, #cat-curtain, header'))
   .map((el, i) => i + ':' + el.tagName + ':' + el.className + ':' + (el.getAttribute('style') ?? '')))()`;
@@ -280,42 +248,35 @@ async function openArena(page) {
    * A claim well away from whatever the squad is already doing, and a point verified on it —
    * **and a point that belongs to the game rather than to the page.**
    *
-   * The first version of this pick skipped that last clause and picked the furthest usable claim,
-   * which on one board was a card's `<figure>`: a claim sitting inside a link. Clicking it did
-   * exactly what 1.2's `PROTECTED`/`INTERACTIVE` split promises — the page won, the browser
-   * navigated, and the fight ended. The trace read `claims=0 round=undefined` two frames after the
-   * click, which is a new document, not a lost order. So the check was measuring §11's guarantee and
-   * calling it an ordering failure, and it only did so on the boards where the furthest claim
-   * happened to be a link (the board is rolled per fight, so it failed intermittently — the worst
-   * kind of red).
+   * The first version of this pick asked once, and took the furthest usable claim; on one board that
+   * was a card's `<figure>`, a claim sitting inside a link. Clicking it did exactly what 1.2's
+   * `PROTECTED`/`INTERACTIVE` split promises — the page won, the browser navigated, and the fight
+   * ended. The trace read `claims=0 round=undefined` two frames after the click, which is a new
+   * document, not a lost order. The check was measuring §11's guarantee and reporting it as an
+   * ordering failure, on the boards where the furthest claim happened to be a link — the board is
+   * rolled per fight, so intermittently, which is the worst kind of red.
    *
-   * §15.3 records the design consequence: **a claim under a link cannot be ordered.** That is the
-   * intended priority and not a bug, so the harness must aim where a commander can actually give an
-   * order, and there is no point in the whole fleet asserting otherwise.
+   * Both halves of the fix are in `lib/fixture.mjs` now (§12.1): `wants.orderable` refuses points the
+   * page owns, and `deal()` deals again rather than asserting the deal. §15.3 carries the design
+   * consequence — **a claim under a link cannot be ordered** — because that is the intended priority
+   * and not a bug.
    */
-  const pick = await page.evaluate((INTERACTIVE) => {
-    const kits = [...document.querySelectorAll('.cat-kit')];
-    const centre = (el) => {
-      const r = el.getBoundingClientRect();
-      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-    };
-    const claims = [...document.querySelectorAll('.cat-claimed')];
-    let best = null;
-    for (const el of claims) {
-      const r = el.getBoundingClientRect();
-      if (r.top < 200 || r.bottom > innerHeight - 150) continue;
-      const x = Math.round(r.left + r.width / 2);
-      const y = Math.round(r.top + r.height / 2);
-      const at = document.elementFromPoint(x, y);
-      if (at?.closest('.cat-claimed') !== el) continue;
-      if (at.closest(INTERACTIVE) || at.closest('#cat-hud')) continue; // the page's click, not the game's
-      // Furthest from every kitten, so "a kitten came here" cannot be true by accident.
-      const away = Math.min(...kits.map((k) => Math.hypot(centre(k).x - x, centre(k).y - y)));
-      if (!best || away > best.away) best = { x, y, away: Math.round(away) };
-    }
-    return best;
-  }, 'a[href], button, input, select, textarea, summary, label, [contenteditable]');
-  ok('found a claim no kitten was standing near', !!pick, pick ? `at ${pick.x},${pick.y}, ${pick.away}px from the nearest kitten` : 'none free');
+  const dealt = await deal(
+    page,
+    // A squad has to be out for "no kitten was standing near" to mean anything — a board dealt a
+    // frame before the first kitten appears would satisfy the pick trivially, at 0px from nobody.
+    wants.all(
+      (p) => p.evaluate(`document.querySelectorAll('.cat-kit').length > 0`),
+      wants.orderable(),
+    ),
+    { deals: 6 },
+  );
+  const pick = dealt.value ? dealt.value[1] : null;
+  fixture(
+    'found a claim no kitten was standing near',
+    dealt,
+    pick ? `at ${pick.x},${pick.y}, ${pick.away}px from the nearest kitten` : '',
+  );
 
   if (pick) {
     await page.mouse.click(pick.x, pick.y);
@@ -436,7 +397,7 @@ async function openArena(page) {
  * 5. A browser that refuses storage still plays
  * ------------------------------------------------------------------ */
 {
-  const ctx = await fresh(false);
+  const ctx = await fresh({ storage: false });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
@@ -466,10 +427,4 @@ async function openArena(page) {
 }
 
 await browser.close();
-const failed = results.filter((r) => !r.pass);
-console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
-if (failed.length) {
-  console.log('failed:');
-  for (const f of failed) console.log(`  - ${f.name}${f.detail ? '  — ' + f.detail : ''}`);
-  process.exit(1);
-}
+if (!done()) process.exit(1);

@@ -18,32 +18,26 @@ const SCRUB_MS = 1400;
 /** Stance multipliers on the telegraph — mirrors STANCES in src/lib/arena.ts. */
 const TELEGRAPH_MUL = { ambush: 0.78, siege: 1, trickster: 1.1, sleepy: 1.6 };
 
-import { chromium } from 'playwright-core';
+import {
+  BASE,
+  deal,
+  fresh as context,
+  launch,
+  press,
+  release,
+  report,
+  wants,
+} from './lib/fixture.mjs';
 
-const BASE = 'http://localhost:4416';
-const results = [];
-const ok = (name, pass, detail = '') => {
-  results.push({ name, pass, detail });
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
-};
-
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
-
-/**
- * Esc, and wait for the fight to actually be gone.
- *
- * Same reason as `press`: the exit goes out through the curtain now, so the arena is still
- * live for ~700ms after the key. The re-roll loops below press Esc and immediately press the
- * toggle again — against an instant swap that was two clean transitions, and against a
- * transition it is a press landing while the previous intent is still standing, which toggles
- * the wrong way and leaves the loop rolling the same fight forever.
+/*
+ * The reporter, the context factory, the launcher and the open/close waits come from
+ * `lib/fixture.mjs` (§12.1's charter). This file carried its own copy of each, which is how one
+ * idea ended up with eleven implementations and a fix at one call site could never be a fix.
  */
-async function release(page, timeout = 7000) {
-  await page.keyboard.press('Escape');
-  await page
-    .waitForFunction(() => !document.querySelector('.cat-claimed'), undefined, { timeout })
-    .catch(() => {});
-}
+const browser = await launch();
+const { ok, note, fixture, done } = report();
+
+
 
 /**
  * Press the toggle and wait for the state change to have actually landed.
@@ -54,42 +48,13 @@ async function release(page, timeout = 7000) {
  * null `.cat-claimed`. Waiting on the observable rather than on a stopwatch is both correct
  * and, on the close path, usually shorter.
  */
-async function press(page, timeout = 7000) {
-  const was = await page.evaluate(() => !!document.querySelector('.cat-claimed'));
-  await page.click('#cat-arena-toggle');
-  await page
-    .waitForFunction((w) => !!document.querySelector('.cat-claimed') !== w, was, { timeout })
-    .catch(() => {});
-}
 
 
-async function fresh(opts = {}) {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, ...opts });
-  await ctx.addInitScript(() => localStorage.setItem('welcomed', '1'));
-  /*
-   * 2.0: this harness measures **manual mode** (§3's fight). Commander mode is now the default, so
-   * say which game before opening one — otherwise the pointer is not the verb and half these checks
-   * are asking a spectator to hold still. Presses the HUD chip the way a visitor does, and waits for
-   * `aria-pressed` rather than for a timeout.
-   */
-  await ctx.addInitScript(() => {
-    const pick = () => {
-      const b = document.getElementById('cat-manual-toggle');
-      if (!b) return false;
-      if (b.getAttribute('aria-pressed') === 'true') return true;
-      b.click();
-      return b.getAttribute('aria-pressed') === 'true';
-    };
-    addEventListener('DOMContentLoaded', () => {
-      if (pick()) return;
-      const t = setInterval(() => {
-        if (pick()) clearInterval(t);
-      }, 40);
-      setTimeout(() => clearInterval(t), 8000);
-    });
-  });
-  return ctx;
-}
+/**
+ * A desktop context playing **manual mode** — 2.0 made commander mode the default, and every check
+ * in this file is about what a *pointer* does, so the mode is declared before any fight opens.
+ */
+const fresh = (opts = {}) => context(browser, { mode: 'manual', ...opts });
 
 /** Records every phase change on the cat, with a timestamp. */
 const RECORDER = () => {
@@ -177,47 +142,21 @@ const IN_VIEW = () =>
     })
     .filter((c) => c.r.top > 150 && c.r.bottom < innerHeight - 40 && c.r.height < 420).length;
 
-async function ensureBoard(page, tries = 6) {
-  for (let i = 0; i < tries; i++) {
-    if ((await page.evaluate(IN_VIEW)) > 0) return true;
-    await press(page);
-    await page.waitForTimeout(160);
-    await press(page);
-    await page.waitForTimeout(200);
-  }
-  return (await page.evaluate(IN_VIEW)) > 0;
-}
-
 /**
- * Re-roll until the cat is one that actually pounces.
+ * The fight this file needs: an **ambush** cat, and a claim in view to use it against.
  *
- * Step 5 made every "the cat will wind up" assumption in this file conditional, which is
- * stances working rather than a regression: a **siege** cat never leaves the floor, so it
- * cannot reach a claim halfway up the page, and a **sleepy** one waits until 70% of a hold —
- * by which point the hold has finished. Neither can interrupt anything, so a harness written
- * against the baseline opponent simply waits forever.
+ * A sleepy cat stalks at 0.55x and never pounces from a distance; a siege cat cannot leave the
+ * floor. This file measures the pounce, so it pins the one stance that always throws one, and every
+ * section that touches the cat pins it — the two that did not were the last two failures.
  *
- * The default is **ambush alone**, and by experiment rather than by preference. A trickster
- * bluffs a third of its wind-ups, so anything waiting for a landing waits through them; a
- * siege regrows the board underneath a check counting claims; a sleepy one never commits at
- * all. This file measures the pounce, so it needs the stance that always throws one. Every
- * section here that touches the cat pins it — the two that did not were the last two failures.
+ * **Both conditions in one deal, deliberately.** This file used to have two re-rollers — one for the
+ * board, one for the stance — and calling them in sequence had each undoing the other, which is how
+ * it went back to timing out after the stance pin was added. `deal()` takes one predicate for exactly
+ * that reason (§12.1), and forty tries is this file's own budget kept: an ambush is one of four
+ * weighted stances, so six deals is not enough to be sure of getting one.
  */
-async function forceFighter(page, want = ['ambush'], tries = 40) {
-  for (let i = 0; i < tries; i++) {
-    const stance = await page.evaluate(`document.getElementById('site-cat').dataset.stance ?? ''`);
-    const board = await page.evaluate(IN_VIEW);
-    // Both conditions in one loop, deliberately. `ensureBoard` re-rolls the fight to find a
-    // claim and `forceFighter` re-rolls it to find an opponent, so calling them in sequence
-    // has each one undoing the other — which is how this file went back to timing out after
-    // the stance pin was added. Roll until the fight satisfies both, or not at all.
-    if (board > 0 && want.includes(stance)) return stance;
-    await release(page);
-    await press(page);
-    await page.waitForTimeout(180);
-  }
-  return null;
-}
+const fighter = (page, want = ['ambush']) =>
+  deal(page, wants.stance(want, { claims: 'inView', top: 150, bottom: 40, maxHeight: 420 }), { deals: 40, settle: 180 });
 
 /** A claim to fight over, preferring one the cat can reach quickly. */
 const pickTarget = () =>
@@ -257,7 +196,7 @@ const pickTarget = () =>
   await page.waitForTimeout(150);
   // A sleepy cat stalks at 0.55x and a siege one cannot leave the floor, so "it closes on
   // the cursor" is a claim about a particular opponent.
-  await forceFighter(page);
+  await fighter(page);
   ok(
     'opening the arena takes the cat over',
     await page.evaluate(() => document.getElementById('site-cat').classList.contains('boss')),
@@ -330,13 +269,19 @@ const pickTarget = () =>
   await page.waitForTimeout(700);
   await press(page);
   await page.waitForTimeout(120);
-  const foe = await forceFighter(page);
+  const foe = (await fighter(page)).value;
   await page.evaluate(RECORDER);
   const openedAt = await page.evaluate(() => performance.now());
 
-  ok('the board offers a reachable claim and a cat that fights', !!(await forceFighter(page)));
-  const target = await page.evaluate(pickTarget);
-  ok('found a claim to fight over', !!target, target ? `at ${target.x},${target.y}` : 'none');
+  fixture('the board offers a reachable claim and a cat that fights', await fighter(page));
+  /*
+   * The claim itself, dealt for rather than asserted. `pickTarget` prefers the claim the cat can
+   * reach quickest, and a fight that dealt none in the reachable band is a fight this check cannot be
+   * made in — which is a property of the deal, not of the build.
+   */
+  const targetDeal = await deal(page, (p) => p.evaluate(pickTarget), { deals: 6, settle: 180 });
+  const target = targetDeal.value;
+  fixture('found a claim to fight over', targetDeal, target ? `at ${target.x},${target.y}` : '');
 
   const dist = await lureCat(page, target, 70);
   ok('the cat closes on a parked cursor', dist > 0, `${dist.toFixed(0)}px away`);
@@ -369,11 +314,20 @@ const pickTarget = () =>
     !!leap && !!rec && rec.t - leap.t < LEAP_MS + 120,
     leap && rec ? `${(rec.t - leap.t).toFixed(0)}ms airborne` : 'never landed',
   );
-  ok(
-    'nothing pounces during the opening grace',
-    !!tele && tele.t - openedAt >= OPENING_GRACE_MS - 60,
-    tele ? `first telegraph at +${(tele.t - openedAt).toFixed(0)}ms` : 'none',
-  );
+  /*
+   * Two statements, split apart. **That the cat telegraphed at all** is a fixture — a pinned ambush
+   * will, but a recording that caught none has measured nothing. **When it first telegraphed** is the
+   * assertion. Written as one check, a fight that produced no telegraph read as the grace being
+   * violated, which is the opposite of what it means.
+   */
+  fixture('the pinned cat telegraphed at all', tele, tele ? `at +${(tele.t - openedAt).toFixed(0)}ms` : '');
+  if (tele) {
+    ok(
+      'nothing pounces during the opening grace',
+      tele.t - openedAt >= OPENING_GRACE_MS - 60,
+      `first telegraph at +${(tele.t - openedAt).toFixed(0)}ms`,
+    );
+  }
 
   // A landed pounce costs the hold. Note what it does *not* do: hide the ring for
   // long. The player is still holding, so a fresh hold starts immediately and the
@@ -400,11 +354,11 @@ const pickTarget = () =>
   await page.waitForTimeout(150);
   // Ambush again: a siege board regrows on its own timer, so "the pounce took one back"
   // becomes "something took two back" and the check is measuring two things at once.
-  await forceFighter(page);
+  await fighter(page);
   await page.evaluate(RECORDER);
 
   // bank one claim somewhere the cat is not, so there is something to lose
-  ok('the board offers a reachable claim and a cat that fights', !!(await forceFighter(page)));
+  fixture('the board offers a reachable claim and a cat that fights', await fighter(page));
   const far = await page.evaluate(() => {
     const cat = document.getElementById('site-cat').getBoundingClientRect();
     const claims = [...document.querySelectorAll('.cat-claimed')]
@@ -421,7 +375,7 @@ const pickTarget = () =>
   const banked = await page.evaluate(() => document.querySelectorAll('.cat-claimed').length);
 
   // now get caught
-  await forceFighter(page);
+  await fighter(page);
   const target = await page.evaluate(pickTarget);
   await lureCat(page, target, 70);
   /*
@@ -480,7 +434,7 @@ const pickTarget = () =>
   await page.waitForTimeout(700);
   await press(page);
   await page.waitForTimeout(120);
-  await forceFighter(page);
+  await fighter(page);
   await page.evaluate(RECORDER);
 
   /*
@@ -488,7 +442,7 @@ const pickTarget = () =>
    * leap and no landing — so a check that waits for the cat to touch down waits forever, for
    * a reason that is the trickster working correctly.
    */
-  await forceFighter(page, ['ambush']);
+  await fighter(page, ['ambush']);
   const target = await page.evaluate(pickTarget);
   await lureCat(page, target, 70);
   await page.mouse.move(target.x, target.y);
@@ -550,9 +504,9 @@ const pickTarget = () =>
   await page.waitForTimeout(700);
   await press(page);
   await page.waitForTimeout(120);
-  await forceFighter(page);
+  await fighter(page);
   await page.evaluate(RECORDER);
-  await forceFighter(page);
+  await fighter(page);
   const target = await page.evaluate(pickTarget);
   await lureCat(page, target, 70);
   await page.mouse.move(target.x, target.y);
@@ -623,7 +577,7 @@ const pickTarget = () =>
   await page.waitForTimeout(150);
   // Not a siege: its board regrows on a timer, so "did holding still win ground" measures the
   // race between you and the regrow rather than the loop this check is about.
-  await forceFighter(page, ['ambush', 'trickster']);
+  await fighter(page, ['ambush', 'trickster']);
   const start = await page.evaluate(() => document.querySelectorAll('.cat-claimed').length);
 
   // the loop the design predicts: pick a claim far from the cat, hold it, and move
@@ -658,6 +612,4 @@ const pickTarget = () =>
 }
 
 await browser.close();
-const failed = results.filter((r) => !r.pass);
-console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
-if (failed.length) process.exit(1);
+if (!done()) process.exit(1);

@@ -19,44 +19,27 @@ const PERCH_STILL_MS = 620;
 const PERCH_SNAP_PX = 4;
 const PERCH_BREAK_PX = 22;
 
-import { chromium } from 'playwright-core';
+import {
+  BASE,
+  fresh as context,
+  launch,
+  report,
+} from './lib/fixture.mjs';
 
-const BASE = 'http://localhost:4416';
-const results = [];
-const ok = (name, pass, detail = '') => {
-  results.push({ name, pass, detail });
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
-};
+/*
+ * Shared with the rest of the fleet through `lib/fixture.mjs` (§12.1's charter): the reporter with its
+ * fixture/assertion split, the context factory that declares the mode, the launcher, and the waits
+ * that open and close a fight. This file used to carry its own copy of each.
+ */
+const browser = await launch();
+const { ok, note, fixture, done } = report();
 
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 
-async function fresh(opts = {}) {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, ...opts });
-  await ctx.addInitScript(() => localStorage.setItem('welcomed', '1'));
-  /*
-   * 2.0: this harness measures **manual mode** (§3's fight). Commander mode is now the default, so
-   * say which game before opening one — otherwise the pointer is not the verb and half these checks
-   * are asking a spectator to hold still. Presses the HUD chip the way a visitor does, and waits for
-   * `aria-pressed` rather than for a timeout.
-   */
-  await ctx.addInitScript(() => {
-    const pick = () => {
-      const b = document.getElementById('cat-manual-toggle');
-      if (!b) return false;
-      if (b.getAttribute('aria-pressed') === 'true') return true;
-      b.click();
-      return b.getAttribute('aria-pressed') === 'true';
-    };
-    addEventListener('DOMContentLoaded', () => {
-      if (pick()) return;
-      const t = setInterval(() => {
-        if (pick()) clearInterval(t);
-      }, 40);
-      setTimeout(() => clearInterval(t), 8000);
-    });
-  });
-  return ctx;
-}
+
+
+/** A desktop context playing **manual mode** — the top state is reached by winning §3's fight. */
+const fresh = (opts = {}) => context(browser, { mode: 'manual', ...opts });
+
 
 const PERCHED = `document.getElementById('site-cat').classList.contains('perched')`;
 const LEVEL = `[...document.getElementById('site-cat').classList].filter((c) => /^lv\\d$/.test(c)).pop() ?? ''`;
@@ -410,9 +393,10 @@ async function tryPerch(page, x = 640, waitMs = 5000) {
       return { found: false };
     });
     if (clicked.found) await page.waitForTimeout(300);
-    if (!clicked.found) {
-      ok('found a link inside the cat’s band to test against', false, 'none in the notice band');
-    } else {
+    // A *scan* of the page's own links rather than a roll — nothing to re-deal, but still the harness
+    // setting itself up, and `FIXTURE` says which of the two failed when it does.
+    fixture('found a link inside the cat’s band to test against', clicked.found || null, clicked.href ?? '');
+    if (clicked.found) {
       const settled = await tryPerch(page, clicked.x, 6000);
       // Move onto the link's exact centre and let the cat settle there too.
       await page.mouse.move(clicked.x, clicked.y);
@@ -501,7 +485,19 @@ async function tryPerch(page, x = 640, waitMs = 5000) {
   const lv = await collectAll(page);
   const f3 = await winAFight(page);
   const notched = f3.notched;
-  if (notched && lv === 'lv6' && (await tryPerch(page, 640, 6000)).perched) {
+  /*
+   * **Reaching the top state is a fixture, and an expensive one.** It needs every treat found and a
+   * fight won, and both are plays against a rolled opponent — so when it does not happen, this harness
+   * has measured nothing, which is a different statement from "the arena mishandles a perch". Written
+   * as `ok(..., false)` it made the second statement in the words of the first.
+   */
+  const top = notched && lv === 'lv6' && (await tryPerch(page, 640, 6000)).perched;
+  fixture(
+    'reached the top state to test the arena against',
+    top || null,
+    `${lv}, notched ${notched} (${f3.left} left, ${f3.stalls} stalls, ${f3.seconds.toFixed(0)}s)`,
+  );
+  if (top) {
     await page.click('#cat-arena-toggle');
     await page
       .waitForFunction(() => !!document.querySelector('.cat-claimed'), undefined, { timeout: 9000 })
@@ -519,12 +515,6 @@ async function tryPerch(page, x = 640, waitMs = 5000) {
     );
     await page.keyboard.press('Escape');
     await page.waitForTimeout(2000);
-  } else {
-    ok(
-      'reached the top state to test the arena against',
-      false,
-      `${lv}, notched ${notched} (${f3.left} left, ${f3.stalls} stalls, ${f3.seconds.toFixed(0)}s)`,
-    );
   }
   await ctx.close();
 }
@@ -545,10 +535,4 @@ async function tryPerch(page, x = 640, waitMs = 5000) {
 }
 
 await browser.close();
-const failed = results.filter((r) => !r.pass);
-console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
-if (failed.length) {
-  console.log('failed:');
-  for (const f of failed) console.log(`  - ${f.name}${f.detail ? '  — ' + f.detail : ''}`);
-  process.exit(1);
-}
+if (!done()) process.exit(1);
