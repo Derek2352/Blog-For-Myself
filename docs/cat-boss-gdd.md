@@ -1918,6 +1918,18 @@ roll happened to hand it** — the three faults 2.0 found in one afternoon are a
 three directions, and the tell is always the same, a red whose detail line describes the *fixture*
 rather than the behaviour.
 
+**And then the rule was made a mechanism, because writing it here was demonstrably not enough.** All
+three of those faults were already understood, already recorded on this list, and already fixed
+elsewhere in the fleet — `pickSpot` re-dealt six times, `forceStance` re-rolled a hundred and twenty
+fights, `arena.mjs` re-rolled stance and placement together — and they shipped anyway, because there
+was no shared strategy to fix: eleven copies of the context factory, four re-rollers with three
+budgets, three copies each of the placement, throw and lure helpers. §12.1 is the charter that
+replaced them, `scratchpad/lib/fixture.mjs` is the one copy, and `tests/harness-hygiene.test.ts`
+fails the build on the four shapes rather than trusting anyone to remember them. The audit it forced
+found the fault in **twenty-seven places**, including two in already-committed harnesses
+(`battle.mjs` asserted a fixture *and* imported Playwright by an absolute path into a container that
+gets reclaimed). A convention nothing checks decays even in tracked code.
+
 **A half-fixed harness fault comes back as its own sibling.** 1.4 measured that the lure strategy
 plateaus against siege, pinned a leaper in `arena8` section 1, and left section 2 rolling freely.
 Section 2 duly failed here — "16 reclaimed, 2 left" — on a build that had not touched a manual fight,
@@ -2313,6 +2325,53 @@ One thing the harness could not catch, worth writing down: a stale comment left 
 *modelled* the wash rather than reading the rendered pixels, so it passed a build
 whose claims had no visible edge at all. The screenshot caught it. A measurement that
 models the CSS cannot notice the CSS being dropped.
+
+### 12.1 The harness charter (2.0) — a fixture is not an assertion
+
+Everything above is a list of lessons, and 2.0 proved that a list is not a mechanism: three
+harness failures in one afternoon were all the same mistake, all already written down here, and
+all already fixed somewhere else in the fleet. So the rule now lives in code.
+
+**The split.** A harness makes two kinds of statement and they must not be confused.
+
+| | What it is | How it behaves |
+|---|---|---|
+| **Fixture** | what the harness needs *before* it can measure: a claim in view, a stance that leaps, a claim inside a link, treats in hand | comes from a roll (`pickClaims` seeds from the clock; every fight rolls a stance), so it is **re-rolled until it arrives**, and the report says which attempt it took |
+| **Assertion** | what the build does with that fixture | one look. Never retried, never softened, never re-rolled |
+
+The boundary matters because the opposite mistake is worse than the one being fixed: **a suite
+loosened until it stays green is worse than a red one.** Re-rolling a fixture is not weakening a
+check; re-running an assertion until it passes would be.
+
+**One shared strategy.** `scratchpad/lib/fixture.mjs` holds `deal()` — close the fight, open it
+again, ask once more, up to six times — plus the `wants.*` predicates, the context factory (with
+the mode declared), `bounded()`, the machine-state readers and the mirrored constants. The fleet
+previously had eleven copies of the context factory, four re-rollers with three different budgets,
+and three copies each of the placement, throw and lure helpers; that is *why* fixing one call site
+never fixed the class. **One loop, all predicates:** `arena4` left the note that separate
+re-rollers spend their time undoing each other, so a harness needing a leaping cat *and* a claim in
+view asks for both in one `want`.
+
+**Four rules, enforced by `tests/harness-hygiene.test.ts` on every `vitest run`:**
+
+1. a fixture-shaped fallback (`spot ? … : 'none'`, `foe ?? 'never rolled one'`) may appear in
+   `fixture(…)` and nowhere else
+2. `ok(name, false, …)` is never an assertion — it is a harness saying it could not set itself up
+3. `waitForFunction` options go in the **third** argument (1.4's fleet-wide 30s bound)
+4. no private re-rollers, and no absolute-path imports — `battle.mjs` shipped one while committed,
+   which is the proof that a convention nothing checks decays even in tracked code
+
+**The checker was narrowed once, on purpose.** Its first version matched the *words* — "none",
+"nowhere" — and flagged eight correct checks, because `none` is also a CSS value and
+`pointer-events: none` is exactly what some assertions assert. A third fallback shape (`x ||
+'(none)'`) was then tried and dropped: one real site against four correct ones. **A checker that
+has to be suppressed in five places is not enforcing a rule** — and its job is to stop the next
+fault, not to be the only reason a known one gets fixed.
+
+**Where the fleet lives.** In `scratchpad/`, committed. Twelve of the fourteen harnesses used to
+exist only in a session's `/tmp`, importing Playwright by absolute path into a container that gets
+reclaimed — while this document cited them all as `scratchpad/<name>.mjs`. The documentation was
+describing a suite that could evaporate, and one container restart mid-session was the reminder.
 
 ---
 

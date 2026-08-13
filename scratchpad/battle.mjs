@@ -23,7 +23,7 @@
  *   npm run build && npx astro preview --port 4416 &
  *   node scratchpad/battle.mjs
  */
-import { chromium } from '/home/user/Blog-For-Myself/node_modules/playwright-core/index.mjs';
+import { chromium } from 'playwright-core';
 
 /* Mirrors src/lib/arena.ts — kept as literals so a drift shows up as a failure, not a pass. */
 const SCRUB_MS = 1400;
