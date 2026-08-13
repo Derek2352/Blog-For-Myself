@@ -1,25 +1,28 @@
 # GDD — "Whose Screen Is It" (cat boss fight)
 
-**Version** 1.4 · **more fight, and every addition priced against the floor.**
-1.3 made the fight legible; this one makes it a fight worth reading. Three
-additions, each on machinery that already existed: §7.3's cornered cat now
-speeds its **clock** and not just its wind-up (the half 0.9 could not deliver,
-and the half that reaches a *fleeing* player — the counter 1.0 measured);
-§9.3 gives each stance **one signature move** (siege sweeps two adjacent
-claims, a landed ambush pounce **pins** the cat over what it took, the
-trickster's feint can double into a real telegraph); and §5.4's throw gains a
-**second target** — a treat landing on a recovering cat stuns it, which is a
-new *decision* rather than §3's rejected fourth verb, inside a 380ms window
-that is a consequence (`RECOVER_MS − THROW_ARC_MS`) rather than a chosen
-number. The load-bearing lesson is a balance one: the sweep first took two
-claims free and **plateaued** a fleeing player — neither winning nor losing —
-so the cat now pays **one interval per claim it takes**, which makes the board's
-long-run rate provably 1.3's and §9.4's floor safe by construction. The gate is
-a new `scratchpad/battle.mjs` that measures every addition on machine state
-(regrow gaps by mood, sweep sizes, the stun's phase log, the pin's leash in
-pixels), plus the discovery that **siege had never actually been measured**:
-every harness forces an ambush, and flee-and-hold is the leaper's counter, not
-the counter to a cat that cannot leave the floor. Next: still a person.
+**Version** 2.0 · **the kittens fight, and you can just read.** Five versions of
+playtesting returned one sentence — *"she doesn't know what she's doing"* — and 1.3
+answered it with legibility, 1.4 with depth, and both missed the point. The fight was
+never unclear; it was **a game with three verbs on a CV site**. §5.2's core verb is
+holding a pointer perfectly still for 1400ms, §3's decision is a resource trade, and
+1.0 measured that winning means standing 423px from the cat. That is homework, and the
+correct amount of homework on somebody's résumé is none.
+
+So the verb changed hands. **Commander mode** (§15) gives the hold to a *kitten* and the
+visitor two optional clicks: point at a claim to send somebody, or throw a treat to pull
+the cat away. Touch nothing and the round still resolves — that is the promise, and it is
+the first check in `scratchpad/commander.mjs`. Rounds are endless, clearing one adds a
+kitten and tightens the cat's clock, a board the cat fills simply starts again (**there is
+no losing**), and one integer survives the tab closing: the deepest round reached.
+Everything §5–§9 measured is intact underneath, because the boss, the board, the stances,
+the moods, the dialogue and the endings are 1.4's — 1.4's whole fight is still here, behind
+a HUD chip that says *play it yourself*, and still measured by fourteen browser harnesses.
+
+The mode was built by measuring and being wrong in public: a kitten slower than the cat
+could never finish a hold, a policy inherited from 1.0 marched it across the document,
+"take the soonest" left it restarting the same doomed hold forever, and a landed pounce
+that took ground made the whole thing unwinnable. Every one of those is a `[PH]` with the
+arithmetic that corrected it in §15.5. Next: the tester.
 
 **Status** hypothesis. Every number below is `[PH]` until playtested —
 including the ones now running in a browser. Built is not playtested.
@@ -42,6 +45,7 @@ including the ones now running in a browser. Built is not playtested.
 | 1.2 | **Touch mode — §5.2's refusal, overturned rather than worked around.** The build has said "needs a mouse or trackpad" since 0.3, and §5.2 gave two specific reasons rather than waving at "no hover": a press-and-hold has **no aim**, and **a finger covers what it holds**. Both are correct. Reading them against 1.0's flee-and-hold measurement turns up a **third and fatal one that neither 0.1 nor I had noticed**: the fight's counter is holding further away than `SAFE_FLEE_PX` (≈423px), a mouse pays **travel time** to get there, and a finger teleports — so a naive port is not a weaker fight, it is a fight with **no decisions at all**. The two stated objections describe a worse game; the third describes no game.<br><br>**One measured fact answers all three.** The cat is `position: fixed` at the bottom of the viewport and claims are in document flow, so **scroll position *is* distance**: scrolling moves the claim relative to the cat without the cat moving. Measured at 390×844 across three pages, a claim scrolled high sits **683–687px from the cat (safe, 15 of 15)**, centred **413–420px (0 of 16)**, low **161–178px (0 of 16)** — the 423px threshold falling *between* the top band and the middle one, with nothing tuned to put it there. So aim is back, fleeing costs a flick, and §5.2's oldest edge case — "a scroll while channelling is movement, interrupt" — turns out to be the rule that prices it. The same clause written to stop scroll-scrubbing is what makes touch mode a game.<br><br>**Occlusion is answered by moving the feedback, not the finger:** the 40px ring sits exactly where a fingertip is, so on a coarse pointer progress goes *into the claim*, §5.1's wash deepening 7% → 26% so a filling claim arrives at the tint `cat-freed`'s drain begins from. No new art (§0). **Long-press and scroll are suppressed on claimed elements only, only while claimed** — and `touch-action: pinch-zoom`, **not** `none`, because `none` refuses a pinch that begins on a claim and §11 makes zoom a no-exceptions row. None of the three properties affects layout, which is what §11 was restated in 0.3 to admit; the page still restores byte-identically after a touch fight.<br><br>**The code was smaller than the design.** `scrub.x/y` was fed only by `pointermove`, and the one thing a finger does that a cursor cannot is arrive and then emit nothing — so a finger held perfectly still fired `pointerdown`, no `pointermove`, and no hold could register. Everything else was already portable because `stepScrub` polls position per frame instead of reacting to events, and `pointerout` with a null `relatedTarget` turns out to fire on finger *lift*, so §5.3's whiff-on-leaving rule transferred for free. Three genuinely new rules, and they are one discovery: **on touch a hold ends in gestures a dwell never did.** A cursor resting on a link does nothing; a finger resting on one is a click, a text selection, a context menu *and* a drag — and §5.1 deliberately allows a claim *inside* a link, so on a portfolio the core verb landed on link after link. `isTap` decides whether a lift throws. `isWorking` swallows the click that ends a hold on a claim, and reads a flag recorded *during* the hold because a completed hold frees the element, so “is there a claim here” is already false by the time the click arrives — which is why the first attempt still navigated away. And `dragstart` is refused on claims, because a long press on a link is the native link-drag gesture: it fires `pointercancel` and released the hold a few hundred ms in, surfacing as `8 → 8 claims` from a hold that plainly should have taken one. Each needed a browser to find and none of them exists on a mouse.<br><br>**No difficulty lever was added.** Step 0 was run to decide whether a phone fight needed one and the answer was no, so none shipped — the plan reserved the right to a coarse `MIN_BOARD` or an aggression factor, and both would have been magic numbers. One thing is recorded rather than fixed: Chromium applies *touch adjustment* on mobile, snapping a tap that lands near a clickable target onto it, so throwing is fuzzier on a phone than the crosshair makes it on a desktop. Nothing can be done about that from here — but it makes §7.4’s `support-bribe` the only teaching for §5.4 that survives losing the cursor. |
 | 1.3 | **The fight can be learned cold — the playtest finding, fixed.** The review that closed 1.2 measured what 1.2's checklist had assumed: on the homepage a cold visitor did nothing for the whole opening grace, ~61% of fights had no clock to feel (ambush/trickster/sleepy sat at `regrowMs: 0`), the cat's mood tier and stance were invisible (the boss looked exactly like the ambient cat), and there was no audio. Four fixes, one per pillar of the finding. **Legibility** — a teach line ("hold still on it. it comes back.") opens the fight inside the opening grace (measured at 1412–1648ms in the harness, inside `OPENING_GRACE_MS` 2500), gated to the cold case (no frees, no spends); a dead-band filler ends the silent-fight defect where a fight opened with no line at all (territory 0.5–0.75, previously `pickLine` returned null); support-idle re-gated to fights with actual history so it can't swallow the teach line. **Tempo** — every stance now has a clock; §9.3's derivation is 4000→6000→8000→12000→15000ms, each step a measured response to the arena8 harness (at 8000 the harness reclaimed ~6s/claim against an 8s regrow — a dead-even treadmill; 15000 is the slowest clock that still counts as a clock per §9.3's own "beyond 15000 it is decoration" line). **Presence** — §7.3's tiers and the stances now *show*: mood colour/scale/posture and stance tell classes on the boss, `--boss-scale` wired to territory, cleaned up on fight end. **Sound** — §11's opt-in row is answered with a WebAudio synth (`src/lib/cat-sfx.ts`, no assets, §0's art constraint overturned for audio only): telegraph, landing, reclaim, win/lose cues, all silent until the HUD's sound toggle is pressed, with `aria-pressed` on the button. **Ship gate** — `scratchpad/first-run.mjs`: a cold visitor does nothing → the cat must teach the verb inside the opening grace; then playing only what it was taught must win a treatless fight. The gate is green: 4 consecutive full passes (wins at 21–40s, 5–7 reclaims), 414/414 tests, `astro check` clean, build clean. Two measurement notes the harness left behind: the fight rolls a random stance each rematch so the gate needs §9.4's rematch budget (~25–50% per-fight win rate converts with the 6-try loop), and the harness's own scroll path taught a §11 bug — `mouse.wheel` does not refresh `scrub.seen`, so a harness wheeling for 20s triggered the idle truce mid-fight; fixed in the harness by scrolling via `scrollIntoView`. Board tightened to 10–14 (§10) and hysteresis widened to keep bands ≥2 claims on it. Next: a person — the gate proves winnability, not fun. |
 | 1.4 | **More fight: the last stand, a signature move per stance, and a counter.** Asked for after 1.3 ("even more battle with the cat mechanics/elements") and built as three additions on machinery that already existed. **§7.3's desperate tier is finally the whole tier, and a 0.9 decision is retracted to get there.** 0.9 delivered "faster telegraph" exactly as the table says, but 1.0 then measured that the fight's counter is *fleeing* — so the tier escalated the one threat a good player has opted out of, while the regrow clock, the only pressure that reaches a distant player, stayed fixed. The fight was calmest precisely where it should tighten, which is where the tester's "the pace is slow" is loudest. A cornered cat now keeps `LAST_STAND_REGROW` of its clock (**measured: 4975ms against siege's 9000ms**), the tier's entry raises a line and a two-note rising sting, and 0.9's objection is answered rather than ignored — the mood and the stance stay separate factors, so the last stand cannot quietly retune §9.3. **§9.3 gets one identity move each** ("same verbs, different counter-play", which was still four sets of coefficients): siege sweeps **two adjacent** claims on a beat, a landed ambush pounce **pins** the cat over what it took for 2600ms within 90px (reusing the treat leash), and the trickster's feint can now be followed straight away by a real telegraph. **§5.4 gains a second target rather than a fourth verb** — a treat landing within 64px of a cat in `recover` stuns it, which is the trade §3 demands of any addition: spend the treat to make your next window safe, or spend it to punish a whiff you read. The window is a *consequence*, not a constant: `RECOVER_MS − THROW_ARC_MS` = **380ms**, and nothing teaches it (§7.4 now has a *second* mechanic found by exploration, and it is the same knowledge §5.3 already gave the player, used the other way round).<br><br>**One balance finding, caught by measurement and fixed by arithmetic.** The sweep first took two claims for free, which raised siege's rate to 1.5 claims per 9000ms — and flee-and-scrub then **plateaued at six claims for ten straight exchanges**, 0.167 claims/s of regrow against 0.164 of reclaiming: a fight that could be neither won nor lost, which is worse than either. `regrowInterval` now charges **one interval per claim taken**, so a sweep of two waits twice and the long-run rate is identical to 1.3's whatever the cadence (**9000ms vs 9001ms per claim, measured**). §9.4's floor is therefore safe by construction, and `SIEGE_SWEEP_EVERY` tunes feel only. **And a finding about siege that nine versions of harness had hidden: it has to be played as siege.** `arena8` forces an ambush, so every browser measurement had fought a cat that *leaps*, and flee-and-hold is the leaper's counter; against a floor-bound cat it is four of every six seconds spent luring something that cannot come. Played as its own table describes, the same fight is **7 reclaims and a win in 21–23s**.<br><br>**Four harness faults, and the first had been true since 0.4:** every `waitForFunction` bound in the fleet was fiction — 22 call sites passed `{ timeout: N }` in Playwright's *arg* position, so a wait asking for 4000ms took **30104ms**, and 20 of those seconds belong to §11's idle truce. A siege roll therefore ended `arena8` section 1 with "0 reclaimed, 0 left", which reads exactly like a broken game: **a truce, a loss and a win look identical from outside**, the same blind spot that hid 1.1's truce bug. A watched fight with empty paws *loses itself* (§2 working correctly: a loss is a full board **and** no ammo). A regrow rate averaged across the harness's own play reported 18333ms for a 9000ms clock, because the gaps that spanned the holding included it. And "claims went up" is a proxy for "the cat hit me" that **1.3's own feature invalidated** — every stance has a clock now, so a regrow forged the pin's trigger and a working 90px leash was reported as 388px. <br><br>**Then a review pass over 1.4's own code, which found three bugs no harness had caught — all three about *when* rather than *what*.** (1) A trickster feint that re-commits was not gated on the ending, so a bluff could turn into a fresh telegraph inside the beat that says the cat takes one thing and leaves; 1.1 fixed exactly this for the pounce and the distinction is that a feint is the cat *declining* to jump, so re-committing is starting something new rather than finishing something started. (2) The last stand's event was cleared by whichever code read the fight state first — and the mood pass reads it every frame while the dialogue returns early during §8's talk gap, so the mood ate the event and threw it away: the climax line could only ever be said if the tier was entered inside a ~16ms window. Only the dialogue spends it now, and the event is dropped if the cat stops being cornered before it is said. (3) The swat's stun was written as a new *length* for the recovery, but the FSM scales `RECOVER_MS` by the stance's `recover` — so it silently restarted the stance clock and one treat bought 580ms against siege and 895ms against ambush. It is additive now, which is what `SWAT_STUN_MS`'s own derivation had said all along; **the bug was found by reading the code against its own constant's documentation**, which is a review technique worth naming. **Ship gate:** 435 unit tests, a new 22-check `scratchpad/battle.mjs` measuring each addition on machine state, every earlier harness, `astro check` clean, warning-free build. Still not playtested by a person — the tester who could not read 1.2 is the gate that matters. |
+| 2.0 | **Commander mode — the input model changes hands, and §3 is retracted to do it.** Asked for after 1.4: an idle/auto game, "more hassle free like the T-Rex endless runner". The finding it answers is five versions old and always the same sentence — *"she doesn't know what she's doing"* — and 1.3's legibility pass and 1.4's depth pass were both answers to the wrong question. The fight is not unclear; it is a game with three verbs on a CV site, where the right amount of homework is none. **So the verb changes hands rather than shape:** a *kitten* performs §5.2's hold, the boss hunts **kittens** and never the cursor, and the visitor gets two optional clicks — point at a claim to send somebody, click open page to throw (§5.4, unchanged). Touch nothing and the round still resolves; that sentence is `commander.mjs` check 1. Rounds are endless and **there is no losing** — a board the cat fills starts the same round again, no penalty and no record touched (§15.2) — while clearing one adds a kitten and tightens the clock (`ROUND_REGROW_STEP`, plus a capped nudge to §7.3's aggression). One integer persists, `cat-best-round`, which **amends §7.2/§13.4's "nothing is stored"** on a boundary that is the whole argument: not fight state, unspendable, monotonic, and the one thing an endless mode needs to mean anything past one afternoon. 1.4's fight ships intact behind a HUD chip (§13.8's precedent, a third control), and §9.4's ladder is scoped to it.<br><br>**The design was wrong four times and each one was measured.** (1) A kitten at 190px/s — capped *below* the cat's desperate speed so "a cornered cat can run one down" — can never complete a hold in contact: the cat's cycle with no walk to make is 1380ms against a 1400ms hold, and a frame trace showed 0.75 progress, landed on, 0.38, landed on, indefinitely. It is 250px/s now, and the cat's threat is ground it guards rather than an animal it deletes. (2) 1.0's flee-and-hold policy, applied literally, sent it to `y: 1303` on a 900px viewport — a cursor teleports and legs do not — so the policy is now two clocks compared (`workTimeMs` vs `threatTimeMs`), which *generalises* 1.0's 423px rather than replacing it. (3) Its fallback "take the soonest" priced an interruptible hold as though it would complete, so it stood under the cat restarting the same hold; it takes the best ratio now, which means walking away. (4) A landed pounce that took ground made the mode unwinnable — one kitten, seventy-two seconds, three claims to five and back — because ground taken by pounces is a second source of board growth that the floor cannot price; a hit costs tempo only. Plus two smaller ones: a kitten's arrival had to be made *sticky* (a tilted element's bounding box drifting a pixel flipped walk/hold on alternate frames and restarted the hold forever), and a kitten works in `KITTEN_WORK_MS` 1000ms rather than `SCRUB_MS`, because 0.7's "the player wins every subsequent exchange" quietly depends on the player *fleeing* and a kitten on the last claim has nowhere to go.<br><br>**One unit test caught what no browser could:** `MIN_REGROW_MS` was charged per *interval* rather than per *claim*, so §9.3's sweep could take two claims on one floor — half the promised bound, failing only at deep rounds where nobody would have looked. **And one fix was made at the wrong layer and retracted:** shrinking commander mode's board to four claims cured the marching and bought a worse bug (trivially fillable, and rounds over in three seconds — a run reached round 14 in 72s), so the board is §4.1's again and the cause was fixed instead. **Ship gate:** 467 unit tests, a new 23-check `scratchpad/commander.mjs` (zero-input clear, the cat landing 11px from a kitten and 687px from the parked cursor, a hit taking 0 claims of 3 landings, the squad capped, the record surviving a reload while nothing else does, and a round played with storage denied), `astro check` clean, warning-free build, and the fourteen manual-mode harnesses green after each learned to declare its mode in one line. Still not playtested by a person — which, five versions in, is the only gate that has ever mattered. |
 
 ---
 
@@ -97,9 +101,43 @@ would be the wrong call.
 If that single interaction isn't fun with placeholder art and no scoring, no
 amount of systems on top will save it.
 
+> **2.0 has a second hypothesis, and it is a different bet.** The one above is
+> manual mode's and it is still the right test for that mode. Commander mode's is:
+>
+> > *Watching a kitten patiently take your page back from a cat that keeps knocking
+> > it over is pleasant, and pointing at the paragraph you want next is satisfying.*
+>
+> Note what changed: **tension became patience**. The first hypothesis needs the
+> player to feel hunted; the second needs them to feel *fond* of something
+> competent working on their behalf. If that is not true with placeholder art —
+> if watching is merely boring — then no amount of escalation curve saves it, and
+> the honest response is to keep manual mode and delete §15 rather than tune it.
+> Five versions of evidence say the first hypothesis is not landing with the one
+> tester this site has; none of that is evidence for the second.
+>
+> **And one pillar is bent, so it should be said out loud.** Pillar 5 asks that the
+> fight spend nothing the site has not already earned, and the *throw* still obeys
+> it exactly. But a **kitten** is a resource that arrives from *playing* — one per
+> cleared round — rather than from exploring, which is the first thing in this
+> design to come from anywhere but the treat economy. The defence is that a kitten
+> is not spent, cannot be banked, and vanishes with the fight (§7.2); the cost is
+> that "explore the site" is no longer the only way to get stronger. That is a real
+> departure from the pillar rather than a reading of it, and if it ever needs
+> settling, the pillar wins and the squad becomes something the found-set deals.
+
 ---
 
 ## 2. Core loop
+
+> **2.0 — the loop below is manual mode's.** Commander mode's is one paragraph and §15 has
+> the detail: *a kitten works a claim, the cat hunts the kitten, the board comes back, the
+> round is banked and the next one is harder.* The differences that matter to this section
+> are that the **session loop has no end** (rounds are endless, and a board the cat fills
+> starts the same round again rather than losing it) and that the **moment-to-moment has no
+> input in it** — a visitor who never clicks sees the same loop a visitor who commands does,
+> only slower. The long-term paragraph below survives untouched, including its refusal of
+> retention mechanics: one integer is stored (the deepest round reached) and there is still
+> no login, no leaderboard and no daily anything.
 
 ### Moment-to-moment (0–30s)
 - **Action** — Player parks the cursor on a **claimed** element and holds. A ring
@@ -131,6 +169,25 @@ amount of systems on top will save it.
 
 ## 3. Core activity and player interactions
 
+> **Retracted and rewritten in 2.0, and this section is the one the whole document was
+> proudest of.** Everything below still describes the game exactly — as **manual mode**,
+> which still ships and is still measured by fourteen browser harnesses. What changed is
+> which game a visitor meets first, and the reason is the plainest finding in five
+> versions of playtesting: *"she doesn't know what she's doing."* Twice, from the same
+> tester, after 1.3 spent a version on legibility and 1.4 spent one on depth.
+>
+> The three verbs are not the problem. The problem is that they are **three verbs on a
+> CV site**. §5.2's core verb is holding a pointer perfectly still for 1400ms, the
+> decision below is a resource trade, and 1.0 measured that winning means holding 423px
+> from the cat — positioning, timing and economy, before anything good happens. For the
+> person this site exists to impress, the correct amount of homework is none.
+>
+> So the verb changed **hands**, not shape. §15's commander mode gives the hold to a
+> kitten and the visitor two optional orders; the boss, the board, the stances, the moods,
+> the dialogue and the endings are the ones written here, untouched. Read §15 for the game
+> that opens by default, and read this for the one behind the chip that says *play it
+> yourself*.
+
 **Core activity**: *territorial scrubbing under threat.* You reclaim page regions
 by dwelling on them; the cat interrupts by reaching your cursor; you buy time with
 a finite resource.
@@ -147,6 +204,16 @@ a finite resource.
 
 Three verbs. Everything else is emergent from their interaction. **No dash, no
 attack button, no combo** — added complexity that adds no new decision.
+
+> **2.0's table, for comparison, is two clicks and no verbs at all** (§15): point at a
+> claim to send a kitten, click open page to throw. Both optional; the round resolves if
+> the visitor never touches anything. That is not a simplification of the table above so
+> much as a different answer to the same question — *what is the fewest inputs that still
+> contain a decision?* — asked about somebody who did not come here to play a game.
+>
+> The rule this section states survived being rewritten, which is the best thing that can
+> be said for it: an input has to add a decision. §15 has exactly one ("that claim, or
+> leave them to it") and adds nothing else.
 
 *Changed in 0.2:* 0.1 started the fight on a long-press of the cat, reusing the
 existing tap-to-scamper affordance. Removed. An invisible gesture is not an opt-in
@@ -280,6 +347,25 @@ already samples true backdrops and computes WCAG ratios.
 visually — the claim wash borrows `--color-accent`, which the ink never uses)
 
 ### 5.2 Mechanic: Scrub (the core verb)
+
+> **Still the core verb in 2.0 — a kitten performs it now (§15).** Nothing measured in
+> this section changed hands with it: `SCRUB_MS`, the stillness tolerance, the interrupt
+> rule, the wash that shows progress and 1.2's whole touch derivation all describe what a
+> *worker* does, and commander mode simply asks a different worker. `stepHold` in
+> `CatArena.astro` is this section, extracted, with the pointer and each kitten as callers.
+>
+> Two things differ, and both are forced rather than chosen:
+>
+> - **The drift rule does not apply to a kitten.** For a pointer, movement is *intent* —
+>   you moved off, so the hold restarts. A kitten's coordinates move whenever the *page*
+>   does, because claims are in document flow and a kitten is fixed to the viewport like
+>   the cat, so applying it would mean **scrolling cancelled the squad's progress**. In a
+>   mode whose promise is that you can read while it plays, reading cannot be a penalty.
+> - **A kitten's hold is `KITTEN_WORK_MS` (1000ms), not `SCRUB_MS`.** Not impatience: the
+>   cat's pounce cycle with no walk to make is 1380ms for siege, so a 1400ms hold *loses*
+>   that race, and a player only wins it by fleeing (0.7's finding, whose walk-back term a
+>   camped kitten does not get). Measured before it was understood: a round parked on its
+>   last claim for forty seconds. See §15.
 
 **Purpose** The channel that creates tension.
 **Player fantasy** Steady hands under pressure.
@@ -705,6 +791,12 @@ Vertical territory, because the cat already owns the bottom of the page:
 found-set is untouched, so exploration is never punished. The cost of losing is
 that the cat *says something about it* (§8), which is the real sting and costs
 the player nothing.
+
+> **In commander mode there is no losing at all (§15).** A board the cat fills starts the
+> same round again: no penalty, no rung, no record touched. This section's principle is
+> taken further rather than contradicted — and the one thing 2.0 stores (the deepest round
+> reached) is monotonic for exactly this reason. A bad afternoon cannot take anything away
+> from a visitor. See §13.4's amendment for what is and is not remembered.
 
 I considered staking affection on the fight (loss aversion is a strong hook). I
 am **rejecting it**: on a portfolio, punishing a visitor for touching an easter
@@ -1187,6 +1279,12 @@ Same verbs, different counter-play. This is where the fight gets legs.
 > siege.
 
 ### 9.4 Handicap ladder
+
+> **Manual mode only, as of 2.0.** A rung is a stake, and a commander has nothing to stake:
+> §15's rounds are its difficulty curve, and its escalation is the clock and the cat's
+> temper rather than treats withheld. The floor this section fought for is not abandoned —
+> it is restated for a squad in §15.5 (`MIN_REGROW_MS`, charged per claim) and it is still
+> the bound every escalation number is checked against.
 ~~**Unbuilt as of 0.7**, and the only piece of §9 that is. It needs an ending that asks a
 question, and every ending currently restores the page and gets out of the way.~~
 
@@ -1403,6 +1501,14 @@ them independently is how this gets unbalanced.
   gated — pressing the toggle under reduced motion starts nothing until a
   motion-safe variant exists, and until then the button says so in words rather
   than being absent. A half-speed action game is still worse than none.
+- **Commander mode is more motion, and it is still gated the same way (2.0).** Up to four
+  kittens walking over somebody's writing is the most this site has ever animated, so it is
+  worth being explicit that nothing about §11 was relaxed to allow it: the squad lives in an
+  `aria-hidden` container with `pointer-events: none`, `prefers-reduced-motion` still refuses
+  to open the arena at all (there is no still version of this either), and the mode **never
+  self-starts** — §13's toggle is the only way in, exactly as before. "Hassle-free" was the
+  brief, and it must not become "motion nobody asked for". `KITTEN_CAP` is a §11 number as
+  much as a balance one.
 - **The fight is `aria-hidden`**, as the cat already is. It carries no information
   and announces nothing. A screen-reader user's page is unchanged. **One
   exception: the toggle** (§13) — a control cannot be both hidden and usable, and
@@ -1714,6 +1820,84 @@ resource exploration gave them.
 >
 > Recorded at length because it is the second time this build has mistaken a harness's rhythm
 > for a property of the game, and both times the wrong version was the more interesting story.
+
+**2.0 ship gate, actual:** 467 unit tests (31 of them new, in `tests/squad.test.ts`), a new
+23-check `scratchpad/commander.mjs`, the fourteen manual-mode harnesses green, `astro check` clean
+and a warning-free build. No new build step: 2.0 is a §15 bolted onto a complete §12 rather than a
+step in it.
+
+**The interesting checks are the ones that read a number nobody had thought to read.** The cat's
+landing point, measured against both candidates: **11px from a kitten, 687px from the parked
+cursor** — which is "the boss hunts the squad" as a fact rather than an intention. The claim count
+across four landings: **0 rises**, which is a hit costing tempo and not ground. And a reload that
+keeps `cat-best-round` while the fight, the found-set, the round attribute and the squad all go —
+§7.2's promise and §13.4's amendment in one assertion, because the boundary *is* the argument.
+
+**Five lessons, and four of them are about being wrong in a way arithmetic could have predicted.**
+
+**A strategy is not portable between different bodies.** 1.0's flee-and-hold is the correct way for
+a *hand* to play this fight, and applying it to a kitten sent the animal to `y: 1303` on a 900px
+viewport. A cursor teleports, so distance from the cat is free; legs are not free. The policy is two
+clocks compared now, and the pleasing part is that it *reduces* to 1.0's 423px when the walk is
+zero — the old finding was a special case of the right rule all along.
+
+**"Soonest" is not "best" when the thing you are pricing can be interrupted.** The fallback took the
+claim that would finish first, which valued a hold that would be broken every single time above one
+across the room that would actually complete. This is a modelling error rather than a tuning error,
+and no amount of adjusting the numbers would have found it — a frame-by-frame trace did, in about a
+minute, after two rounds of theorising did not.
+
+**An unpriced source of pressure will break a bound that was proved without it.** `squad.ts` proves
+the squad out-reclaims the board by comparing two rates, and the board's rate in that proof is the
+regrow clock. Ground taken by *pounces* is a second source, and with it the measured fight sat at
+three-to-five claims for seventy-two seconds while the arithmetic insisted the squad was ahead. A
+proof is only about the terms it contains.
+
+**A symptom fixed at the wrong layer buys a worse bug.** Shrinking the board to four claims cured
+the marching and produced boards that were trivially fillable and over in three seconds — a run hit
+round 14 in 72 seconds. Retracted, cause fixed instead, and the retraction is left in `squad.ts`
+where the constant used to be.
+
+**An invariant that used to be free stopped being free, and the oldest harness in the fleet caught
+it.** A progress mark belongs to whoever is holding, so letting go has to remove it. Until 2.0 that
+needed no thought: there was one mark, `hideRing` cleared it, and every abandon path happened to
+call `hideRing`. With a mark *per worker* that stops following, and the one place that nulls the
+pointer's hold without going through the ring — the `pointerout` handler, on a finger lift — left a
+claim wearing a half-full `--scrub`. `touch-fight` reported it in the words the check was written in
+five versions ago: *"no `--scrub` is left on the page after the finger lifts — 1 elements"*. That
+mark would have been snapshotted by `claim()` as the element's original style and restored on the way
+out, which is **pillar 2 failing by omission** — the same shape as 1.4's siege-sweep bug, from the
+opposite direction. There is now exactly one way to let go of a claim (`dropHold`), so no caller has
+to remember. Worth stating generally: **when you add a second actor to a system, every invariant that
+was maintained by coincidence needs to be re-derived on purpose.**
+
+**A half-fixed harness fault comes back as its own sibling.** 1.4 measured that the lure strategy
+plateaus against siege, pinned a leaper in `arena8` section 1, and left section 2 rolling freely.
+Section 2 duly failed here — "16 reclaimed, 2 left" — on a build that had not touched a manual fight,
+and the investigation ended where 1.4's notes already were. Both sections pin one now. When a fault
+is a property of a *shared helper*, fixing it at one call site is not fixing it.
+
+**And a bound calibrated from one sample sits inside the variance of the thing it measures.**
+`arena4` asserts a scripted win takes at least 15s, which was true of the run it was written against.
+Across runs it is 17s over 9 holds, 15s over 8, **13s over 7** — the board is `MIN_BOARD`..`MAX_BOARD`
+candidates and `pickClaims` takes 55%, so the number of holds a win needs moves by a couple either
+way and the clock follows. 2.0 tripped it while changing nothing about a manual fight, which cost an
+investigation to establish that nothing was wrong. The floor is arithmetic now — the fastest possible
+scripted win is about 5.5 holds × `SCRUB_MS` ≈ 7.7s — so it still catches a fight that stopped being
+a fight without catching a different deal.
+
+**One flake, and it was the unit suite rather than a browser.** §8's reachability sweep runs tens of
+thousands of `pickLine` calls on purpose — 1.4's note explains why a coarse grid invents shadows —
+and it measured **4214ms against vitest's 5000ms default**. So it passed alone and failed while a
+browser harness ran beside it, which is the least useful red line there is: it says nothing about the
+code and it teaches everybody to re-run and shrug. Both sweeps carry an explicit 30s timeout now. A
+test whose result depends on what else the machine is doing is not a test yet.
+
+**And the fleet had to be told which game it measures.** Commander mode is the default, so every
+pre-2.0 harness opened a fight where the pointer is not the verb: `arena.mjs` reported 60/63 with
+its three scrub checks red and every claim-and-restore check green, which is a harness measuring the
+wrong game and saying so precisely. One line each at the context — press the mode chip, wait on
+`aria-pressed` rather than on a timeout — rather than fifty edits at fifty click sites.
 
 **1.4 ship gate, actual:** 435 unit tests, a new 22-check browser harness
 (`scratchpad/battle.mjs`) that measures each of 1.4's additions on machine state, plus every
@@ -2127,11 +2311,23 @@ state announcement for free.
 - Visible focus ring, inherited from the site's existing focus style. Not
   overridden.
 
-### 13.4 State and persistence — nothing is stored
+### 13.4 State and persistence — nothing is stored *except one integer*
 
 *Revised in 0.3. 0.2 specified a durable `localStorage` "off" beside a session-only
 "on". Building it showed the stored entry could not change any observable
 behaviour.*
+
+> **Amended in 2.0, and the boundary is the argument.** §15's endless mode stores one key —
+> `cat-best-round`, the deepest round reached. Everything this section was written about is
+> still session-only and still dies on a refresh: the fight, the rung, the found-set, the
+> collar, the sound toggle, which mode you chose. What is stored is not fight state at all.
+> It cannot be spent, it changes nothing about how any future round plays, it can only go
+> up, and it is the one thing an *endless* mode needs in order to mean anything past a
+> single afternoon.
+>
+> The 0.3 test still applies and this passes it where the 0.2 opt-out failed: the stored
+> entry **does** change something observable — the HUD says "best yet" the first time you
+> beat it. **This key, and nothing else, ever.**
 
 | State | Where it lives | Why |
 |---|---|---|
@@ -2208,7 +2404,22 @@ by the entry point; the teardown is mechanism and does not get a vote.
 **None.** A consent control has no tunable parameters — there is no version of
 this that is balanced by making it slightly harder to find.
 
-### 13.8 The second control (added 1.3)
+### 13.8 The second control (added 1.3), and the third (2.0)
+
+> **2.0 adds "Play it yourself", which is a *mode* rather than a preference.** Same chip, same
+> `aria-pressed` handling, same session-only lifetime, and it sits here for the reason this section
+> already gives: §13.1 settled that a game does not belong in the accessibility popover, and "which
+> game" is more a game than "sound" is. The label is written from the visitor's side — nobody knows
+> what "commander mode" is, and everybody knows what *play it yourself* means.
+>
+> **It only ever takes effect on the next fight**, which is a decision and not a limitation.
+> Converting a live fight would have to answer what happens to four kittens halfway through four
+> holds, who the boss is hunting on the frame the cursor becomes a target again, and whether a round
+> counter becomes a rung. §13.5's lesson is that intent and state disagreeing is where the bugs live,
+> so the chip changes intent and the next `open()` reads it. The HUD says what it will do, which is
+> the one place the arena's own line describes the future.
+
+
 
 The sound toggle in the cat-arena chip is the only other control the fight has
 gained since 0.1, so it lives here rather than in a footnote. It is **not** a
@@ -2410,3 +2621,137 @@ the machine's frame rate, and satisfying it would have meant slowing the flood.
 the §13 toggle (there is no other entry point), and §6's territory bar for the
 handoff beat. It depends on **no** mechanic in §5, which is why it can be built
 last (§12).
+
+---
+
+## 15. Commander mode (2.0) — the kittens fight, you give orders
+
+### 15.1 Purpose, and the finding that forced it
+
+**The fight was good and nobody could play it.** That is the whole reason this section
+exists, and it took five versions to hear properly. 1.2 shipped every numbered section;
+1.3 answered "the tester doesn't know what she's doing" with legibility — a teach line, a
+clock for every stance, mood and stance tells, sound; 1.4 answered "the pace is slow" with
+depth — a last stand, signature moves, a counter. Both were real improvements. Both were
+answers to the wrong question, because the same sentence came back.
+
+The problem is not that the fight is unclear. It is that it is **a game with three verbs on
+a CV site**. §5.2's core verb is holding a pointer perfectly still for 1400ms; §3's decision
+is a resource trade; 1.0 measured that winning means holding 423px from a cat that walks at
+170px/s. Positioning, timing and economy — homework, before anything good happens, for a
+visitor who came to read about somebody's internship.
+
+So the verb changes **hands**. A kitten does the holding; the visitor watches, or points at
+things. Everything §5–§9 measured stays true, because the boss, the board, the stances, the
+moods, the dialogue and the endings are untouched — what moved is who performs the hold.
+
+**The promise, stated so it can be tested:** *open it, touch nothing, and the page comes
+back.* `scratchpad/commander.mjs` check 1 is that sentence and nothing else.
+
+### 15.2 One round
+
+| Beat | What happens |
+|---|---|
+| Open | §13's toggle, §14's curtain, §4.1's board — all unchanged. One kitten appears from wherever the cat was. |
+| Work | The kitten picks a claim, walks to it, holds it for `KITTEN_WORK_MS`, frees it, picks another. |
+| Threat | The boss stalks, telegraphs and pounces at **the nearest kitten**. The cursor is never a target. |
+| Hit | The kitten loses its hold and flinches. It loses no ground and does not sit down — see 15.5. |
+| Clear | Board empty → the round is banked, the squad gains one, the clock tightens, a new board is dealt on the same page after `ROUND_BEAT_MS`. |
+| Full | Board taken → **the same round starts again.** No modal, no penalty, no lost record. |
+
+**There is no losing.** §2's loss and §9.4's ladder are manual mode's; a commander has
+neither a treat-of-last-resort nor a rung to stake, so the honest answer to a full board is
+another go at it. `roundOutcome` in `squad.ts` is that rule, and what is missing from its
+arguments is the feature: it does not take `ammo`.
+
+### 15.3 The two orders
+
+| Click on | Order | Reuses |
+|---|---|---|
+| a claimed element | the nearest **idle** kitten goes and takes that one | `claimUnder`, and 1.2's `PROTECTED`/`INTERACTIVE` split so links still navigate |
+| open page | throw a treat — pulls the cat off whatever it is hunting | §5.4's throw, unchanged |
+
+Both optional, both a single click, neither with a cost. **Ordering deliberately does not
+spend a treat**: treats are the throw's resource, and putting a price on the only thing a
+commander does would contradict the mode's premise, which is that doing nothing is allowed.
+
+An order is a suggestion about *what*, never about how or when — no queue, no cancel, no
+selection. A bad order is honoured: a commander is allowed to be wrong. And `stepSquad` only
+ever re-picks for a kitten with no errand, so an order sticks by construction rather than by
+a flag.
+
+### 15.4 What a kitten works on next
+
+**Two clocks, compared: can I finish before it arrives?** `workTimeMs` is the walk plus the
+hold; `threatTimeMs` is the cat's walk to within `POUNCE_RANGE` at its fastest. Prefer every
+claim where the first is smaller, and among those take the one that finishes soonest. When
+none qualifies, take the best *ratio* — the claim it comes closest to being able to finish,
+which is the one furthest from the cat, which is the only move that changes the situation.
+
+This generalises 1.0's finding rather than replacing it. Set the walk to zero and the rule
+reduces to a distance: `POUNCE_RANGE` plus the cat's walk for the length of the hold —
+**423px for a 1400ms hold, which is exactly the number 1.0 measured**, and less for a
+kitten because it works faster.
+
+Both halves were got wrong first, in ways worth keeping:
+
+- **Safety-first ranking (1.0's strategy, applied literally).** A cursor teleports, so
+  distance from the cat is free and maximising it costs nothing. A kitten pays with its legs.
+  Measured: it walked to `y: 1303` on a 900px viewport and the board oscillated between three
+  and five claims for a minute — six seconds of walking to protect 1.4 seconds of holding.
+- **"Take the soonest" as the fallback.** It prices an interruptible hold as though it would
+  complete, so a claim under the cat's nose beat one across the room that would actually have
+  come back. Traced frame by frame: 0.75 progress, landed on, 0.38, landed on, indefinitely.
+
+### 15.5 Tuning table — all `[PH]`, all derived
+
+| Var | `[PH]` | Rationale | "Broken" looks like |
+|---|---|---|---|
+| `KITTEN_SPEED` | 250px/s | **Faster than the cat's fastest** (`STALK_SPEED × AGGRO_DESPERATE` = 238). Started at 190 with the opposite reasoning — "a cornered cat should run one down" — which sounds like §7.3's pressure and is the mode failing: a cat that can hold contact cancels the core verb. The cat's threat is ground it takes and guards (§9.3, 1.4's pin), not an animal it deletes | ≤238: a squad in contact never completes a hold, so watching is a lie. ≫300: boards fall before the escalation can bite |
+| `KITTEN_WORK_MS` | 1000ms | A kitten's hold, and **not** `SCRUB_MS`. The cat's cycle with no walk to make is `recover × 700 + telegraph × 420 × telegraphScale + LEAP` — **1380ms for siege at even mood, ~1260ms desperate, ~1180ms at the round-aggression cap** — all shorter than a 1400ms hold. A player only survives that by fleeing (0.7); a kitten holding the last claim cannot | ≥1260: a camped claim never comes back, which is the endgame of every round. ≪800: the board falls faster than the escalation can answer |
+| `KITTEN_FLINCH_MS` | 220ms | Paint, not a stun — the kitten keeps working through it. Both earlier values *blocked* (900ms matched `SWAT_STUN_MS` for symmetry; 450ms was derived from room to run) and both lost the exchange race above | Anything blocking, at any length. 0: a landed pounce reads as nothing happening |
+| `ARRIVE_PX` | 26px | `hunt()`'s own "beside you" distance, reused. Arrival is **sticky**: once holding, a kitten keeps holding until the claim is gone — a tilted element's bounding box drifting a pixel across the threshold otherwise flipped walk/hold on alternate frames and restarted the hold forever | Non-sticky: fifteen seconds of visible wash and nothing ever completing |
+| `KITTEN_CAP` | 4 | Each kitten clears about one claim per `KITTEN_WORK_MS` plus a walk, so four finish a `MAX_BOARD` in well under a minute. Also the most motion this site has ever asked for (§11), each one drawn over somebody's writing | Higher: the escalation cannot keep up and rounds stop building |
+| Squad size | `1 + rounds cleared`, capped | Round one is one animal on purpose: the clearest possible read on what a kitten *is*. Reinforcement then races the escalation rather than standing apart from it | Starting at the cap: nobody ever sees a single kitten work, which is the mode's whole introduction |
+| `ROUND_REGROW_STEP` | 0.82 | The clock tightens per cleared round — the lever 1.4 proved is the one that reaches a distant defender. At siege's 9000ms that is ~1.6s off per round, about one kitten's walk, so a round costs the squad roughly what the reinforcement it just earned pays for | ≤0.6: round four is unclearable however many kittens turned up. ≥0.95: round twelve feels like round one |
+| `MIN_REGROW_MS` | `SCRUB_MS`, **per claim** | §9.4's floor restated for a squad: a hold must be worth starting. Charged per claim because §9.3's sweep takes two, and applying it to the interval let two claims arrive on one floor — half the promise. Caught by the rate test, not the browser | Per-interval: a sweeping cornered siege out-reclaims a capped squad at deep rounds |
+| `ROUND_AGGRO_STEP` / `CAP` | 0.06 / 1.35 | The meaner half of the escalation, multiplying §7.3's existing aggression — so it needs no new machinery and cannot break §10's whiff invariant, since `telegraphScale` only shortens and floors the wind-up. Capped low because aggression is the lever a *watcher* cannot answer | Cap ≥ `AGGRO_DESPERATE`: a round decided by a number the visitor has no reply to |
+| `ROUND_BEAT_MS` | 1500ms | Between rounds: a breath, not an exit. Shorter than `WIN_BEAT_MS` because a win beat is theatre for something *finishing* and this is the same fight continuing | <800: the board changing reads as a glitch. >`WIN_BEAT_MS`: a loading screen between every round |
+| `WATCH_TRUCE_MS` | 180s | §11's truce, re-asked for a mode where watching is playing. Measures *presence* — any move, scroll or keypress — rather than play. The hidden-tab truce still covers the commoner case | As short as `IDLE_TRUCE_MS`: the page snatches itself back from somebody watching it. Unbounded: a laptop left here runs an animation loop flat |
+
+**A hit takes tempo, never ground.** `RECLAIM_ON_HIT` is 0 in commander mode, and this is
+the load-bearing balance decision of the whole section. It exists in manual mode because a
+player who never gets hit would face no pressure (0.6: a loss has to be reachable). A kitten
+*cannot dodge* — holding still is the verb — so every landed pounce would be a free claim,
+and ground taken by pounces is a second source of board growth that `squad.ts`'s floor does
+not price. Measured with it on: one kitten, round one, seventy-two seconds, three claims to
+five and back, the round never turning over. The board's rate is the regrow clock alone,
+which is the thing §9.3 gives the cat and the thing this section's floor can actually bound.
+
+### 15.6 What is remembered, and what is not
+
+One `localStorage` key: `cat-best-round`, the deepest round ever reached. This reverses
+§7.2/§13.4, which said nothing is stored — twice, with arguments — so the boundary is the
+justification. Those sections are about **fight state**: territory, the rung, the found-set,
+the collar. All of that is still session-only and still dies on a refresh, which is what
+keeps losing free. What is stored is one integer that is not fight state, cannot be spent,
+changes nothing about how any future round plays, and can only go up. An endless mode needs
+one number that survives the tab closing, or "endless" describes a single afternoon.
+
+**This key, and nothing else, ever.** Written through a `try`/`catch` in the style of
+`a11y-prefs.ts`: a browser that refuses storage must degrade to "no record yet", not throw
+inside a game loop. `commander.mjs` section 5 plays a round with storage denied.
+
+### 15.7 Known properties, honestly
+
+- **A run has no failure state.** With the squad capped and the clock floored, the board's
+  rate can never exceed four kittens', so rounds get harder to clear but never impossible: a
+  run ends when the visitor stops watching. That is what "no losing" implies, and it makes
+  *best round reached* a measure of attention rather than skill. Correct for an idle game on
+  a CV site; the first thing to revisit if a playtest finds it hollow.
+- **Manual mode is 1.4, and it costs two paths.** Fourteen harnesses measure it and they all
+  now declare their mode in one line, because commander mode is the default and a harness
+  that does not choose is measuring a spectator being asked to hold still.
+- **Still not playtested by a person.** Every number here is `[PH]`, the gate proves the mode
+  *works*, and the tester who could not read 1.2 or 1.4 is the only one who can say whether
+  this one is finally the right shape.

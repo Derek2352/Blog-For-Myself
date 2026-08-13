@@ -54,6 +54,28 @@ const WON = `document.getElementById('site-cat').classList.contains('notched')`;
 async function fresh() {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   await ctx.addInitScript(() => localStorage.setItem('welcomed', '1'));
+  /*
+   * 2.0: this harness measures **manual mode** (§3's fight). Commander mode is now the default, so
+   * say which game before opening one — otherwise the pointer is not the verb and half these checks
+   * are asking a spectator to hold still. Presses the HUD chip the way a visitor does, and waits for
+   * `aria-pressed` rather than for a timeout.
+   */
+  await ctx.addInitScript(() => {
+    const pick = () => {
+      const b = document.getElementById('cat-manual-toggle');
+      if (!b) return false;
+      if (b.getAttribute('aria-pressed') === 'true') return true;
+      b.click();
+      return b.getAttribute('aria-pressed') === 'true';
+    };
+    addEventListener('DOMContentLoaded', () => {
+      if (pick()) return;
+      const t = setInterval(() => {
+        if (pick()) clearInterval(t);
+      }, 40);
+      setTimeout(() => clearInterval(t), 8000);
+    });
+  });
   return ctx;
 }
 

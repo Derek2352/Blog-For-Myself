@@ -69,6 +69,24 @@
   </svg>
 </div>
 
+{/* The squad's home (§15, 2.0).
+
+    Empty in the markup and filled at runtime with clones of the cat's own drawing —
+    §0 forbids new art, and `SiteCat.astro` records why a hand-built element is the
+    wrong tool here: Astro scopes styles to what it renders, so a `createElement`'d
+    paw "never matched `.cat-paw` and came out 0x0 and invisible". A clone carries the
+    scope class with it, so a kitten is literally the same cat, smaller.
+
+    It exists as a rendered container for one reason: `transition:persist`. The
+    kittens are created by a script whose module scope survives a client-side
+    navigation, so their DOM has to survive it too, or the squad would evaporate on
+    a link click while the fight it belongs to carried on.
+
+    `aria-hidden` and `pointer-events: none` like everything else the fight draws:
+    the game carries no information (§11) and must never eat a click meant for the
+    page under it. */}
+<div id="cat-squad" transition:persist="cat-squad" aria-hidden="true"></div>
+
 {/* The scrub ring: a cursor-sized dial that fills while you hold still. Fixed,
     aria-hidden and pointer-events: none — it must never be the thing under the
     cursor, or it would eat the hover it is reporting on. */}
@@ -496,6 +514,56 @@
     }
   }
 
+  /* ---- The squad (§15, 2.0) ------------------------------------------------
+     A kitten is the cat's own drawing at 62%, so nothing new is drawn (§0). These
+     rules are `:global` because the elements are cloned and appended at runtime and
+     therefore carry no scope class of this component's — the same reason every rule
+     this file writes about `#site-cat` is global. */
+  #cat-squad {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 0;
+    height: 0;
+    /* Under the ring and the ribbon, over the page: a kitten is a character in the
+       fight, not chrome, and it must never be the thing a click lands on. */
+    z-index: 39;
+    pointer-events: none;
+  }
+  :global(.cat-kit) {
+    position: fixed;
+    left: 0;
+    top: 0;
+    /* The drawing is 48×30 and the transform scales about its own top-left, so this
+       centres the animal on the coordinate the script thinks it is standing on. */
+    margin: -9px 0 0 -15px;
+    color: var(--color-ink);
+    opacity: 0.82;
+    pointer-events: none;
+    will-change: transform;
+    /* The same paper halo the cat wears, so a kitten stays readable over a dark cover. */
+    filter: drop-shadow(0 0 2px var(--color-ground));
+  }
+  /* Caught by a pounce (§15) — a flinch, not a stun. Squashed, borrowing the boss's own
+     `boss-swatted` vocabulary on purpose: both animals show being caught out the same
+     way, so a visitor learns one shape and reads both. The kitten keeps working
+     through it, because the arithmetic in `KITTEN_FLINCH_MS` says it must. */
+  :global(.cat-kit.kit-hit) {
+    transform-origin: 50% 100%;
+    filter: drop-shadow(0 0 2px var(--color-ground)) saturate(0.6);
+    opacity: 0.6;
+  }
+  /* Just been given an order — a single pulse of the accent, so the visitor can see
+     *which* kitten heard them. Colour only: nothing here may affect layout (§11). */
+  :global(.cat-kit.kit-called) {
+    color: var(--color-accent);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    :global(.cat-kit) {
+      transition: color 220ms ease-out, opacity 220ms ease-out;
+    }
+  }
+
   #cat-scrub {
     position: fixed;
     left: 0;
@@ -559,7 +627,6 @@
     mood as moodFor,
     aggression,
     telegraphScale,
-    regrowInterval,
     swatLands,
     SWAT_STUN_MS,
     sweepPartner,
@@ -583,6 +650,7 @@
     isLost,
     LINE_MS,
     WIN_BEAT_MS,
+    ROUND_BEAT_MS,
     LOSE_BEAT_MS,
     pickLine,
     lineText,
@@ -595,6 +663,39 @@
     pounceHit,
     type Phase,
   } from '@/lib/arena';
+  import {
+    KITTEN_SPEED,
+    KITTEN_FLINCH_MS,
+    KITTEN_WORK_MS,
+    ARRIVE_PX,
+    WATCH_TRUCE_MS,
+    canFinish,
+    kittensFor,
+    pickWork,
+    assignOrder,
+    roundOutcome,
+    roundRegrowMs,
+    roundAggro,
+    readBestRound,
+    writeBestRound,
+    type Candidate,
+  } from '@/lib/squad';
+
+  /**
+   * Which game this is (§15, 2.0).
+   *
+   * **Commander** is the default and the reason 2.0 exists: kittens perform §5.2's hold and the
+   * visitor gives orders, or gives nothing at all and watches. **Manual** is 1.4's fight, kept
+   * whole — the three verbs, the endings, §9.4's ladder — for anyone who wants to play it, and
+   * kept honest by the fourteen harnesses that measure it.
+   *
+   * Session-only, like everything else about a fight except the one stored round (§13.4). A
+   * refresh comes back a commander, because that is the mode a visitor who has never chosen
+   * should meet.
+   */
+  type Mode = 'commander' | 'manual';
+  let mode: Mode = 'commander';
+  const commanding = () => mode === 'commander';
 
   /**
    * Live state, module scope, session only.
@@ -680,7 +781,43 @@
     curtain: null as null | (() => void),
     /** rAF handle for the loop. */
     raf: 0,
+    /**
+     * Which round of commander mode this is, counting from 1 (§15).
+     *
+     * Rounds are the endless mode's shape: clearing one deals a fresh board on the same page,
+     * with a shorter regrow clock, a meaner cat and one more kitten. Losing the board does not
+     * lower it, because there is nothing to lose — the round simply starts again.
+     */
+    round: 1,
+    /** When this round's board was dealt, so a clear has a time to report. */
+    roundAt: 0,
+    /** Deepest round ever reached, read once from storage — the only thing that persists. */
+    best: 0,
   };
+
+  /**
+   * Whatever the boss is hunting this frame (§15).
+   *
+   * The boss does not know or care what it is stalking: it wants a position, a velocity to lead,
+   * and something whose hold it can break when it lands. In **manual** mode that is the pointer;
+   * in **commander** mode it is the nearest kitten, and the cursor is never a target — which is
+   * what lets a visitor read the page while a fight happens on it.
+   *
+   * A reference rather than a copy, so `land()` clearing `quarry.target` clears the *right*
+   * hold. Re-pointed once a frame in `tick`, before anything reads it.
+   */
+  interface Prey {
+    x: number;
+    y: number;
+    ax: number;
+    ay: number;
+    vx: number;
+    vy: number;
+    at: number;
+    since: number;
+    inside: boolean;
+    target: HTMLElement | null;
+  }
 
   /** Scrub tracking: where the pointer settled, when, and how fast it is moving. */
   const scrub = {
@@ -705,6 +842,29 @@
      */
     inside: false,
   };
+
+  /**
+   * One kitten (§15). A `Prey` that can also walk somewhere and be sat down.
+   *
+   * It is deliberately the same shape the boss reads off the pointer, plus three fields the
+   * pointer has no use for: what it is *walking to* as opposed to holding, whether that came
+   * from an order, and when it is allowed to get up again.
+   */
+  interface Kitten extends Prey {
+    /** Its own element — a clone of the cat's drawing, so §0's "nothing new is drawn" holds. */
+    el: HTMLElement;
+    /** The claim it is on its way to. `target` is the one it has arrived at and is holding. */
+    seek: HTMLElement | null;
+    /** Flinching from a landed pounce until this moment — visual only (§15). */
+    flinchUntil: number;
+    /** Which way it is facing, so the drawing flips like the cat's does. */
+    facing: number;
+  }
+
+  const squad: Kitten[] = [];
+
+  /** What the boss is hunting. Re-pointed once a frame; the pointer in manual mode. */
+  let quarry: Prey = scrub;
 
   /**
    * The current touch, so a **tap** can be told from a **hold** (§3, §5.2 as answered in 1.2).
@@ -755,6 +915,8 @@
       const r = n.getBoundingClientRect();
       return r.bottom > 0 && r.top < vh;
     });
+    // Both modes get §4.1's board. 2.0 briefly dealt commander mode a smaller one to keep the walks
+    // short, and that was the wrong layer to fix it at — see `SQUAD_BOARD_MIN`'s retraction.
     return boardSlice(inView).map((i) => nested[i]!);
   }
 
@@ -772,6 +934,14 @@
 
   /** Paint a claim on. One custom property; the rest of the look is the class. */
   function claim(node: HTMLElement, index: number, seed: number): void {
+    /*
+     * Nothing of ours may be in the snapshot. `free()` restores this attribute verbatim, so a
+     * `--scrub` left behind by an interrupted hold would be recorded as the element's *original*
+     * style and restored on the way out — pillar 2 failing, from a mark nobody removed. 1.4 shipped
+     * this exact shape once via the siege sweep; 2.0 has four kittens that can each leave one, so
+     * the single choke point cleans up instead of trusting four callers to.
+     */
+    clearWash(node);
     wasStyled.set(node, node.getAttribute('style'));
     node.style.setProperty('--claim-tilt', `${claimTilt(index, seed).toFixed(3)}deg`);
     node.classList.add('cat-claimed');
@@ -911,14 +1081,50 @@
   function hideRing(): void {
     const r = ring();
     if (r) r.hidden = true;
-    if (scrubbing) {
-      scrubbing.style.removeProperty('--scrub');
-      scrubbing = null;
-    }
   }
 
-  /** The claim currently showing its own progress, so exactly one ever does. */
-  let scrubbing: HTMLElement | null = null;
+  /**
+   * Claims currently showing hold progress.
+   *
+   * A single `scrubbing` element until 2.0, because a visitor has one pointer and can only be
+   * holding one thing. A squad has four kittens holding four things, so this is a set — and the
+   * discipline it was written with matters more now, not less: `free()` restores the `style`
+   * attribute verbatim and `claim()` snapshots it, so a `--scrub` left on an element that gets
+   * re-claimed is recorded *as the original* and restored on exit. That is pillar 2 failing, and
+   * 1.4 already shipped one bug of exactly that shape. With four workers there are four ways to
+   * leave a mark behind, so `claim()` now clears one on the way past rather than trusting anybody.
+   */
+  const washed = new Set<HTMLElement>();
+
+  /** Take the progress mark off one claim. */
+  function clearWash(node: HTMLElement): void {
+    node.style.removeProperty('--scrub');
+    washed.delete(node);
+  }
+
+  /** Take it off all of them — the fight is over, or the board is being dealt again. */
+  function clearAllWash(): void {
+    for (const node of [...washed]) clearWash(node);
+  }
+
+  /**
+   * Give up a hold, and take its mark with it.
+   *
+   * **The invariant this exists to make unbreakable:** a progress mark belongs to whoever is
+   * holding, so abandoning the hold has to remove it. Until 2.0 that was free, because `hideRing`
+   * cleared the single `scrubbing` element and every abandon path happened to call it. With a mark
+   * per worker that no longer follows, and `touch-fight` found it immediately: the `pointerout`
+   * handler nulls `scrub.target` on a finger lift, so the mark on the claim it had been holding was
+   * orphaned — one element still wearing `--scrub` after the finger left, which `claim()` would
+   * later snapshot as its original style. Pillar 2, failing by omission.
+   *
+   * So there is one way to let go of a claim, and it is this. Five callers, none of which has to
+   * remember anything.
+   */
+  function dropHold(hand: Prey): void {
+    if (hand.target) clearWash(hand.target);
+    hand.target = null;
+  }
 
   /**
    * Where the hold's progress is shown — and on touch it cannot be at the pointer.
@@ -935,12 +1141,21 @@
    * original*, which is pillar 2's exact failure.
    */
   function showScrub(target: HTMLElement, x: number, y: number, progress: number): void {
-    if (!coarse()) {
+    /*
+     * Commander mode always fills the claim, whatever the pointer is.
+     *
+     * There is one ring and there can be four kittens, so a ring cannot represent a squad — but
+     * the deeper reason is that it should not try. In manual mode the ring is at the pointer
+     * because the hold *is* the pointer; in commander mode the visitor is watching the page come
+     * back, and the honest place for "this paragraph is being rescued" is the paragraph. It also
+     * means 1.2's contrast work on the in-claim wash (§5.1, 7% → 26%) is the thing carrying the
+     * whole mode's feedback, which it was measured to be able to do.
+     */
+    if (!coarse() && !commanding()) {
       showRing(x, y, progress);
       return;
     }
-    if (scrubbing && scrubbing !== target) scrubbing.style.removeProperty('--scrub');
-    scrubbing = target;
+    washed.add(target);
     target.style.setProperty('--scrub', progress.toFixed(3));
   }
 
@@ -965,57 +1180,44 @@
   }
 
   /**
-   * One frame of scrubbing. Returns progress 0..1, which the boss reads to decide
-   * whether you are committed enough to be worth interrupting.
+   * One frame of *somebody* working a claim — §5.2's verb, performed by whoever is asked (§15).
+   *
+   * Extracted from `stepScrub` in 2.0 and otherwise unchanged, which is the point: commander mode
+   * does not reimplement the core verb, it hands it to a kitten. Every measurement behind
+   * `SCRUB_MS`, the drift rule, the reward beat and the win check therefore still describes both
+   * modes, and a kitten's hold is the same 1400ms of stillness a visitor's was.
+   *
+   * `drift` is the one genuine difference between a hand and a kitten, and it matters more than it
+   * looks. For a pointer, movement is *intent* — you moved off, so the hold restarts (§5.2). For a
+   * kitten, the coordinates move whenever the **page** does, because claims are in document flow
+   * and a kitten is fixed to the viewport like the cat. Applying the drift rule to it would mean
+   * that scrolling — that is, reading — silently cancelled the squad's progress, and the whole
+   * promise of the mode is that reading is what the visitor should be doing.
    */
-  function stepScrub(now: number): number {
-    // The other half of freezing the ending (see the pounce commitment in `stepBoss`): a hold
-    // started or continued during the beat wins nothing, because there is nothing left to win.
-    // Without this the win beat's one reclaimed element could be scrubbed straight back off
-    // under the line announcing it, and the parting shot would be about a thing not on screen.
-    if (arena.ending) {
-      scrub.target = null;
-      hideRing();
-      return 0;
-    }
-    const target = scrub.inside && scrub.x >= 0 ? claimUnder(scrub.x, scrub.y) : null;
-    if (!target || target !== scrub.target) {
+  function stepHold(
+    hand: Prey,
+    target: HTMLElement | null,
+    now: number,
+    opts: { drift: boolean; over?: number },
+  ): number {
+    if (!target || target !== hand.target) {
       // moved onto something else, or off the board: the hold restarts
-      scrub.target = target;
-      scrub.since = now;
-      scrub.ax = scrub.x;
-      scrub.ay = scrub.y;
+      if (hand.target) clearWash(hand.target);
+      hand.target = target;
+      hand.since = now;
+      hand.ax = hand.x;
+      hand.ay = hand.y;
       if (!target) hideRing();
       return 0;
     }
-    if (!stillEnough(scrub.x - scrub.ax, scrub.y - scrub.ay)) {
+    if (opts.drift && !stillEnough(hand.x - hand.ax, hand.y - hand.ay)) {
       // drifted: same target, fresh hold, and the anchor follows the pointer
-      scrub.since = now;
-      scrub.ax = scrub.x;
-      scrub.ay = scrub.y;
+      hand.since = now;
+      hand.ax = hand.x;
+      hand.ay = hand.y;
     }
-    /*
-     * Holding a claim **is** playing, and the idle truce has to know that.
-     *
-     * `scrub.seen` was refreshed only by `pointermove`, and §11's auto-truce ends a fight
-     * `IDLE_TRUCE_MS` after the last one. But the core verb of this game (§5.2) is holding the
-     * pointer *still*, and 1.0 measured flee-and-hold as the counter the whole fight is built
-     * on — so the better you play, the less you move. A player pinned on one claim by a cat
-     * that keeps interrupting makes progress, never moves the mouse, and at twenty seconds the
-     * game quietly ends itself under them.
-     *
-     * Found by a harness reporting an emptied board with no win: a truce and a victory look
-     * identical from outside, which is why this survived four versions of browser testing.
-     */
-    scrub.seen = now;
-    const progress = scrubProgress(now - scrub.since);
-    /*
-     * Remembered here because this is the only place that knows a hold had a claim under it — and
-     * it has to be remembered rather than re-derived, since a *completed* hold frees the element
-     * before the click that ends the touch arrives. `isWorking` is what reads it.
-     */
-    touch.onClaim = true;
-    showScrub(target, scrub.x, scrub.y, progress);
+    const progress = scrubProgress(now - hand.since, opts.over);
+    showScrub(target, hand.x, hand.y, progress);
     if (progress < 1) return progress;
 
     // reclaimed
@@ -1026,22 +1228,365 @@
     // 1.3: taking a claim back is the fight's reward beat, and it has a visual (the wash
     // draining) — so it gets the reward sound.
     playCue('reclaim');
+    clearWash(target);
     free(target, true);
     caption(arenaCaption(arena.claimed.length, arena.total));
     paintTerritory();
-    scrub.target = null;
-    scrub.since = now;
+    hand.target = null;
+    hand.since = now;
     hideRing();
-    if (isWon(arena.claimed.length, arena.order.length)) finish('win', now);
+    /*
+     * Who decides what a cleared board means — and it is the one branch the two modes cannot
+     * share. Manual mode wins a fight and moves a rung (§9.4). Commander mode clears a *round*
+     * and deals the next one, harder, with one more kitten (§15). Same emptied board, two
+     * different things to do about it.
+     */
+    if (isWon(arena.claimed.length, arena.order.length)) {
+      if (commanding()) clearRound(now);
+      else finish('win', now);
+    }
     return 0;
+  }
+
+  /**
+   * One frame of the *visitor* scrubbing. Returns progress 0..1, which the boss reads to decide
+   * whether you are committed enough to be worth interrupting.
+   *
+   * Manual mode only. In commander mode the pointer does not work claims at all — it points at
+   * them (§15's orders), and a cursor resting on a paragraph is somebody reading rather than
+   * somebody playing.
+   */
+  function stepScrub(now: number): number {
+    // The other half of freezing the ending (see the pounce commitment in `stepBoss`): a hold
+    // started or continued during the beat wins nothing, because there is nothing left to win.
+    // Without this the win beat's one reclaimed element could be scrubbed straight back off
+    // under the line announcing it, and the parting shot would be about a thing not on screen.
+    if (arena.ending || commanding()) {
+      dropHold(scrub);
+      hideRing();
+      return 0;
+    }
+    const target = scrub.inside && scrub.x >= 0 ? claimUnder(scrub.x, scrub.y) : null;
+    if (target && target === scrub.target) {
+      /*
+       * Holding a claim **is** playing, and the idle truce has to know that.
+       *
+       * `scrub.seen` was refreshed only by `pointermove`, and §11's auto-truce ends a fight
+       * `IDLE_TRUCE_MS` after the last one. But the core verb of this game (§5.2) is holding the
+       * pointer *still*, and 1.0 measured flee-and-hold as the counter the whole fight is built
+       * on — so the better you play, the less you move. A player pinned on one claim by a cat
+       * that keeps interrupting makes progress, never moves the mouse, and at twenty seconds the
+       * game quietly ends itself under them.
+       *
+       * Found by a harness reporting an emptied board with no win: a truce and a victory look
+       * identical from outside, which is why this survived four versions of browser testing.
+       */
+      scrub.seen = now;
+      /*
+       * Remembered here because this is the only place that knows a hold had a claim under it —
+       * and it has to be remembered rather than re-derived, since a *completed* hold frees the
+       * element before the click that ends the touch arrives. `isWorking` is what reads it.
+       */
+      touch.onClaim = true;
+    }
+    return stepHold(scrub, target, now, { drift: true });
+  }
+
+  /* ---------------------------------------------------------------- *
+   * The squad (§15) — kittens, which do the holding now
+   * ---------------------------------------------------------------- */
+
+  const squadEl = () => el('cat-squad');
+
+  /**
+   * Make a kitten out of the cat that is already on the page.
+   *
+   * **`cloneNode`, not `createElement`, and that is the whole trick.** §0 forbids new art, and
+   * `SiteCat.astro` writes down why hand-built elements do not work here: Astro scopes a
+   * component's styles to the elements *it* rendered, so a `createElement`'d paw "never matched
+   * `.cat-paw` and came out 0x0 and invisible". A clone carries the scope class in its `class`
+   * attribute, so it keeps the cat's own drawing *and* the base rules for it — and the kitten is
+   * then literally the same animal, smaller, which is exactly the fiction wanted.
+   *
+   * Returns null before the cat exists (a page without `SiteCat`), which the caller treats as "no
+   * squad this round" rather than as an error: the arena is decoration and must never be the
+   * reason a page fails.
+   */
+  function makeKitten(now: number): Kitten | null {
+    const flip = document.querySelector<HTMLElement>('#site-cat .cat-flip');
+    const box = squadEl();
+    if (!flip || !box) return null;
+    const node = document.createElement('div');
+    node.className = 'cat-kit';
+    node.appendChild(flip.cloneNode(true));
+    box.appendChild(node);
+    // Starts where the cat is, because that is where kittens come from — and it means the squad
+    // arrives from the same corner the boss just left rather than appearing mid-page.
+    const from = catEl()?.getBoundingClientRect();
+    return {
+      el: node,
+      x: from ? from.left + from.width / 2 : 40,
+      y: from ? from.top + from.height / 2 : window.innerHeight - 40,
+      ax: 0,
+      ay: 0,
+      vx: 0,
+      vy: 0,
+      at: now,
+      since: now,
+      inside: true,
+      target: null,
+      seek: null,
+      flinchUntil: 0,
+      facing: 1,
+    };
+  }
+
+  /**
+   * Put the kitten where its numbers say it is, and publish what it is doing.
+   *
+   * The two `data-` attributes are for the same reason `data-mood` and `data-stance` exist on the
+   * boss: this is real fight state, it is worth being able to see from outside the closure, and a
+   * browser harness that can only see pixels ends up asserting on pixels — which §12 has recorded
+   * as the way a check passes while the mechanic is broken. `data-hold` is *which claim*, not how
+   * far along, because progress is already visible as the wash on the claim itself.
+   */
+  function placeKitten(k: Kitten): void {
+    k.el.style.transform = `translate(${Math.round(k.x)}px, ${Math.round(k.y)}px) scale(${k.facing * 0.62}, 0.62)`;
+    const seek = k.seek ? arena.order.indexOf(k.seek) : -1;
+    const hold = k.target ? arena.order.indexOf(k.target) : -1;
+    k.el.dataset.seek = String(seek);
+    k.el.dataset.hold = String(hold);
+  }
+
+  /** The squad this round is fought with, dealt fresh so a round cannot inherit a stale animal. */
+  function dealSquad(now: number): void {
+    disbandSquad();
+    const want = kittensFor(arena.round);
+    for (let i = 0; i < want; i++) {
+      const k = makeKitten(now);
+      if (!k) break;
+      // Fanned out along the floor, so two kittens do not start life inside each other.
+      k.x += i * 22;
+      squad.push(k);
+      placeKitten(k);
+    }
+  }
+
+  /** Take them off the page, and their marks with them. */
+  function disbandSquad(): void {
+    for (const k of squad) {
+      if (k.target) clearWash(k.target);
+      k.el.remove();
+    }
+    squad.length = 0;
+  }
+
+  /** Where a claim is, in the space the fight happens in. */
+  function centreOf(node: HTMLElement): { x: number; y: number } {
+    const r = node.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
+
+  /**
+   * The board as the policy sees it: every claim still standing, with a viewport position.
+   *
+   * Viewport space, like the cat and the kittens, because the fight is fought in it — the boss is
+   * `position: fixed` and so is a kitten, and mixing document and viewport coordinates is the
+   * mistake §12 recorded twice ("measure in the space the mechanic lives in"). A consequence worth
+   * being clear about: a claim scrolled far off screen has an off-screen position, so a kitten will
+   * walk off the visible page to reach it. That is correct — the work is still happening, the HUD
+   * still counts it — and it is what lets a visitor scroll away without stalling the round.
+   */
+  function boardCandidates(): Candidate[] {
+    const out: Candidate[] = [];
+    for (const node of arena.claimed) {
+      if (!node.isConnected) continue;
+      const c = centreOf(node);
+      out.push({ index: arena.order.indexOf(node), x: c.x, y: c.y });
+    }
+    return out;
+  }
+
+  /**
+   * One frame of the whole squad (§15).
+   *
+   * Each kitten does one of two things and never anything else: it walks to the claim it means to
+   * work, or it works it. (It also flinches when hit, which is paint rather than behaviour — see
+   * `KITTEN_FLINCH_MS`.) The intelligence is entirely in `pickWork`, which
+   * is `arena.ts`-style pure and which implements the strategy the browser harnesses proved wins —
+   * so what happens here is only the moving.
+   */
+  function stepSquad(now: number, dt: number): void {
+    if (!commanding() || arena.ending) return;
+    const at = { x: boss.x, y: boss.y };
+    const candidates = boardCandidates();
+    const taken = squad.map((k) => (k.seek ? arena.order.indexOf(k.seek) : -1));
+
+    for (const k of squad) {
+      /*
+       * The flinch is a *reaction shot* and nothing else — it does not stop the kitten (§15).
+       *
+       * Two earlier versions blocked here, and both made the mode unwinnable: 0.7's measurement is
+       * that a stationary worker beats the cat's pounce cycle by about twenty milliseconds, so any
+       * pause at all loses every exchange. See `KITTEN_FLINCH_MS` for the whole arithmetic. What a
+       * hit costs is the hold, which `land` has already taken.
+       */
+      k.el.classList.toggle('kit-hit', now < k.flinchUntil);
+
+      // Has what it was going for gone? Somebody else may have freed it, or the cat re-took it.
+      if (k.seek && (!k.seek.isConnected || !arena.claimed.includes(k.seek))) {
+        k.seek = null;
+      }
+      /*
+       * Pick, or **re-pick when the trip stopped being worth making**.
+       *
+       * A kitten keeps its errand: `seek` survives until the claim is freed or taken back, which is
+       * what makes an order stick and what stops it dithering. The one exception is the case that
+       * made this necessary — when nothing on the board can be finished, `pickWork` falls back to
+       * walking *away* from the cat, and that walk is only ever a means to an end. Committing to it
+       * blindly is how a kitten ends up marching across a document while a claim it could have
+       * finished sits beside it. So: if what it is walking to cannot be finished from here, and
+       * something else can, it changes its mind.
+       */
+      const slot = squad.indexOf(k);
+      const seekIndex = k.seek ? arena.order.indexOf(k.seek) : -1;
+      const stillWorth =
+        k.seek !== null &&
+        (k.target === k.seek ||
+          candidates.some((c) => c.index === seekIndex && canFinish(k, c, at)));
+      if (!stillWorth) {
+        const mine = pickWork(
+          { x: k.x, y: k.y, target: seekIndex >= 0 ? seekIndex : null },
+          candidates,
+          at,
+          taken.filter((t) => t >= 0),
+        );
+        const chosen = mine >= 0 ? (arena.order[mine] ?? null) : null;
+        // Only switch to something *better*: a fallback pick that lands on a different unworkable
+        // claim every frame would be dithering, which looks broken and reclaims nothing.
+        if (chosen !== k.seek) {
+          const worth = candidates.some((c) => c.index === mine && canFinish(k, c, at));
+          if (!k.seek || worth) {
+            dropHold(k);
+            k.seek = chosen;
+            taken[slot] = mine;
+          }
+        }
+      }
+      if (!k.seek) {
+        // Nothing left to take — the round is ending, or every claim is somebody else's.
+        k.el.classList.remove('walking');
+        stepHold(k, null, now, { drift: false, over: KITTEN_WORK_MS });
+        placeKitten(k);
+        continue;
+      }
+
+      const to = centreOf(k.seek);
+      const dx = to.x - k.x;
+      const dy = to.y - k.y;
+      const away = Math.hypot(dx, dy);
+      /*
+       * **Arrival is sticky, and it has to be.** The test is `away > ARRIVE_PX` only while the
+       * kitten is *not already holding this claim*; once it is holding, it stays holding until the
+       * claim is gone. Without that, a claim whose measured centre drifts a pixel across the
+       * threshold — and a `.cat-claimed` element is tilted, so its bounding box is a rotated
+       * rectangle that moves under any reflow — flips the kitten between "walk" and "hold" on
+       * alternate frames. Each flip hands `stepHold` a different target, which restarts the hold,
+       * which means it never completes. Measured: a kitten sat at one spot for fifteen seconds with
+       * the wash showing and nothing ever coming back.
+       */
+      const holding = k.target === k.seek;
+      if (!holding && away > ARRIVE_PX) {
+        const step = Math.min(away, KITTEN_SPEED * dt);
+        k.x += (dx / away) * step;
+        k.y += (dy / away) * step;
+        k.vx = (dx / away) * KITTEN_SPEED;
+        k.vy = (dy / away) * KITTEN_SPEED;
+        k.at = now;
+        if (Math.abs(dx) > 2) k.facing = dx < 0 ? -1 : 1;
+        k.el.classList.add('walking');
+        // Walking is not working: a hold only exists once it has arrived, which is what makes
+        // distance cost the squad something and therefore what makes `pickWork`'s choice matter.
+        stepHold(k, null, now, { drift: false, over: KITTEN_WORK_MS });
+        placeKitten(k);
+        continue;
+      }
+
+      k.vx = 0;
+      k.vy = 0;
+      k.el.classList.remove('walking');
+      stepHold(k, k.seek, now, { drift: false, over: KITTEN_WORK_MS });
+      placeKitten(k);
+    }
+  }
+
+  /**
+   * §15's order: send somebody to that claim.
+   *
+   * The commander's whole vocabulary, and it is one line of state — the kitten's `seek`. Everything
+   * that makes it *work* is already here: the kitten walks with the same code it always walks with,
+   * holds with the same code any hand holds with. Nothing needs to mark it as *ordered*, because
+   * `stepSquad` only ever re-picks for a kitten with no `seek` at all — so an instruction survives
+   * by construction until the claim is freed or taken back, and a bad order is honoured like any
+   * other. That is the right behaviour: a commander is allowed to be wrong.
+   *
+   * An order is a suggestion about *what*, never about how or when. There is no cancel, no queue and
+   * no cost, because each of those would turn a nudge into an interface — and the mode is for
+   * somebody who may not have realised there is a game on the page.
+   */
+  function order(claim: HTMLElement, x: number, y: number): void {
+    if (!arena.claimed.includes(claim)) return;
+    const who = assignOrder(
+      squad.map((k) => ({ x: k.x, y: k.y, target: k.seek ? arena.order.indexOf(k.seek) : null })),
+      { x, y },
+    );
+    const k = who >= 0 ? squad[who] : undefined;
+    if (!k) return;
+    // Whatever it was holding stops being held — including its wash, or the abandoned claim keeps a
+    // half-full mark that `claim()` would later snapshot as its original style (pillar 2).
+    dropHold(k);
+    k.seek = claim;
+    playCue('order');
+    k.el.classList.add('kit-called');
+    window.setTimeout(() => k.el.classList.remove('kit-called'), 360);
+  }
+
+  /**
+   * Which kitten the boss is hunting: the nearest one (§15).
+   *
+   * Nearest rather than weakest or busiest, because that is the version a watching visitor can
+   * predict — the threat is always the animal closest to the cat, which is a thing you can see
+   * without being told. Startled kittens stay eligible: a cat looming over a sitting kitten is
+   * both correct and the clearest possible picture of what a hit costs.
+   */
+  function nearestKitten(): Kitten | null {
+    let best: Kitten | null = null;
+    let bestD = Infinity;
+    for (const k of squad) {
+      const d = Math.hypot(k.x - boss.x, k.y - boss.y);
+      if (d < bestD) {
+        bestD = d;
+        best = k;
+      }
+    }
+    return best;
   }
 
   function tick(now: number): void {
     if (!arena.on) return;
     arena.raf = requestAnimationFrame(tick);
 
-    // auto-truce: a fight nobody is playing is over (§11)
-    if (scrub.seen && now - scrub.seen > IDLE_TRUCE_MS) {
+    /*
+     * auto-truce: a fight nobody is playing is over (§11) — and 2.0 has to ask that question
+     * differently, because in commander mode *watching* is the intended way to play.
+     *
+     * Manual mode keeps the 20s clock exactly as 1.1 corrected it. Commander mode uses the longer
+     * `WATCH_TRUCE_MS` and measures presence rather than play: any move, scroll or keypress
+     * refreshes it, so a reader is present and a three-minute silence means the tab was left open.
+     * With the 20s clock the mode's central experience would end itself twice a minute.
+     */
+    const patience = commanding() ? WATCH_TRUCE_MS : IDLE_TRUCE_MS;
+    if (scrub.seen && now - scrub.seen > patience) {
       endQuietly();
       return;
     }
@@ -1059,7 +1604,18 @@
     // up, how soon it commits, how quickly it walks and how often it speaks, so a
     // stale one for a frame means four things disagreeing about the same fight.
     stepMood(now);
-    stepBoss(now, dt, stepScrub(now));
+    /*
+     * The squad moves before the boss, and then the boss is pointed at it (§15).
+     *
+     * Order matters for the same reason the treat goes first: the cat must stalk where its quarry
+     * *is* this frame, not where it was. And `quarry` is re-pointed once, here, so everything below
+     * — the pounce, the aim prediction, the anchor leash, 1.4's swat — reads one consistent answer
+     * to "who am I hunting" for the whole frame.
+     */
+    stepSquad(now, dt);
+    const worked = stepScrub(now);
+    quarry = commanding() ? (nearestKitten() ?? scrub) : scrub;
+    stepBoss(now, dt, commanding() ? scrubProgress(now - quarry.since) * (quarry.target ? 1 : 0) : worked);
     holdCaption();
     // Nothing talks while an ending is playing: the ending has the last word.
     if (!arena.ending) stepTalk(now);
@@ -1499,6 +2055,8 @@
       // spending — and "is there another paw left to take" would go false the moment you
       // threw your last treat.
       found: arena.ammoWas.filter(Boolean).length,
+      // Which game this is, for the two lines in §8 that teach a verb (§15).
+      commanding: commanding(),
       /*
        * The event, handed over once (§7.3, 1.4). `stepMood` raises it on the way into the tier and
        * the dialogue takes it — see `consume` above. A boolean that stayed true for the whole tier
@@ -1574,7 +2132,19 @@
     // Stances bend durations, they do not replace them (§9.3). A bell's doubled telegraph
     // rides on top of the stance's own multiplier and is spent when the wind-up ends.
     const spec = STANCES[boss.stance];
-    const aggro = aggression(boss.mood);
+    /*
+     * §7.3's tier, times §15's round.
+     *
+     * The second half of "faster board and a meaner cat", and it needs no new machinery because
+     * aggression already owns the four things that make a cat feel meaner (wind-up, walking speed,
+     * willingness to commit, how often it talks) and §7.3 already clamps the ones that must not
+     * scale. In particular `telegraphScale` only ever *shortens* the wind-up and floors it above
+     * human reaction time, so a round-30 cat cannot become unreadable — §10's invariant protects
+     * the escalation for free, which is why this is one multiplication rather than a system.
+     *
+     * `roundAggro` is 1 in round 1, so manual mode is untouched.
+     */
+    const aggro = aggression(boss.mood) * roundAggro(arena.round);
     const scale =
       boss.phase === 'telegraph'
         ? // §7.3's desperate tier, and it only ever shortens this — see `telegraphScale`.
@@ -1621,14 +2191,14 @@
           Math.random() < TRICKSTER_DOUBLE &&
           !arena.ending &&
           arena.claimed.length > 0 &&
-          scrub.inside
+          quarry.inside
         ) {
-          const moving = now - scrub.at < 90;
+          const moving = now - quarry.at < 90;
           const aim = predict(
-            scrub.x,
-            scrub.y,
-            moving ? scrub.vx : 0,
-            moving ? scrub.vy : 0,
+            quarry.x,
+            quarry.y,
+            moving ? quarry.vx : 0,
+            moving ? quarry.vy : 0,
             AIM_LEAD_MS,
           );
           boss.ax = boss.x;
@@ -1746,9 +2316,11 @@
       endGrooming(root);
     }
 
-    if (!scrub.inside || scrub.x < 0) return; // nothing to stalk
-    const dx = scrub.x - boss.x;
-    const dy = scrub.y - boss.y;
+    // Nothing to stalk. In manual mode that is a pointer outside the window (§5.3); in commander
+    // mode it means the squad has not been dealt yet, which is one frame at the start of a round.
+    if (!quarry.inside || quarry.x < 0) return;
+    const dx = quarry.x - boss.x;
+    const dy = quarry.y - boss.y;
     const dist = Math.hypot(dx, dy);
 
     if (
@@ -1776,17 +2348,19 @@
       /*
        * Commit. Everything about the pounce is decided here and nothing after.
        *
-       * Velocity is only meaningful while the pointer is moving: a cursor that
+       * Velocity is only meaningful while the quarry is moving: a cursor that
        * stopped keeps its last sampled reading, because nothing fires to say "still
        * now", and aiming ahead of it would make the cat miss the one player it is
-       * certainly entitled to hit — the one holding perfectly still.
+       * certainly entitled to hit — the one holding perfectly still. A kitten stamps
+       * `at` the same way while it walks and zeroes its velocity on arrival, so the
+       * rule reads identically against either quarry (§15).
        */
-      const moving = now - scrub.at < 90;
+      const moving = now - quarry.at < 90;
       const aim = predict(
-        scrub.x,
-        scrub.y,
-        moving ? scrub.vx : 0,
-        moving ? scrub.vy : 0,
+        quarry.x,
+        quarry.y,
+        moving ? quarry.vx : 0,
+        moving ? quarry.vy : 0,
         AIM_LEAD_MS,
       );
       boss.ax = boss.x;
@@ -1894,7 +2468,11 @@
         arena.movedAt = now;
         caption(arenaCaption(arena.claimed.length, arena.total));
         paintTerritory();
-        if (isLost(arena.claimed.length, arena.order.length, ammo().length)) finish('lose', now);
+        // §15 first: in commander mode a full board is a round to start again, not a defeat, and
+        // the two rules disagree on purpose (see `roundOutcome`). Manual mode keeps §2's loss,
+        // ammo and all.
+        if (!checkRound() && isLost(arena.claimed.length, arena.order.length, ammo().length))
+          finish('lose', now);
       }
       /*
        * The sweep's bill. Two claims cost two intervals, so §9.3's moment is paid for in *time*
@@ -1902,7 +2480,10 @@
        * version that took two for free plateaued a fleeing player at six claims for ten
        * exchanges — see `regrowInterval`.
        */
-      boss.regrowAt = now + regrowInterval(spec.regrowMs, boss.mood, took);
+      // §15: the same bill, with the round's own multiplier and floor folded in. Manual mode passes
+      // round 1, where `roundRegrowMs` is `regrowInterval` exactly — so 1.4's measurements still
+      // describe the fight a manual player gets.
+      boss.regrowAt = now + roundRegrowMs(spec.regrowMs, boss.mood, took, arena.round);
     }
   }
 
@@ -1919,17 +2500,48 @@
     // 1.3: the landing has a visual (the faceplant), so it has a sound. Hit or miss
     // both land — the thud is the pounce arriving, not the catch.
     playCue('land');
-    const caught = scrub.inside && pounceHit(boss.bx, boss.by, scrub.x, scrub.y);
+    const caught = quarry.inside && pounceHit(boss.bx, boss.by, quarry.x, quarry.y);
     if (!caught) return;
 
     // the hold is gone, not reduced: partial retention would remove the reason to
     // ever dodge (§5.2)
-    scrub.target = null;
-    scrub.since = now;
+    dropHold(quarry);
+    quarry.since = now;
     hideRing();
     arena.interrupts++;
+    /*
+     * §15: the kitten flinches, and that is the whole visible cost — the hold above is the real one.
+     *
+     * `seek` is deliberately *kept*. Clearing it sends the kitten shopping for a new claim after
+     * every hit, which on a board with one claim left means walking away from the only thing worth
+     * holding; keeping it means the kitten picks itself up and tries the same thing again, which is
+     * exactly what a player does and what 0.7 measured them winning with.
+     */
+    if (commanding()) {
+      const hit = squad.find((k) => k === quarry);
+      if (hit) hit.flinchUntil = now + KITTEN_FLINCH_MS;
+    }
 
-    for (let i = 0; i < RECLAIM_ON_HIT; i++) {
+    /*
+     * **A landed pounce takes ground from a player and only tempo from a kitten (§15).**
+     *
+     * `RECLAIM_ON_HIT` exists because a human who never gets hit would face no pressure at all
+     * (0.6's note: a loss has to be reachable). A kitten is the opposite case — it *cannot* dodge,
+     * because holding still is the verb, so every pounce that lands is a free claim for the cat.
+     *
+     * Measured, that is not a difficulty knob, it is a hole in the arithmetic. `squad.ts` proves the
+     * squad out-reclaims the board by comparing two rates, and the board's rate in that proof is the
+     * regrow clock — the thing `MIN_REGROW_MS` floors and the escalation tunes. Ground taken by
+     * pounces is a *second*, unpriced source of board growth, and with it the browser showed exactly
+     * what the proof could not see: one kitten, round 1, seventy-two seconds, three claims to five
+     * and back, the round never turning over.
+     *
+     * So in commander mode a pounce keeps the one thing it costs the squad — **the hold**, which can
+     * be most of `KITTEN_WORK_MS` of work thrown away — and the *board* does the board's job, which is
+     * what §9.3 says it is for. Manual mode is untouched: a player can dodge, so a player pays in
+     * ground.
+     */
+    for (let i = 0; i < (commanding() ? 0 : RECLAIM_ON_HIT); i++) {
       const back = takeGround();
       if (!back) break;
       claim(back, arena.order.indexOf(back), arena.seed);
@@ -1959,7 +2571,10 @@
     arena.movedAt = now;
     caption(arenaCaption(arena.claimed.length, arena.total));
     paintTerritory();
-    if (isLost(arena.claimed.length, arena.order.length, ammo().length)) finish('lose', now);
+    // §15: a landed pounce can fill the board too, and in commander mode that starts the round
+    // again rather than ending the fight.
+    if (!checkRound() && isLost(arena.claimed.length, arena.order.length, ammo().length))
+      finish('lose', now);
   }
 
   /**
@@ -2164,13 +2779,47 @@
      * costs nothing on the normal path and makes that unreachable rather than unlikely.
      */
     if (arena.on) close();
-    const board = candidates();
-    if (!board.length) {
+    const now = performance.now();
+    arena.round = 1;
+    arena.best = readBestRound();
+    if (!dealBoard(now, behindCurtain)) {
       // Nothing to fight over. The intent has to be given back too, or the button stays
       // pressed over an arena that never opened — §13.5's exact failure state.
       arena.want = false;
       return;
     }
+    arena.on = true;
+    document.documentElement.classList.add('cat-arena-on');
+    arena.openedAt = now;
+    arena.spokeAt = now;
+    arena.spent = 0;
+    arena.lastLine = '';
+    scrub.seen = now;
+    dropHold(scrub);
+    const paws = [...document.querySelectorAll<HTMLElement>('#cat-score .cat-paw[data-slug]')];
+    arena.ammoWas = paws.map((p) => p.classList.contains('got'));
+    withholdForRung(paws);
+    takeCat(now);
+    if (commanding()) dealSquad(now);
+    arena.raf = requestAnimationFrame(tick);
+  }
+
+  /**
+   * Deal a board on the page as it is now — the opening of a fight, and of every round after it
+   * (§15).
+   *
+   * Extracted from `open()` in 2.0 so a cleared round can start the next one without going through
+   * the curtain: commander mode's rounds are *inside* one fight, and re-opening the arena would
+   * flood the screen with ink every twenty seconds and reset the round counter it exists to grow.
+   *
+   * Re-queries `candidates()` each time rather than reusing the first board, because the visitor
+   * may have scrolled or navigated between rounds and §9.1's promise is that the arena is whatever
+   * page you are on. Returns false when the page has nothing claimable, which the callers treat as
+   * "do not open" and "stop here" respectively.
+   */
+  function dealBoard(now: number, behindCurtain = false): boolean {
+    const board = candidates();
+    if (!board.length) return false;
     const seed = (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0;
     const picked = pickClaims(board.length, INITIAL_CLAIM_FRACTION, seed);
     arena.order = board;
@@ -2181,25 +2830,115 @@
     // index by position in the *board*, not in the claimed subset, so a re-claim
     // after a landed pounce reproduces the tilt the element had the first time
     arena.claimed.forEach((node) => claim(node, board.indexOf(node), seed));
-    arena.on = true;
-    document.documentElement.classList.add('cat-arena-on');
     caption(arenaCaption(arena.claimed.length, arena.total));
-    const now = performance.now();
-    arena.openedAt = now;
     arena.movedAt = now;
-    arena.spokeAt = now;
-    arena.spent = 0;
     arena.interrupts = 0;
-    arena.lastLine = '';
     arena.ending = null;
-    scrub.seen = now;
-    scrub.target = null;
+    arena.roundAt = now;
+    /*
+     * Published for the same reason `data-mood` and `data-stance` are (§7.3, 1.3): a round is real
+     * fight state, and a harness that cannot read it has to *infer* which of two outcomes happened
+     * from a caption — which is exactly the "assert on a proxy" trap §12 keeps recording. It also
+     * tells the difference between the two things that both deal a fresh board: a round that was
+     * cleared and a round that was lost, which look identical from outside.
+     */
+    // Commander mode only: a manual fight has rungs rather than rounds (§9.4), and publishing a
+    // round number over it would describe a clock that is not running.
+    if (commanding()) document.documentElement.dataset.catRound = String(arena.round);
+    else delete document.documentElement.dataset.catRound;
     paintTerritory(behindCurtain);
-    const paws = [...document.querySelectorAll<HTMLElement>('#cat-score .cat-paw[data-slug]')];
-    arena.ammoWas = paws.map((p) => p.classList.contains('got'));
-    withholdForRung(paws);
-    takeCat(now);
-    arena.raf = requestAnimationFrame(tick);
+    return true;
+  }
+
+  /* ---------------------------------------------------------------- *
+   * Rounds (§15) — endless, and there is no losing
+   * ---------------------------------------------------------------- */
+
+  /**
+   * The board came back. Bank the round and deal a harder one.
+   *
+   * §7.4's win beat is kept and shortened into a *breath* rather than an ending: the cat does not
+   * get the parting shot here, because it has not gone anywhere — the next round is the same fight
+   * continuing. What the visitor gets instead is the number going up, which is the whole reward
+   * commander mode has, and the reason it is the thing that persists.
+   */
+  function clearRound(now: number): void {
+    const cleared = arena.round;
+    const seconds = ((now - arena.roundAt) / 1000).toFixed(0);
+    arena.round = cleared + 1;
+    // §15's one stored fact. `writeBestRound` is monotonic, so this can only ever be good news.
+    const record = writeBestRound(arena.round);
+    arena.best = Math.max(arena.best, arena.round);
+    playCue('win');
+    caption(
+      record
+        ? `round ${cleared} cleared in ${seconds}s — best yet`
+        : `round ${cleared} cleared in ${seconds}s`,
+    );
+    say(record ? 'round-record' : 'round-clear', ROUND_BEAT_MS);
+    /*
+     * A beat, then the next board — and `arena.ending` is deliberately *not* set.
+     *
+     * `ending` means "this fight is over and nothing new starts" (§7.4, tightened in 1.1), which is
+     * exactly wrong here: the fight is not over, one round of it is. Setting it would freeze the
+     * pounce and the regrow for the beat, which reads as the cat losing interest at the moment the
+     * round it just lost should be turning nasty.
+     */
+    clearTimeout(arena.beatTimer);
+    arena.beatTimer = window.setTimeout(() => {
+      if (!arena.on || !commanding()) return;
+      const then = performance.now();
+      if (!dealBoard(then, false)) {
+        // The page stopped having anything to fight over mid-run — a navigation, or content
+        // swapped underneath. Nothing to escalate into, so bow out the quiet way (§11).
+        endQuietly();
+        return;
+      }
+      rollStance(arena.seed);
+      dealSquad(then);
+    }, ROUND_BEAT_MS);
+  }
+
+  /**
+   * The cat took the whole board. Start the round again — **there is no losing** (§15).
+   *
+   * The round number does not move, so nothing is taken away and the record is untouched: this is
+   * the T-Rex bargain, where failure costs you the run and never the score. §2's loss and §9.4's
+   * ladder still exist in manual mode, where a treat in hand is a way out and the rung is the
+   * stake; a commander has neither, so the honest answer to a full board is another go at it.
+   */
+  function restartRound(): void {
+    playCue('lose');
+    caption('the page is theirs — going again');
+    say('round-again', ROUND_BEAT_MS);
+    clearTimeout(arena.beatTimer);
+    arena.beatTimer = window.setTimeout(() => {
+      if (!arena.on || !commanding()) return;
+      const then = performance.now();
+      if (!dealBoard(then, false)) {
+        endQuietly();
+        return;
+      }
+      rollStance(arena.seed);
+      dealSquad(then);
+    }, ROUND_BEAT_MS);
+  }
+
+  /**
+   * Ask what this board means, and act on it — commander mode's only two outcomes (§15).
+   *
+   * Called from the two places that can fill a board: a landed pounce and a regrow. The pure rule
+   * lives in `squad.ts` and deliberately does not take ammo, which is the difference between
+   * `isLost` and this: a full board is not a defeat here, it is a round to start again.
+   */
+  function checkRound(): boolean {
+    if (!commanding() || arena.ending) return false;
+    const outcome = roundOutcome(arena.claimed.length, arena.order.length);
+    if (outcome === 'restart') {
+      restartRound();
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -2223,7 +2962,23 @@
     const r = root.getBoundingClientRect();
     boss.last = now;
     boss.facing = 1;
-    boss.stance = pickStance(arena.seed);
+    rollStance(arena.seed);
+    placeCat(root, r.left + r.width / 2, r.top + r.height / 2);
+  }
+
+  /**
+   * Roll this fight's opponent and wipe everything the last one was doing.
+   *
+   * Extracted from `takeCat` in 2.0, because §15's rounds need exactly this and nothing else that
+   * `takeCat` does: a new round is a new *opponent* on the same page, not a re-borrowed cat. Every
+   * reset in here was already load-bearing for a rematch (1.1's stale-mood note, 1.4's sweep beat),
+   * and a round is a rematch that skipped the paperwork — so a round that inherited any of it would
+   * reproduce bugs those notes were written about.
+   */
+  function rollStance(seed: number): void {
+    const root = catEl();
+    const now = performance.now();
+    boss.stance = pickStance(seed);
     boss.feint = false;
     boss.telegraphMul = 1;
     boss.slowUntil = 0;
@@ -2232,7 +2987,9 @@
     boss.anchorPx = 0;
     boss.lureMs = LURE_MS;
     boss.immuneMs = LURE_MS;
-    boss.regrowAt = now + STANCES[pickStance(arena.seed)].regrowMs;
+    // The round's own clock, so an escalated round is already fast on its first tick rather than
+    // taking one free interval at the old pace (§15).
+    boss.regrowAt = now + roundRegrowMs(STANCES[boss.stance].regrowMs, 'even', 1, arena.round);
     // Reset with everything else, or a rematch inherits the last fight's sweep beat and siege's
     // first tick lands as a double for no reason the player could have read.
     boss.regrows = 0;
@@ -2241,10 +2998,10 @@
     // stale tier would carry the previous board's verdict into the opening of this one.
     boss.mood = 'even';
     boss.groomedAt = now;
+    if (!root) return;
     root.dataset.mood = 'even';
     root.dataset.stance = boss.stance;
     bossPhase(root, 'stalk', now);
-    placeCat(root, r.left + r.width / 2, r.top + r.height / 2);
   }
 
   /** Give it back, from where the fight left it, and let it walk on. */
@@ -2266,6 +3023,10 @@
       endGrooming(root);
       delete root.dataset.stance;
       delete root.dataset.mood;
+      // The round goes with them: §7.2 says a fight leaves no trace, and a `data-` attribute left on
+      // <html> after the page is handed back is a trace. The stored best round is the one exception
+      // (§13.4 as amended), and it lives in storage rather than on the document.
+      delete document.documentElement.dataset.catRound;
       root.style.removeProperty('--boss-scale');
       document.dispatchEvent(
         new CustomEvent('cat:resume', { detail: { x: boss.x - root.offsetWidth / 2 } }),
@@ -2282,6 +3043,17 @@
   function close(): void {
     cancelAnimationFrame(arena.raf);
     arena.raf = 0;
+    /*
+     * The squad goes before the board does, and the order matters (§15).
+     *
+     * `disbandSquad` takes each kitten's progress mark off the claim it was holding. `free()` below
+     * restores the whole `style` attribute from its snapshot and would wipe a stray `--scrub`
+     * anyway — but only for elements that are *currently claimed*, and a kitten can be halfway
+     * through something that a pounce took back a frame ago. Clearing marks by owner rather than by
+     * board is the version that cannot leave one behind, which is pillar 2 and is not negotiable.
+     */
+    disbandSquad();
+    clearAllWash();
     for (const node of arena.claimed) free(node, false);
     arena.claimed = [];
     arena.freed = [];
@@ -2301,7 +3073,7 @@
      */
     document.documentElement.classList.remove('cat-arena-on');
     hideRing();
-    scrub.target = null;
+    dropHold(scrub);
     scrub.x = scrub.y = -1;
     scrub.vx = scrub.vy = 0;
     clearTreat();
@@ -2392,6 +3164,30 @@
       syncSound();
     });
     syncSound();
+
+    /*
+     * 2.0: which game (§15). Pressed means manual — 1.4's fight, held by hand.
+     *
+     * **It only ever takes effect on the next fight**, and that is a decision rather than a
+     * limitation. Swapping modes mid-fight would have to answer questions with no good answers:
+     * what happens to four kittens halfway through four holds, who is the boss hunting during the
+     * frame the pointer becomes a target again, and does a round counter survive becoming a fight
+     * that has rungs instead. §13.5's lesson was that intent and state disagreeing is where the
+     * bugs live, so the switch changes intent and the next `open()` reads it — one code path, no
+     * mid-air conversions.
+     */
+    const modeBtn = el('cat-manual-toggle') as HTMLButtonElement | null;
+    const syncMode = () => {
+      modeBtn?.setAttribute('aria-pressed', mode === 'manual' ? 'true' : 'false');
+    };
+    modeBtn?.addEventListener('click', () => {
+      mode = mode === 'manual' ? 'commander' : 'manual';
+      syncMode();
+      // Say what it will do, since it cannot do it yet. The HUD line is the arena's own voice
+      // (§6) and this is the one place it has to describe the *future*.
+      if (arena.on) caption(mode === 'manual' ? 'next fight: you play' : 'next fight: kittens play');
+    });
+    syncMode();
 
     btn.addEventListener('click', () => {
       if (blockedBecause()) {
@@ -2485,7 +3281,7 @@
         scrub.since = now;
         scrub.seen = now;
         scrub.inside = true;
-        scrub.target = null; // let `stepScrub` decide what is under the finger this frame
+        dropHold(scrub); // let `stepScrub` decide what is under the finger this frame
         touch.at = now;
         touch.onClaim = false;
       },
@@ -2504,7 +3300,9 @@
       if (e.pointerType === 'mouse') return;
       scrub.x = scrub.y = -1;
       scrub.ax = scrub.ay = -1;
-      scrub.target = null;
+      // The finger has gone, so the hold has — and its mark goes with it, or the claim keeps a
+      // half-full wash that `claim()` would snapshot as the style it arrived with (pillar 2).
+      dropHold(scrub);
       scrub.inside = false;
       hideRing();
     };
@@ -2592,6 +3390,27 @@
        * for the path that has worked since 0.5.
        */
       if (touch.at && !isTap(performance.now() - touch.at)) return;
+      /*
+       * §15's first order: **a click on a claim sends a kitten to it.**
+       *
+       * The disambiguation costs nothing because 1.2 already built it. `INTERACTIVE` above means a
+       * click on a link still navigates (§11), and `claimUnder` is the same hit test the pointer
+       * used to scrub with — so the two orders divide the page between them exactly the way the
+       * visitor would guess: *point at the thing you want back, or throw somewhere empty to pull
+       * the cat away.* Nothing needs teaching and nothing needs aiming.
+       *
+       * Ordering deliberately does **not** cost a treat. Treats are the throw's resource (§5.4) and
+       * making the free order compete with them would put a price on the only thing a commander
+       * does, in a mode whose whole premise is that doing nothing is allowed.
+       */
+      if (commanding()) {
+        const claim = claimUnder(e.clientX, e.clientY);
+        if (claim) {
+          order(claim, e.clientX, e.clientY);
+          touch.at = 0;
+          return;
+        }
+      }
       throwTreat(e.clientX, e.clientY);
       touch.at = 0;
     });
@@ -2612,10 +3431,27 @@
     // arena adds no other binding (§11 — the site's own shortcuts stay owned by
     // the pages that define them).
     window.addEventListener('keydown', (e) => {
+      // Somebody is at the keyboard, so somebody is here (§11 as amended in 2.0 — see the truce
+      // in `tick`). Any key, including the ones this fight has no opinion about.
+      scrub.seen = performance.now();
       // `want`, not `on`: Esc during the flood is the clearest case there is of an
       // interruption that must not have to wait for an animation to finish.
       if (e.key === 'Escape' && arena.want) truce();
     });
+
+    /*
+     * **Scrolling is presence, and until 2.0 it was not.**
+     *
+     * §11's truce clock was refreshed by `pointermove` alone, which made a very specific lie
+     * possible: a visitor reading with a scroll wheel and never moving the mouse looked, to the
+     * game, exactly like a visitor who had left. 1.3 met this from the other side — its harness
+     * wheeled the page for twenty seconds and the fight truced underneath it, and the note in the
+     * changelog fixed the *harness* by scrolling a different way. That was the wrong half to fix.
+     *
+     * It matters much more in commander mode, where reading while the squad works is not just
+     * allowed but the intended way to play. Passive, because this must never delay a scroll.
+     */
+    window.addEventListener('scroll', () => (scrub.seen = performance.now()), { passive: true });
 
     // Tab hidden long enough ends it: nobody comes back to a page mid-invasion.
     let hiddenAt = 0;

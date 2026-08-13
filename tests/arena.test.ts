@@ -1546,7 +1546,15 @@ describe('the cat’s writing (§8)', () => {
    * without once being chosen is either dead or gated on something the fight cannot produce,
    * and both are worth a red line.
    */
-  it('has no line that nothing can reach — the shadowing check 1.0 needed', () => {
+  /*
+   * **A generous explicit timeout, because this test's runtime is a property of the machine.**
+   * The grid is tens of thousands of `pickLine` calls by design — 1.4's note above explains why a
+   * coarse one invents shadows — and it measured 4214ms against vitest's 5000ms default. That is a
+   * test that passes alone and fails while a browser harness is running beside it, which is the
+   * least useful kind of red line: it says nothing about the code and it teaches everybody to
+   * re-run and shrug. Caught exactly that way, mid-2.0, with the fleet in the background.
+   */
+  it('has no line that nothing can reach — the shadowing check 1.0 needed', { timeout: 30_000 }, () => {
     const seen = new Set<string>();
     const endings = [undefined, 'win', 'lose', 'truce', 'truce-recover'] as const;
     const moods = ['bored', 'even', 'desperate'] as const;
@@ -1567,6 +1575,13 @@ describe('the cat’s writing (§8)', () => {
                       // hid `bluff-misses`, which needs exactly that value — the same coupling
                       // mistake as pinning `staleMs`, one loop over.
                       for (const lastStand of [false, true])
+                        // 2.0: §15's round beats are their own axis for the same reason
+                        // `lastStand` is — a field the sweep never sets is a branch it never
+                        // takes, and three lines would have been reported unreachable.
+                        for (const round of [undefined, 'clear', 'record', 'again'] as const)
+                    for (const commanding of [false, true])
+                        // 2.0: two lines in §8 teach a verb, and the modes have different ones.
+                        for (const commanding of [false, true])
                         for (const [rung, found] of [
                           [0, 0],
                           [0, 3],
@@ -1593,6 +1608,39 @@ describe('the cat’s writing (§8)', () => {
                         });
                         if (id) seen.add(id);
                       }
+    /*
+     * §15's axes get their own pass (2.0), and the shape of this is the lesson rather than the code.
+     *
+     * A round beat and a mode are caused by things none of the axes above describe — the board
+     * turning over, and which game the visitor chose — so they have to be varied, or the five lines
+     * that depend on them are branches the sweep never takes. But folding them into the grid above
+     * multiplies it eightfold for the sake of five lines, and it timed out at five seconds when I
+     * did exactly that. Independent axes deserve an independent pass: 1.4 learned the first half of
+     * this (`lastStand` derived from `interrupts` hid `bluff-misses`), and this is the other half.
+     */
+    for (const round of [undefined, 'clear', 'record', 'again'] as const)
+      for (const commanding of [false, true])
+        for (const territory of [0, 0.55, 0.8])
+          for (const ending of [undefined, 'win'] as const) {
+            const id = pickLine({
+              territory,
+              ammo: 1,
+              spent: 0,
+              freed: 0,
+              interrupts: 0,
+              idleMs: 0,
+              staleMs: 0,
+              collared: false,
+              mood: 'even',
+              rung: 0,
+              found: 1,
+              lastStand: false,
+              commanding,
+              ...(round ? { round } : {}),
+              ...(ending ? { ending } : {}),
+            });
+            if (id) seen.add(id);
+          }
     const unreachable = LINES.filter((l) => !seen.has(l.id)).map((l) => l.id);
     expect(unreachable, `unreachable: ${unreachable.join(', ')}`).toEqual([]);
   });
@@ -1611,7 +1659,7 @@ describe('the cat’s writing (§8)', () => {
    * this sweep uses the **real** `mood()` rather than a free variable, which is the only way to
    * ask "what does a fight actually say".
    */
-  it('has no line that only unreachable *combinations* can reach', () => {
+  it('has no line that only unreachable *combinations* can reach', { timeout: 30_000 }, () => {
     const seen = new Set<string>();
     for (const ending of [undefined, 'win', 'lose', 'truce', 'truce-recover'] as const)
       for (let t = 0; t <= 100; t++)
@@ -1625,6 +1673,14 @@ describe('the cat’s writing (§8)', () => {
                 for (const interrupts of [0, 1, 2, 3])
                   for (const idleMs of [0, 9000])
                     for (const staleMs of [0, 25_000])
+                    /*
+                     * 2.0: §15's round beats, and they get their own loop for the reason 1.4
+                     * learned the hard way when `lastStand: interrupts === 2` quietly hid
+                     * `bluff-misses` — a field derived from another field is a field that cannot
+                     * be varied. A round beat is caused by the *board turning over*, which none
+                     * of the axes above describe, so it is independent of every one of them.
+                     */
+                    for (const round of [undefined, 'clear', 'record', 'again'] as const)
                     for (const [rung, found] of [
                       [0, 0],
                       [1, 3],
@@ -1651,6 +1707,39 @@ describe('the cat’s writing (§8)', () => {
                       const id = pickLine({ ...partial, mood: m } as FightState);
                       if (id) seen.add(id);
                     }
+    /*
+     * §15's axes get their own pass (2.0), and the shape of this is the lesson rather than the code.
+     *
+     * A round beat and a mode are caused by things none of the axes above describe — the board
+     * turning over, and which game the visitor chose — so they have to be varied, or the five lines
+     * that depend on them are branches the sweep never takes. But folding them into the grid above
+     * multiplies it eightfold for the sake of five lines, and it timed out at five seconds when I
+     * did exactly that. Independent axes deserve an independent pass: 1.4 learned the first half of
+     * this (`lastStand` derived from `interrupts` hid `bluff-misses`), and this is the other half.
+     */
+    for (const round of [undefined, 'clear', 'record', 'again'] as const)
+      for (const commanding of [false, true])
+        for (const territory of [0, 0.55, 0.8])
+          for (const ending of [undefined, 'win'] as const) {
+            const id = pickLine({
+              territory,
+              ammo: 1,
+              spent: 0,
+              freed: 0,
+              interrupts: 0,
+              idleMs: 0,
+              staleMs: 0,
+              collared: false,
+              mood: 'even',
+              rung: 0,
+              found: 1,
+              lastStand: false,
+              commanding,
+              ...(round ? { round } : {}),
+              ...(ending ? { ending } : {}),
+            });
+            if (id) seen.add(id);
+          }
     const dead = LINES.filter((l) => !seen.has(l.id)).map((l) => l.id);
     expect(dead, `never said in a real fight: ${dead.join(', ')}`).toEqual([]);
   });

@@ -250,10 +250,16 @@ export const STILL_PX = 6;
  */
 export const TAP_MS = 260;
 
-/** Fraction of a scrub completed after holding still this long. */
-export function scrubProgress(heldMs: number): number {
+/**
+ * Fraction of a scrub completed after holding still this long.
+ *
+ * `over` defaults to `SCRUB_MS` — the player's hold, unchanged since 0.3 and the number every
+ * measurement in §5.2/§10 is about. It is a parameter because 2.0 gave the *kitten* a different one
+ * (`KITTEN_WORK_MS`), for a reason that is about the cat rather than about patience: see §15.
+ */
+export function scrubProgress(heldMs: number, over = SCRUB_MS): number {
   if (!(heldMs > 0)) return 0;
-  return heldMs >= SCRUB_MS ? 1 : heldMs / SCRUB_MS;
+  return heldMs >= over ? 1 : heldMs / over;
 }
 
 /**
@@ -897,6 +903,22 @@ export const WIN_BEAT_MS = 2200;
 /** The beat after a loss. Shorter: nobody wants to sit in it. */
 export const LOSE_BEAT_MS = 1600;
 
+/**
+ * `[PH 1500]` ms between one round and the next (§15, 2.0).
+ *
+ * Shorter than `WIN_BEAT_MS`, and the difference is the whole distinction between a round and a
+ * fight. A win beat is an *exit*: the cat takes one thing back, says its line, and the page is
+ * handed over — 2200ms of theatre for something that is finishing. A round beat is a **breath**:
+ * long enough to read four words and see the number go up, short enough that the next board arrives
+ * while the visitor is still watching the same thing happen. The T-Rex restarts before you have
+ * finished being annoyed, and that is why it is easy to keep playing.
+ *
+ * "Broken looks like": under ~800ms the round line cannot be read and the board changing looks like
+ * a glitch; over `WIN_BEAT_MS` the endless mode acquires a loading screen between every round,
+ * which is the one thing an idle game cannot afford.
+ */
+export const ROUND_BEAT_MS = 1500;
+
 /* ------------------------------------------------------------------ *
  * Aggression (§7.3) — difficulty as characterisation
  * ------------------------------------------------------------------ */
@@ -1218,6 +1240,25 @@ export interface FightState {
   lastStand?: boolean;
   /** Which ending, if the fight is ending. */
   ending?: 'win' | 'lose' | 'truce' | 'truce-recover';
+  /**
+   * Is this commander mode (§15, 2.0)?
+   *
+   * The dialogue has to know, because two lines in this table teach a *verb* and the two modes have
+   * different ones. Nothing else in §8 branches on it: the cat's voice is the cat's voice whoever is
+   * holding the claims, and a second script for the same animal would be a worse document as well as
+   * a worse fight.
+   */
+  commanding?: boolean;
+  /**
+   * Which round beat is playing, in commander mode (§15, 2.0).
+   *
+   * Separate from `ending` because a round turning over is the opposite of an ending: the fight
+   * continues, the cat has not left, and nothing about the page is being handed back. Folding it
+   * into `ending` would have made every `s.ending === 'win'` check in this table describe a round
+   * clear as well — including §9.4's rematch offer, which would then be offered every twenty
+   * seconds to somebody who is not being asked to fight again because they never stopped.
+   */
+  round?: 'clear' | 'record' | 'again';
 }
 
 /**
@@ -1296,6 +1337,35 @@ export const LINES: readonly { id: string; text: string; when: (s: FightState) =
   { id: 'truce', text: 'sensible.', when: (s) => s.ending === 'truce' },
 
   /*
+   * ---- §15's round beats (2.0), which are not endings
+   *
+   * A round is not a fight, so these sit apart from the four lines above and say something the
+   * endings cannot: the cat is *still here*. It has just lost a board and the next one is already
+   * being dealt, which is the difference between "keep it, it's drafty anyway" and "the next one's
+   * mine" — one is a cat leaving and the other is a cat rolling its sleeves up.
+   *
+   * They are said by id rather than chosen (`clearRound` and `restartRound` call `say` directly at
+   * the exact moment the board turns over), and they live in this table anyway because §8 is meant
+   * to be the one place the cat's voice is written down. The `when` clauses keep that honest: a line
+   * with no reachable state would be a line nobody can audit.
+   */
+  {
+    id: 'round-record',
+    text: 'nobody’s got this far. yet.',
+    when: (s) => s.round === 'record',
+  },
+  {
+    id: 'round-clear',
+    text: 'fine. the next one’s mine.',
+    when: (s) => s.round === 'clear',
+  },
+  {
+    id: 'round-again',
+    text: 'told you. from the top.',
+    when: (s) => s.round === 'again',
+  },
+
+  /*
    * ---- §9.4, at the top of a laddered fight
    *
    * The handicap is revealed *as the fight opens* rather than before the press, so something
@@ -1367,7 +1437,25 @@ export const LINES: readonly { id: string; text: string; when: (s: FightState) =
     // safe context, exactly as §7.4 asks.
     id: 'teach-hold',
     text: 'hold still on it. it comes back.',
-    when: (s) => !s.ending && s.freed === 0 && s.spent === 0 && s.territory > 0.5,
+    when: (s) => !s.ending && !s.commanding && s.freed === 0 && s.spent === 0 && s.territory > 0.5,
+  },
+  {
+    /*
+     * The same row for the other game (§15, 2.0).
+     *
+     * A commander is never told to hold anything, because holding is not one of their verbs — the
+     * kittens do it. Left ungated, 1.3's teach line taught the wrong game to every visitor who met
+     * the default mode, which a browser run showed it doing over and over while a kitten worked
+     * beside the words.
+     *
+     * What it teaches instead is the *only* thing worth knowing: pointing is allowed. Not "you must
+     * point" — the mode's whole promise is that the round resolves either way — so the line names
+     * the option and leaves it there. Same gate as above (the cold opening, inside the grace), so a
+     * visitor who has already given an order never sees it.
+     */
+    id: 'teach-order',
+    text: 'point at one. they’ll fetch it.',
+    when: (s) => !s.ending && !!s.commanding && s.freed === 0 && s.spent === 0 && s.territory > 0.5,
   },
   {
     // Re-gated in 1.3: "you can stop any time" must read as mercy to someone who has

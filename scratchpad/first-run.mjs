@@ -63,8 +63,33 @@ const check = (name, ok, detail = '') => {
   if (!ok) failures++;
 };
 
+/*
+ * 2.0: these checks measure **manual mode** (§3's fight — a pointer that holds). Commander mode is
+ * the default now, so the mode has to be chosen before a fight is opened, or the pointer is not the
+ * verb any more. Pressed the way a visitor presses it, and waited on `aria-pressed` rather than on a
+ * timeout, because the chip's handler is attached by CatArena's own init.
+ */
+const PICK_MANUAL = () => {
+  const pick = () => {
+    const b = document.getElementById('cat-manual-toggle');
+    if (!b) return false;
+    if (b.getAttribute('aria-pressed') === 'true') return true;
+    b.click();
+    return b.getAttribute('aria-pressed') === 'true';
+  };
+  addEventListener('DOMContentLoaded', () => {
+    if (pick()) return;
+    const t = setInterval(() => {
+      if (pick()) clearInterval(t);
+    }, 40);
+    setTimeout(() => clearInterval(t), 8000);
+  });
+};
+
 const browser = await chromium.launch({ executablePath, headless: true });
-const page = await browser.newPage();
+const context = await browser.newContext();
+await context.addInitScript(PICK_MANUAL);
+const page = await context.newPage();
 
 /** A cold visitor: fresh context, no treats found yet, nothing stored. */
 await page.goto(BASE, { waitUntil: 'networkidle' });

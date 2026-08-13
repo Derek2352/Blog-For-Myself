@@ -149,6 +149,25 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
       <span class="cat-arena-pip" aria-hidden="true"></span>
       <span>Cat sounds</span>
     </button>
+    {/* 2.0: which game. Off means commander mode — kittens do the work and you give
+        orders or nothing at all (§15); on means 1.4's fight, where you hold the claims
+        yourself (§3's three verbs, §9.4's ladder). The third control in the HUD, for
+        the reason the second one is here: §13.1 settled that a game does not belong in
+        the accessibility panel, and "which game" is even more a game than "sound" is.
+
+        The default is the gentler one, and the label is written from the visitor's side
+        rather than the code's — nobody knows what "commander mode" is, but everybody
+        knows what "play it yourself" means. Session-only (§13.4); a refresh comes back
+        a spectator. */}
+    <button
+      id="cat-manual-toggle"
+      class="cat-arena-btn tap-safe"
+      type="button"
+      aria-pressed="false"
+    >
+      <span class="cat-arena-pip" aria-hidden="true"></span>
+      <span>Play it yourself</span>
+    </button>
     {/* Filled in by CatArena.astro, which is the only thing that knows *why* the
         arena can't open — reduced motion, or a pointer that can't hold still on a
         thing. Rendered empty rather than with a guess, so the widget can never
