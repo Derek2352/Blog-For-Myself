@@ -166,8 +166,16 @@ let reclaimed = 0;
  * treatless fight is winnable doing only the taught verb, and one win still has to happen. It is the
  * *budget* being made big enough to be evidence, which is the whole of §12.1's fixture rule applied to
  * a stochastic gate.
+ *
+ * **One constant, used in both places.** Raising this from six to twelve without noticing that the
+ * rematch block below was gated on a *second*, hard-coded `fight < 5` bought six fights that never
+ * opened: each ran its forty-second loop against a closed arena, reclaimed nothing, and reported the
+ * ribbon left over from the last real truce. The log said `reclaimed=0 ... ribbon="sensible."` six
+ * times in a row, which reads like the game refusing to start and was the harness never asking it to.
+ * A budget expressed as two numbers is a budget that will disagree with itself.
  */
-for (let fight = 0; fight < 12 && !won; fight++) {
+const FIGHTS = 12;
+for (let fight = 0; fight < FIGHTS && !won; fight++) {
   // Open a fresh fight for this attempt.
   if (fight === 0) {
     const freshToggle = await page.$('#cat-arena-toggle');
@@ -276,7 +284,7 @@ for (let fight = 0; fight < 12 && !won; fight++) {
     }
   }
   console.log(`  fight ${fight}: reclaimed=${fightReclaimed} won=${won}${ribbon ? ` ribbon="${ribbon}"` : ''}`);
-  if (!won && fight < 5) {
+  if (!won && fight < FIGHTS - 1) {
     // Rematch: the toggle is the only way in, and pressing it again is the acceptance
     // (§9.4). Wait for the page to restore, then re-open.
     await page.waitForFunction(

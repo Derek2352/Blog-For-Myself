@@ -2442,6 +2442,15 @@ come from what the assertion actually needs (no commitment, no window, nothing m
 from what feels like a comfortable margin. **A fixture used as a comfort blanket is just a second way to
 fail a passing build.**
 
+**And `first-run`'s budget was expressed as two numbers, which then disagreed.** Raising the rematch
+budget from six to twelve missed a *second*, hard-coded `fight < 5` gating the rematch itself, so six of
+the twelve fights never opened: each ran its forty-second loop against a closed arena, reclaimed
+nothing, and reported the ribbon left over from the last real truce. Six lines of
+`reclaimed=0 ... ribbon="sensible."` read exactly like the game refusing to start, and were the harness
+never asking it to — the fix I had just written for a flaky gate, failing twice as hard and for a new
+reason. There is one `FIGHTS` constant now. **A budget expressed as two numbers is a budget that will
+disagree with itself**, and a fix verified only by "the code is more correct now" is not verified.
+
 ---
 
 ## 13. The arena toggle
