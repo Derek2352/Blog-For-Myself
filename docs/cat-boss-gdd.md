@@ -1907,6 +1907,17 @@ applies, because otherwise it faithfully measures a *different* guarantee — he
 it under the wrong name. The fix is four lines in the pick and a paragraph in §15.3 saying out loud
 that some of the board is unorderable.
 
+**Then the same shape a third time, in the oldest place it could hide: a *precondition* asserted
+instead of retried.** `touch-fight` needs a claim that sits inside a link — §5.1 permits it and the
+check exists because a long press on a link is four native gestures at once. On this sweep it reported
+*"none on this board"* and skipped five checks with it, on a build that had not touched touch mode.
+`pickClaims` seeds from the clock, so which elements a fight claims is a property of the **deal**, and
+a deal is not a build. It deals again now, up to six times, and reports which deal offered the case
+(it took two). Generally: **a harness may assert on what the build does and never on what a random
+roll happened to hand it** — the three faults 2.0 found in one afternoon are all that sentence, from
+three directions, and the tell is always the same, a red whose detail line describes the *fixture*
+rather than the behaviour.
+
 **A half-fixed harness fault comes back as its own sibling.** 1.4 measured that the lure strategy
 plateaus against siege, pinned a leaper in `arena8` section 1, and left section 2 rolling freely.
 Section 2 duly failed here — "16 reclaimed, 2 left" — on a build that had not touched a manual fight,
