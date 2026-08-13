@@ -85,6 +85,15 @@ export const ROUND_AGGRO_CAP = 1.35; // :377
 export const WATCH_TRUCE_MS = 180_000; // :479
 export const BEST_ROUND_KEY = 'cat-best-round'; // :502
 
+/* §2.2's card scale: every distance constant on the card's board is the page value / 5,
+ * while every duration is unchanged. Mirrored from src/lib/card.ts. */
+export const CARD_SCALE = 1 / 5;
+export const CARD_STALK_SPEED = STALK_SPEED * CARD_SCALE; // 34
+export const CARD_KITTEN_SPEED = KITTEN_SPEED * CARD_SCALE; // 50
+export const CARD_POUNCE_RANGE = POUNCE_RANGE * CARD_SCALE; // 18
+export const CARD_HIT_RADIUS = 46 * CARD_SCALE; // ~9
+export const CARD_SAFE_FLEE_PX = SAFE_FLEE_PX * CARD_SCALE; // ~85
+
 /** The same walk-and-hold arithmetic `squad.ts` proves, for a kitten rather than a hand. */
 export const SAFE_WORK_PX = POUNCE_RANGE + STALK_SPEED * AGGRO_DESPERATE * (SCRUB_MS / 1000);
 
@@ -97,17 +106,23 @@ export const BASE = process.env.BASE_URL ?? 'http://localhost:4416';
  * Machine-state readers. Every assertion in the fleet reads one of these; none of them reads prose.
  * §12 has recorded the alternative often enough — a check that reads a caption is a check that passes
  * while the mechanic is broken.
+ *
+ * 2.2: these read the **card game** now. The page-board game is gone (§2.2's drop), so claims are
+ * `.cat-tile[data-state="claimed"]`, the boss is `[data-boss]`, and the "arena on" question is
+ * whether the card's panel is open.
  * ------------------------------------------------------------------ */
-export const CLAIMS = `document.querySelectorAll('.cat-claimed').length`;
+export const CLAIMS = `document.querySelectorAll('.cat-tile[data-state="claimed"]').length`;
+export const FREED = `document.querySelectorAll('.cat-tile[data-state="unclaimed"]').length`;
 export const AMMO = `document.querySelectorAll('#cat-score .cat-paw.got').length`;
 export const FOUND = `document.querySelectorAll('#cat-score .cat-paw.got').length`;
-export const ARMED = `document.documentElement.classList.contains('cat-arena-on')`;
-export const STANCE = `document.getElementById('site-cat')?.dataset.stance ?? ''`;
-export const MOOD = `document.getElementById('site-cat')?.dataset.mood ?? ''`;
-export const ROUND = `Number(document.documentElement.dataset.catRound ?? 0)`;
-export const KITS = `document.querySelectorAll('.cat-kit').length`;
-export const MINE = `parseFloat(document.querySelector('#cat-territory .territory-mine')?.style.width) || 0`;
-export const RIBBON = `(() => { const r = document.getElementById('cat-ribbon'); return !r || r.hidden ? '' : r.textContent.trim(); })()`;
+export const ARMED = `!document.querySelector('#cat-card-panel').hidden`;
+export const STANCE = `document.querySelector('[data-boss]')?.dataset.stance ?? ''`;
+export const MOOD = `document.querySelector('[data-boss]')?.dataset.mood ?? ''`;
+export const PHASE = `document.querySelector('[data-boss]')?.dataset.phase ?? ''`;
+export const ROUND = `Number((document.querySelector('[data-round]')?.textContent ?? '0').replace(/\\D/g, '')) || 0`;
+export const KITS = `document.querySelectorAll('.cat-card-kit').length`;
+export const MINE = `parseFloat(document.querySelector('[data-territory]')?.style.getPropertyValue('--territory')) || 0`;
+export const RIBBON = `(() => { const r = document.querySelector('[data-ribbon]'); return !r || r.hidden ? '' : r.textContent.trim(); })()`;
 
 /**
  * The page as pillar 2 defines it: every element's tag, classes and inline style, in order.
@@ -170,14 +185,14 @@ export async function launch(opts = {}) {
 
 /**
  * 2.0: **say which game before opening one.** Commander mode is the default, so a harness measuring
- * §3's manual fight has to press the HUD chip first or the pointer is not the verb and half its
+ * §3's manual fight has to press the mode chip first or the pointer is not the verb and half its
  * checks are asking a spectator to hold still. Pressed the way a visitor presses it, and waited on
- * `aria-pressed` rather than on a timeout, because the chip's handler is attached by CatArena's own
- * init and an init script runs before it.
+ * `aria-pressed` rather than on a timeout. 2.2: the chip lives in the card header now
+ * (`#cat-card-mode`), not the page HUD.
  */
 const PICK_MANUAL = () => {
   const pick = () => {
-    const b = document.getElementById('cat-manual-toggle');
+    const b = document.getElementById('cat-card-mode');
     if (!b) return false;
     if (b.getAttribute('aria-pressed') === 'true') return true;
     b.click();
@@ -279,37 +294,39 @@ export const bounded = (page, fn, ms, arg = undefined) =>
 /**
  * Press the toggle and wait for the state change to have **landed**.
  *
- * 1.3 put a ~1.9s ink curtain between the press and the fight, which turned every `click` followed
- * by a 120–200ms wait into a race the script always loses; the first symptom was
- * `getBoundingClientRect` on a null `.cat-claimed`. Waiting on the observable is both correct and,
- * on the close path, usually shorter.
+ * 2.2: the toggle is the collapsed card icon and the fight opens immediately — there is no ink
+ * curtain to wait through. What "landed" looks like is the panel visible with tiles dealt.
  */
 export async function press(page, { timeout = 7000, tap = false } = {}) {
-  const was = await page.evaluate(() => !!document.querySelector('.cat-claimed'));
-  if (tap) await page.locator('#cat-arena-toggle').tap();
-  else await page.click('#cat-arena-toggle');
-  await page.waitForFunction((w) => !!document.querySelector('.cat-claimed') !== w, was, { timeout }).catch(() => {});
+  const was = await page.evaluate(() => !document.querySelector('#cat-card-panel').hidden);
+  if (tap) await page.locator('#cat-card-toggle').tap();
+  else await page.click('#cat-card-toggle');
+  await page.waitForFunction(
+    (w) => (!document.querySelector('#cat-card-panel').hidden) !== w,
+    was,
+    { timeout },
+  ).catch(() => {});
 }
 
 /**
- * End the fight and wait for the page to actually be back.
+ * End the fight and wait for the card to actually be back.
  *
- * `aria-pressed` follows intent (§13.5), so it goes false while the exit transition is still up and
- * `close()` has not run — a snapshot taken there caught `cat-arena-on` still on `<html>` and reported
- * fifteen differences. What "restored" looks like is the *claims* being gone. On a phone there is no
- * Escape key, so the toggle is the way out.
+ * Escape closes the card (the card's own truce). On a phone there is no Escape key, so the
+ * close button is the way out.
  */
 export async function release(page, { timeout = 8000, tap = false } = {}) {
-  if (tap) await page.locator('#cat-arena-toggle').tap();
+  if (tap) await page.locator('#cat-card-close').tap();
   else await page.keyboard.press('Escape');
-  await page.waitForFunction(() => !document.querySelector('.cat-claimed'), undefined, { timeout }).catch(() => {});
+  await page
+    .waitForFunction(() => document.querySelector('#cat-card-panel').hidden, undefined, { timeout })
+    .catch(() => {});
 }
 
-/** Both halves: the board gone *and* the class gone. */
+/** Both halves: the board gone *and* the panel hidden. */
 export async function overFor(page, ms = 8000) {
   await page
     .waitForFunction(
-      () => !document.querySelector('.cat-claimed') && !document.documentElement.classList.contains('cat-arena-on'),
+      () => document.querySelector('#cat-card-panel').hidden && !document.querySelectorAll('.cat-tile').length,
       undefined,
       { timeout: ms },
     )
@@ -359,31 +376,31 @@ export async function deal(page, want, { deals = 6, settle = 220, tap = false, r
  * ------------------------------------------------------------------ */
 export const wants = {
   /**
-   * A claim the pointer can sit on without scrolling: high enough to be clear of the header band,
-   * clear of the cat's strip at the bottom, and not so tall that its centre is nowhere near it.
+   * A claimed tile the pointer can sit on: on the card's board, clear of the boss's strip,
+   * and not so small its centre is nowhere near it. Card-relative, so no scrolling is needed —
+   * §2.2's whole point.
    */
   spot:
-    ({ top = 160, bottom = 40, maxHeight = 420 } = {}) =>
+    () =>
     (page) =>
-      page.evaluate(
-        ([t, b, h]) => {
-          const r = [...document.querySelectorAll('.cat-claimed')]
-            .map((n) => n.getBoundingClientRect())
-            .filter((c) => c.top > t && c.bottom < innerHeight - b && c.height < h)[0];
-          return r ? { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } : null;
-        },
-        [top, bottom, maxHeight],
-      ),
+      page.evaluate(() => {
+        const b = document.querySelector('[data-board]')?.getBoundingClientRect();
+        if (!b) return null;
+        const r = [...document.querySelectorAll('.cat-tile[data-state="claimed"]')]
+          .map((n) => n.getBoundingClientRect())
+          .filter((c) => c.top > b.top + 6 && c.bottom < b.bottom - 6)[0];
+        return r ? { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } : null;
+      }),
 
   /**
-   * A stance from `list`, and by default a claim **in view** to use it against.
+   * A stance from `list`, and by default a claim **on the board** to use it against.
    *
    * Both in one look because §9.3's stances are not interchangeable opponents: a **sleepy** cat will
    * not interrupt a hold at all, and a **siege** cat cannot reach anything off the floor. Neither is
    * a bug, and a check that says "a fight can be lost" has to be given a cat that can win one.
    *
    * `claims` is three-valued because the copies this replaced were, and flattening them broke a
-   * harness. `'inView'` is `arena2`/`arena4`/`arena7`'s condition — a claim in the reachable band.
+   * harness. `'inView'` is `arena2`/`arena4`/`arena7`'s condition — a claim on the reachable board.
    * `'any'` is `arena8`/`battle`'s — the board merely has to exist, which mattered because a deal
    * checked immediately after a re-open can catch a fight whose claims are not placed yet; converting
    * `battle` to `'ignore'` sent three checks red, including a treat that never left the HUD.
@@ -391,18 +408,13 @@ export const wants = {
    * which cat turned up. **The distinctions between copies of a helper are usually load-bearing.**
    */
   stance:
-    (list, { claims = 'inView', ...spotOpts } = {}) =>
+    (list, { claims = 'inView' } = {}) =>
     async (page) => {
-      const got = await page.evaluate(
-        ([t, b, h]) => ({
-          stance: document.getElementById('site-cat')?.dataset.stance ?? '',
-          all: document.querySelectorAll('.cat-claimed').length,
-          inView: [...document.querySelectorAll('.cat-claimed')]
-            .map((n) => n.getBoundingClientRect())
-            .filter((r) => r.top > t && r.bottom < innerHeight - b && r.height < h).length,
-        }),
-        [spotOpts.top ?? 160, spotOpts.bottom ?? 40, spotOpts.maxHeight ?? 420],
-      );
+      const got = await page.evaluate(() => ({
+        stance: document.querySelector('[data-boss]')?.dataset.stance ?? '',
+        all: document.querySelectorAll('.cat-tile[data-state="claimed"]').length,
+        inView: document.querySelectorAll('.cat-tile[data-state="claimed"]').length,
+      }));
       if (!list.includes(got.stance)) return null;
       if (claims === 'inView' && got.inView === 0) return null;
       if (claims === 'any' && got.all === 0) return null;
@@ -410,120 +422,84 @@ export const wants = {
     },
 
   /**
-   * A claim scrolled so its centre sits `at` px down the screen, and the point to hold.
+   * A claimed tile whose centre sits at `at` in the card's board coords, and the point to hold.
    *
-   * Two things in here are load-bearing and both were wrong first time.
-   *
-   * **The tolerance.** A first version returned the first claim it could hit without checking that
-   * the scroll had put it where it asked, so a claim near the top of the document — which cannot be
-   * pushed down, because `want` clamps at 0 — came back reported as "high" while sitting 188px from
-   * the cat. Every conclusion was then wrong in the same direction: the fight was played in the
-   * danger band and the harness called it the safe one.
-   *
-   * **The settle.** The next version hit-tested straight after `scrollTo` and got the sticky header
-   * at every height. A scroll-dependent hit-test needs the scroll to be *finished*, and this site
-   * reveals content with a `translateY` transition, so a claim scrolled into view keeps travelling
-   * for a few hundred ms — measured, a claim spanning y 137..156 was y 126..145 sixty milliseconds
-   * later. Waits for the element to stop moving rather than for a clock.
+   * 2.2: the card has no scroll — the whole board is on screen by construction — so "placed"
+   * becomes "is this tile actually at that spot on the board". `at` is in board coordinates
+   * (0..boardW, 0..boardH), matching how the card game positions the boss and kittens.
    */
   placed:
-    (at, { tol = 60, insideLink = null, band = null } = {}) =>
+    (at, { tol = 30 } = {}) =>
     (page) =>
       page.evaluate(
-        async ([atPx, tolPx, wantLink, bandTop, bandBottom]) => {
-          const stable = async (el) => {
-            let last = null;
-            for (let i = 0; i < 40; i++) {
-              await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 25)));
-              const t = el.getBoundingClientRect().top;
-              if (last !== null && Math.abs(t - last) < 0.5) return;
-              last = t;
-            }
-          };
-          const maxScroll = document.documentElement.scrollHeight - innerHeight;
-          for (const el of document.querySelectorAll('.cat-claimed')) {
-            if (wantLink === true && !el.closest('a[href]')) continue;
-            if (wantLink === false && el.closest('a[href]')) continue;
-            const r0 = el.getBoundingClientRect();
-            const target = Math.max(0, Math.min(maxScroll, Math.round(r0.top + scrollY + r0.height / 2 - atPx)));
-            scrollTo({ top: target, behavior: 'instant' });
-            await stable(el);
+        async ([atX, atY, tolPx]) => {
+          const board = document.querySelector('[data-board]');
+          if (!board) return null;
+          const b = board.getBoundingClientRect();
+          const boss = document.querySelector('[data-boss]');
+          const bossRect = boss?.getBoundingClientRect();
+          const cx = bossRect ? bossRect.left + bossRect.width / 2 : 0;
+          const cy = bossRect ? bossRect.top + bossRect.height / 2 : 0;
+          for (const el of document.querySelectorAll('.cat-tile[data-state="claimed"]')) {
             const r = el.getBoundingClientRect();
-            const x = Math.round(Math.min(Math.max(r.left + r.width / 2, 40), innerWidth - 40));
+            const x = Math.round(r.left + r.width / 2);
             const y = Math.round(r.top + r.height / 2);
-            if (Math.abs(y - atPx) > tolPx) continue; // the scroll could not put it where asked
-            if (bandTop !== null && (y < bandTop || y > innerHeight - bandBottom)) continue;
-            if (document.elementFromPoint(x, y)?.closest('.cat-claimed') !== el) continue;
-            const cat = document.getElementById('site-cat').getBoundingClientRect();
+            const bx = x - b.left;
+            const by = y - b.top;
+            if (Math.abs(bx - atX) > tolPx || Math.abs(by - atY) > tolPx) continue;
             return {
               x,
               y,
-              d: Math.round(Math.hypot(x - (cat.left + cat.width / 2), y - (cat.top + cat.height / 2))),
-              href: el.closest('a[href]')?.getAttribute('href') ?? null,
+              d: Math.round(Math.hypot(x - cx, y - cy)),
+              href: null,
             };
           }
           return null;
         },
-        [at, tol, insideLink, band ? band.top : null, band ? band.bottom : 0],
+        [at.x ?? 0, at.y ?? 0, tol],
       ),
 
   /**
-   * A claim a commander can actually give an order about: on screen, hit-testable, and **not owned
-   * by the page**.
-   *
-   * That last clause is 2.0's measured fault. 1.2 split `PROTECTED` from `INTERACTIVE` so a claimed
-   * card is still a card you can click through, so a click on a claim inside a link navigates — which
-   * ends the fight, and looked exactly like an order going missing.
+   * A claim a commander can actually give an order about: on the board, hit-testable, and **not
+   * underneath a kitten** (an order aimed at a claim a kitten is already standing on reads as a
+   * no-op to the squad, so the check would be measuring the fixture rather than the mechanic).
    */
   orderable:
-    ({ top = 200, bottom = 150, awayFrom = '.cat-kit' } = {}) =>
+    ({ awayFrom = '.cat-card-kit' } = {}) =>
     (page) =>
       page.evaluate(
-        ([t, b, away, INTER]) => {
+        ([away]) => {
           const centre = (el) => {
             const r = el.getBoundingClientRect();
             return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
           };
           const others = [...document.querySelectorAll(away)].map(centre);
           let best = null;
-          for (const el of document.querySelectorAll('.cat-claimed')) {
+          for (const el of document.querySelectorAll('.cat-tile[data-state="claimed"]')) {
             const r = el.getBoundingClientRect();
-            if (r.top < t || r.bottom > innerHeight - b) continue;
             const x = Math.round(r.left + r.width / 2);
             const y = Math.round(r.top + r.height / 2);
             const at = document.elementFromPoint(x, y);
-            if (at?.closest('.cat-claimed') !== el) continue;
-            if (at.closest(INTER) || at.closest('#cat-hud')) continue;
+            if (at?.closest('.cat-tile') !== el) continue;
             const gap = others.length ? Math.min(...others.map((o) => Math.hypot(o.x - x, o.y - y))) : Infinity;
             if (!best || gap > best.away) best = { x, y, away: Math.round(gap === Infinity ? 0 : gap) };
           }
           return best;
         },
-        [top, bottom, awayFrom, INTERACTIVE],
+        [awayFrom],
       ),
 
-  /** A link inside a given band of the viewport, scrolled there and hit-tested. */
+  /** A link inside the page (still a thing worth asserting in 2.2 — the card must not eat it). */
   linkInBand:
-    ({ from, to } = {}) =>
+    ({ from = 0, to = 100000 } = {}) =>
     (page) =>
       page.evaluate(
         async ([bandFrom, bandTo]) => {
-          const stable = async (el) => {
-            let last = null;
-            for (let i = 0; i < 40; i++) {
-              await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 25)));
-              const t = el.getBoundingClientRect().top;
-              if (last !== null && Math.abs(t - last) < 0.5) return;
-              last = t;
-            }
-          };
-          const maxScroll = document.documentElement.scrollHeight - innerHeight;
           const mid = (bandFrom + bandTo) / 2;
           for (const link of document.querySelectorAll('main a[href]')) {
             const r0 = link.getBoundingClientRect();
-            const target = Math.max(0, Math.min(maxScroll, Math.round(r0.top + scrollY + r0.height / 2 - mid)));
+            const target = Math.max(0, Math.min(document.documentElement.scrollHeight - innerHeight, Math.round(r0.top + scrollY + r0.height / 2 - mid)));
             scrollTo({ top: target, behavior: 'instant' });
-            await stable(link);
             const r = link.getBoundingClientRect();
             const x = Math.round(r.left + r.width / 2);
             const y = Math.round(r.top + r.height / 2);
@@ -555,55 +531,56 @@ export const wants = {
  * ------------------------------------------------------------------ */
 
 /**
- * A point that belongs to nobody — no link, no HUD, optionally no claim — so a click there is
- * unambiguously a throw and a rest there is unambiguously not playing.
- *
- * Its own function because it must be re-asked after **every** scroll: coordinates found before a
- * scroll point at whatever moved into them, and on this site that is usually a link. Uses
- * `INTERACTIVE` and not `PROTECTED` — the protected list matches `<main tabindex="-1">`, which is how
- * three harnesses came to agree that throwing worked while every scan was skipping the content area.
+ * A point inside the card's board that belongs to nobody — no tile, optionally no claim —
+ * so a click there is unambiguously a throw. 2.2: the board is the game surface, and there
+ * is no page to scroll, so this is asked once and stays valid.
  */
 export async function idlePoint(page, { avoidClaims = true } = {}) {
   return page.evaluate(
-    ([avoid, INTER]) => {
-      for (let y = 150; y < innerHeight - 70; y += 14)
-        for (let x = 30; x < innerWidth - 30; x += 14) {
+    ([avoid]) => {
+      const board = document.querySelector('[data-board]');
+      if (!board) return null;
+      const b = board.getBoundingClientRect();
+      for (let y = b.top + 10; y < b.bottom - 10; y += 12)
+        for (let x = b.left + 10; x < b.right - 10; x += 12) {
           const el = document.elementFromPoint(x, y);
           if (!el) continue;
-          if (el.closest(INTER) || el.closest('#cat-hud')) continue;
-          if (avoid && el.closest('.cat-claimed')) continue;
+          if (el.closest('.cat-tile')) continue;
+          if (avoid && el.closest('.cat-tile[data-state="claimed"]')) continue;
           return { x, y };
         }
       return null;
     },
-    [avoidClaims, INTERACTIVE],
+    [avoidClaims],
   );
 }
 
 /**
  * The nearest throwable point to somewhere in particular.
  *
- * `avoidClaims` defaults to **false**, which is what the three copies this replaced did — they aim at
- * a far corner, where claims are unlikely, and excluding them would have changed which point they
- * picked. It has to be `true` when aiming *at the cat*, because the cat usually stands on a claim and
- * a click on a claim throws nothing at all: `battle`'s control throw did exactly that and reported "5
- * in hand" with no treat on the board. Two callers, two correct answers, so it is an argument.
+ * `avoidClaims` defaults to **false** — the three copies this replaced aimed at a far corner,
+ * where claims are unlikely. It has to be `true` when aiming *at the cat*, because the cat
+ * usually stands on a claim and a click on a claim throws nothing at all. Two callers, two
+ * correct answers, so it is an argument.
  */
 export async function throwSpot(page, near, { avoidClaims = false } = {}) {
   return page.evaluate(
-    ([nx, ny, INTER, noClaims]) => {
+    ([nx, ny, noClaims]) => {
+      const board = document.querySelector('[data-board]');
+      if (!board) return null;
+      const b = board.getBoundingClientRect();
       const okAt = (x, y) => {
         const el = document.elementFromPoint(x, y);
-        if (!el || el.closest(INTER) || el.closest('#cat-hud')) return null;
-        if (noClaims && el.closest('.cat-claimed')) return null;
+        if (!el || el.closest('.cat-tile')) return null;
+        if (noClaims && el.closest('.cat-tile[data-state="claimed"]')) return null;
         return { x, y };
       };
       const here = okAt(nx, ny);
       if (here) return here;
       let best = null;
       let bestD = Infinity;
-      for (let y = 100; y < innerHeight - 50; y += 16)
-        for (let x = 14; x < innerWidth - 14; x += 16) {
+      for (let y = b.top + 6; y < b.bottom - 6; y += 12)
+        for (let x = b.left + 6; x < b.right - 6; x += 12) {
           if (!okAt(x, y)) continue;
           const d = Math.hypot(x - nx, y - ny);
           if (d < bestD) {
@@ -613,45 +590,34 @@ export async function throwSpot(page, near, { avoidClaims = false } = {}) {
         }
       return best;
     },
-    [near.x, near.y, INTERACTIVE, avoidClaims],
+    [near.x, near.y, avoidClaims],
   );
 }
 
 /**
- * Scroll until a claim is somewhere the pointer can sit on it, and return that point.
+ * A claimed tile the pointer can sit on, preferring the one furthest from the boss.
  *
- * Most of the board is below the fold — on /timeline/ only 4 of 24 claims are in view at once — so a
- * harness that only fights what it can already see runs out of targets and then reports a fight that
- * "ended" when it actually gave up. A player scrolls; so does this. Walks candidate offsets rather
- * than trusting one, because a claim taller than the band is reachable from a different offset, and
- * prefers the claim furthest from the cat, which is how §5.2 says to play it.
+ * 2.2: the whole board is on screen by construction, so there is nothing to scroll to — the
+ * card's fight is entirely visible, which is the point. Returns the claim furthest from the
+ * boss, which is how §5.2 says to play it.
  */
 export async function reachClaim(page) {
-  const cands = await page.evaluate(() =>
-    [...document.querySelectorAll('.cat-claimed')].map((n) => n.getBoundingClientRect().top + scrollY).sort((a, b) => a - b),
-  );
-  for (const top of cands) {
-    await page.evaluate((y) => scrollTo({ top: Math.max(0, y), behavior: 'instant' }), top - 320);
-    await page.waitForTimeout(130);
-    const hit = await page.evaluate(() => {
-      const band = [...document.querySelectorAll('.cat-claimed')]
-        .map((n) => n.getBoundingClientRect())
-        .filter((r) => r.top > 170 && r.bottom < innerHeight - 50 && r.width > 30);
-      if (!band.length) return null;
-      const cat = document.getElementById('site-cat').getBoundingClientRect();
-      const cx = cat.left + cat.width / 2;
-      const cy = cat.top + cat.height / 2;
-      band.sort(
-        (a, b) =>
-          Math.hypot(b.left + b.width / 2 - cx, b.top + b.height / 2 - cy) -
-          Math.hypot(a.left + a.width / 2 - cx, a.top + a.height / 2 - cy),
-      );
-      const r = band[0];
-      return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
-    });
-    if (hit) return hit;
-  }
-  return null;
+  return page.evaluate(() => {
+    const boss = document.querySelector('[data-boss]')?.getBoundingClientRect();
+    const cx = boss ? boss.left + boss.width / 2 : 0;
+    const cy = boss ? boss.top + boss.height / 2 : 0;
+    const band = [...document.querySelectorAll('.cat-tile[data-state="claimed"]')]
+      .map((n) => n.getBoundingClientRect())
+      .filter((r) => r.width > 20);
+    if (!band.length) return null;
+    band.sort(
+      (a, b) =>
+        Math.hypot(b.left + b.width / 2 - cx, b.top + b.height / 2 - cy) -
+        Math.hypot(a.left + a.width / 2 - cx, a.top + a.height / 2 - cy),
+    );
+    const r = band[0];
+    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+  });
 }
 
 /**
@@ -713,11 +679,11 @@ export async function armAmmo(page, { hops = 5, tap = false, home = '/', pool = 
 }
 
 /**
- * Walk the cursor towards a point until the cat is within `px` of it, and report the gap.
+ * Walk the cursor towards a point until the boss is within `px` of it, and report the gap.
  *
- * The cat stalks the pointer, so luring is how a harness gets the two of them into the same place
- * without teleporting a cursor — which is not a thing a hand can do, and 2.0 measured what happens
- * to a policy that assumes it can.
+ * The boss stalks the pointer (manual mode), so luring is how a harness gets the two of them
+ * into the same place without teleporting a cursor — which is not a thing a hand can do, and
+ * 2.0 measured what happens to a policy that assumes it can.
  */
 export async function lureCat(page, at, px = 70, { steps = 26, timeout = 12_000 } = {}) {
   const t0 = Date.now();
@@ -726,7 +692,8 @@ export async function lureCat(page, at, px = 70, { steps = 26, timeout = 12_000 
     await page.mouse.move(at.x, at.y, { steps });
     gap = await page.evaluate(
       ([x, y]) => {
-        const r = document.getElementById('site-cat').getBoundingClientRect();
+        const r = document.querySelector('[data-boss]')?.getBoundingClientRect();
+        if (!r) return Infinity;
         return Math.hypot(r.left + r.width / 2 - x, r.top + r.height / 2 - y);
       },
       [at.x, at.y],

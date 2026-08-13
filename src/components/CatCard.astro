@@ -38,7 +38,7 @@ const TILE_POOL: string[] = [...nav.map((c) => c.label), ...FIXED_TILES];
 const POOL_JSON = JSON.stringify(TILE_POOL);
 ---
 
-<div class="cat-card-root" data-cat-card data-pool={POOL_JSON}>
+<div class="cat-card-root" data-cat-card data-pool={POOL_JSON} transition:persist="cat-card">
   <!-- Collapsed: the tappable cat in the corner. Same sprite shapes as the ambient cat (§0:
        nothing new is drawn), rendered small, with idle animation beats to signal interactivity. -->
   <button
@@ -371,7 +371,11 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     overflow: hidden;
   }
 
-  .cat-tile {
+  /* Tiles are created by the script (`document.createElement`), so they never carry Astro's
+     scoping attribute — every rule that targets them must be `:global()`, or the board renders
+     unstyled. This was a live bug: the harness's computed-style checks read `touch-action:
+     auto` and an empty box-shadow while the data-state attributes were working fine. */
+  :global(.cat-tile) {
     position: relative;
     display: flex;
     align-items: center;
@@ -389,7 +393,7 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     cursor: crosshair;
   }
   @media (hover: none), (pointer: coarse) {
-    .cat-tile {
+    :global(.cat-tile) {
       -webkit-touch-callout: none;
       user-select: none;
       -webkit-user-select: none;
@@ -399,7 +403,7 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
   }
 
   /* unclaimed → neutral. claimed → wash + dashed edge + tilt, same as the page game. */
-  .cat-tile[data-state='claimed'] {
+  :global(.cat-tile[data-state='claimed']) {
     box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--color-accent) 7%, transparent);
     outline: 2px dashed color-mix(in srgb, var(--color-accent) 62%, transparent);
     outline-offset: -3px;
@@ -407,7 +411,7 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
   }
 
   /* being-scrubbed → the wash deepens toward the freed tint (§5.2's in-claim progress). */
-  .cat-tile[data-state='scrubbing'] {
+  :global(.cat-tile[data-state='scrubbing']) {
     box-shadow: inset 0 0 0 100vmax
       color-mix(in srgb, var(--color-accent) calc(7% + 19% * var(--scrub, 0)), transparent);
     outline: 2px dashed color-mix(in srgb, var(--color-accent) 62%, transparent);
@@ -416,7 +420,7 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
 
   /* freed → the flash, then back to neutral. Same 0.42s ease as the page game. */
   @media (prefers-reduced-motion: no-preference) {
-    .cat-tile[data-state='freed'] {
+    :global(.cat-tile[data-state='freed']) {
       animation: cat-tile-freed 0.42s ease-out;
     }
   }
@@ -1618,6 +1622,10 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       arena.rung = nextRung(arena.rung, ending, arena.ammoWas.filter(Boolean).length);
 
       if (ending === 'win') {
+        // §7.1's notch: the confrontation path's proof, on the ambient cat, session-only.
+        // The card's boss is its own sprite; the *notch* belongs to the site's cat, which
+        // is the animal a visitor meets in the corner — same promise the page game kept.
+        document.querySelector('#site-cat')?.classList.add('notched');
         const parting = takeGround();
         if (parting) {
           claim(parting, arena.order.indexOf(parting), arena.seed);
@@ -1744,7 +1752,10 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     function startFight(t: number): void {
       arena.round = 1;
       arena.best = readBestRound();
-      arena.rung = 0;
+      // §9.4's ladder is *module* state, not fight state: it is initialised at 0 when the
+      // script loads, moved by `finish` via `nextRung`, and only ever reset by a refresh
+      // (the rung's whole lifetime, §7.2). Resetting it here — as a 2.2 port briefly did —
+      // made every reopen a rung-0 fight, which is not a ladder at all.
       if (!dealBoard(t)) return;
       arena.on = true;
       arena.openedAt = t;

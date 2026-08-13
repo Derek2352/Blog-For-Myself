@@ -275,6 +275,13 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
   .cat-paw.got {
     background: var(--color-accent);
   }
+  /* §9.4's third paw state: the rung holding one back. Hollow — a transparent fill
+     with an accent ring — so it reads as neither found (filled accent) nor bare
+     (solid line). The harness asserts this exact rendering. */
+  .cat-paw.withheld {
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px var(--color-accent);
+  }
   /* Always readable. This is the line that says what the paws are; hiding it
      between finds was what left seven bare dots on the screen. It swaps to the
      level phrase for a few seconds on a find, then goes back to the tally. */
