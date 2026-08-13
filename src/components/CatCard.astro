@@ -64,6 +64,9 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
         <path class="cat-card-muzzle" d="M52 22.5 Q54 24.5 56 22.5" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"></path>
       </g>
     </svg>
+    <!-- Treats collected from browsing, shown on the collapsed icon: the ammo display
+         (§2.2) and the "I have something worth playing for" cue in one. -->
+    <span class="cat-card-badge" data-badge hidden aria-hidden="true">0</span>
   </button>
 
   <!-- Expanded: the floating card. Scales up from the icon position; no ink curtain — §14.6
@@ -184,6 +187,35 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     display: block;
     width: 100%;
     height: 100%;
+  }
+
+  /* Treats found from browsing, on the collapsed icon — the ammo display (§2.2). */
+  .cat-card-badge {
+    position: absolute;
+    right: -3px;
+    top: -3px;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--color-accent);
+    color: var(--color-accent-ink);
+    font-size: 0.62rem;
+    font-weight: 600;
+    line-height: 17px;
+    text-align: center;
+  }
+  /* A visitor with treats to spend gets a gentle "come play" beat — the tap-to-play cue.
+     The beat only fires while collapsed, so it never competes with the game's own motion. */
+  @media (prefers-reduced-motion: no-preference) {
+    .cat-card-icon[aria-expanded='false'][data-cue] {
+      animation: cat-card-cue 2.6s ease-in-out infinite;
+    }
+  }
+  @keyframes cat-card-cue {
+    0%, 72%, 100% { transform: translateY(0); }
+    76%, 84% { transform: translateY(-3px); }
+    80% { transform: translateY(-5px); }
   }
 
   /* Idle animation beats — stretch, yawn, blink — signalling "I'm interactive" (§2.2). */
@@ -634,6 +666,7 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
   const modeBtn = document.querySelector<HTMLButtonElement>('#cat-card-mode');
   const closeBtn = document.querySelector<HTMLButtonElement>('#cat-card-close');
   const ammoEl = document.querySelector<HTMLElement>('[data-ammo]');
+  const badgeEl = document.querySelector<HTMLElement>('[data-badge]');
   const roundEl = document.querySelector<HTMLElement>('[data-round]');
   const captionEl = document.querySelector<HTMLElement>('[data-caption]');
   const territoryFill = document.querySelector<HTMLElement>('[data-territory]');
@@ -866,6 +899,19 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       const paws = [...document.querySelectorAll<HTMLElement>('#cat-score .cat-paw[data-slug]')];
       const found = paws.filter((p) => p.classList.contains('got')).length;
       if (ammoEl) ammoEl.textContent = tallyFor(found, paws.length || 7);
+      // The collapsed icon's badge and "come play" cue follow the same number: a visitor
+      // with treats found has something to spend, which is the tap-to-play invitation (§2.2).
+      // The cue fires only while the card is closed — an open card is already the game.
+      if (badgeEl) {
+        if (found > 0) {
+          badgeEl.hidden = false;
+          badgeEl.textContent = String(found);
+          if (!open) toggleEl.dataset.cue = '1';
+        } else {
+          badgeEl.hidden = true;
+          delete toggleEl.dataset.cue;
+        }
+      }
     }
 
     /* ---------------------------------------------------------------- *
@@ -1720,6 +1766,9 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       arena.raf = requestAnimationFrame(tick);
     }
 
+    // The collapsed badge/cue needs the count on load, before any fight opens.
+    syncAmmo();
+
     function withholdForRung(paws: HTMLElement[]): void {
       const filled = paws.filter((p) => p.classList.contains('got'));
       const keep = ammoCap(filled.length, arena.rung);
@@ -1822,6 +1871,8 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       rootEl.dataset.open = next ? '1' : '';
       toggleEl.setAttribute('aria-expanded', next ? 'true' : 'false');
       if (next) {
+        // The cue's invitation is answered; the game is where treats are spent now.
+        delete toggleEl.dataset.cue;
         panelEl.hidden = false;
         const t = performance.now();
         startFight(t);
@@ -1830,6 +1881,7 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
         if (arena.on) endFight();
         panelEl.hidden = true;
         toggleEl.focus();
+        syncAmmo();
       }
     }
 
