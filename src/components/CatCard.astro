@@ -1069,7 +1069,13 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
         hideRing();
         return 0;
       }
-      const target = scrub.inside && scrub.x >= 0 ? tileUnder(scrub.x, scrub.y) : null;
+      // Only a *claimed* tile is a scrub target. The page game's `claimUnder` required
+      // `.cat-claimed` and membership in `arena.claimed`; the card's first `tileUnder`
+      // port returned any tile, so a hold kept "scrubbing" a tile the moment it was
+      // freed — progress that changed nothing, kept the boss camping the pointer, and
+      // read to the fleet as "held but not taken" (arena8/top-state flee loops).
+      const under = scrub.inside && scrub.x >= 0 ? tileUnder(scrub.x, scrub.y) : null;
+      const target = under && arena.claimed.includes(under) ? under : null;
       if (target && target === scrub.target) {
         scrub.seen = now;
         touch.onClaim = true;
