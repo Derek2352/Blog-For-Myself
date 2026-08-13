@@ -37,6 +37,7 @@ import {
   press as sharedPress,
   release as sharedRelease,
   report,
+  throwSpot,
   wants,
 } from './lib/fixture.mjs';
 
@@ -554,6 +555,14 @@ async function farTarget(page) {
 
   const swatted = await baitAndCounter();
   ok('the cat commits, which is the window (§5.3’s tell)', commitments > 0, `${commitments} pounces baited`);
+  /*
+   * **How many chances it got is a fixture.** 1.4's own note says the counter is measured over several
+   * attempts, because the cat feints, aims ahead of a moving cursor and sometimes lands out of radius.
+   * Sweep 1 of 2.0's gate got two commitments in forty seconds and reported "the counter is broken";
+   * sweep 2 got enough and reported it working. Whether the *build* counters is the assertion below;
+   * whether this run got enough bites to ask is this line.
+   */
+  fixture('the cat committed often enough to try a counter', commitments >= 3 || null, `${commitments} commitments`);
   ok(
     'a treat landing on a recovering cat swats it (§5.4’s counter)',
     swatted,
@@ -605,10 +614,25 @@ async function farTarget(page) {
   let threw = false;
   const ammoBefore = await page.evaluate(AMMO);
   if (stalking && ammoBefore > 0) {
-    const at = await page.evaluate(() => {
+    /*
+     * **Two things this needs that it used to assume.**
+     *
+     * It clicked the cat's own centre — and `#site-cat` is pointer-transparent, so the click lands on
+     * whatever is behind it, which on this board is usually a *claim*. A click on a claim throws
+     * nothing. `throwSpot` returns the nearest point that belongs to nobody, which keeps the intent
+     * ("the same throw at the same distance") and makes the throw legal.
+     *
+     * And §5.4 allows one treat on the board at a time, so a throw arriving while the counter section's
+     * last treat is still out is silently refused. Waiting for the board to clear costs nothing and
+     * removes the whole failure mode. Sweep 1 of 2.0's gate reported `5 in hand` and no throw; sweep 2
+     * threw fine, which is the signature of a fixture rather than a bug.
+     */
+    await bounded(page, () => document.getElementById('cat-treat')?.hasAttribute('hidden') !== false, 4000);
+    const cat = await page.evaluate(() => {
       const r = document.getElementById('site-cat').getBoundingClientRect();
       return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
     });
+    const at = (await throwSpot(page, cat)) ?? cat;
     await page.mouse.click(at.x, at.y);
     threw = await bounded(page, () => !document.getElementById('cat-throw').hasAttribute('hidden'), 1500);
     await page.waitForTimeout(THROW_ARC_MS + 500);

@@ -2399,6 +2399,31 @@ documentation — the sentence explaining that `ok(..., false)` is never an asse
 regex, as a call to `ok` with `false` second. **A text checker that does not understand comments will
 eventually read its own explanation as a violation.**
 
+**Then the gate itself found the class of fixture the rules cannot see.** With every rule passing, sweep
+1 of two went red in three harnesses and sweep 2 went green on the same build — the signature this whole
+section is about. None of the three was the consolidation:
+
+- `arena`'s ring, drift and reclaim checks parked the pointer on
+  `document.querySelector('.cat-claimed')` — **the first claim in document order**, with no band, no
+  hit-test and no fixture report at all. When the roll put an off-screen claim first, the pointer held
+  nothing and three checks failed as though the ring were broken. **Rules 1 and 2 could not see it,
+  because the assertion *was* the fixture** — there was no fallback string to notice and no `fixture()`
+  call to check. Rule 5 matches the shape instead. The drift check is the worst of the three: it asserts
+  that something does *not* happen, so an unworkable claim passed it **vacuously** — a false green,
+  which is the failure mode this document fears most.
+- `battle`'s control throw aimed at the cat's own centre. `#site-cat` is pointer-transparent, so the
+  click landed on whatever was behind it — usually a claim, which throws nothing — and §5.4 allows one
+  treat on the board at a time, so a throw arriving while the previous one was still out was silently
+  refused. It throws at the nearest point that belongs to nobody now, after waiting for the board to
+  clear.
+- `first-run`'s win was a **rematch budget too small to be evidence.** 1.3 measured a 25–50% per-fight
+  win rate for the taught playstyle, so at six attempts a *working* build shows no win about 18% of the
+  time: one run in five red for nothing. Twelve puts it near 3%. The assertion is unchanged — a fight
+  still has to be won — and only the budget grew, which is the fixture rule applied to a stochastic gate.
+
+The generalisation, and the reason this section exists twice over: **a rule that catches the fault's
+usual wording does not catch the fault.** Two of these three had no wording at all.
+
 ---
 
 ## 13. The arena toggle

@@ -36,6 +36,21 @@ const { ok, note, fixture, done } = report();
  */
 const fresh = (opts = {}) => context(browser, { mode: 'manual', ...opts });
 
+/**
+ * A claim the pointer can actually hold, dealt for.
+ *
+ * Three sections here used to take `document.querySelector('.cat-claimed')` — the **first claim in
+ * document order** — and park the pointer on its centre, with no band, no hit-test and no fixture
+ * report at all. When that claim was off screen or under the header the pointer held nothing, and the
+ * three checks that followed failed as though the ring, the reclaim and the caption were broken.
+ *
+ * It failed in sweep 1 of 2.0's gate and passed in sweep 2, on the same build — the signature of this
+ * whole fault class. It is also the version of the fault that neither hygiene rule can see: the
+ * assertion *was* the fixture, so there was no fallback string to notice. §12.1 has it recorded, and
+ * the checker gained a rule for the shape rather than for the wording.
+ */
+const holdSpot = (page) => deal(page, wants.spot({ top: 170, bottom: 90, maxHeight: 420 }), { deals: 6, settle: 240 });
+
 
 /**
  * Every element's identity + what the arena could have touched.
@@ -192,11 +207,9 @@ const CLAIM_COUNT = `document.querySelectorAll('.cat-claimed').length`;
 
   const before = await page.evaluate(CLAIM_COUNT);
   // park the pointer on the middle of a claim and hold it there
-  const spot = await page.evaluate(() => {
-    const c = document.querySelector('.cat-claimed');
-    const r = c.getBoundingClientRect();
-    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
-  });
+  const spotDeal = await holdSpot(page);
+  const spot = spotDeal.value;
+  fixture('the board dealt a claim the pointer can hold', spotDeal, spot ? `${spot.x},${spot.y}` : '');
   await page.mouse.move(spot.x, spot.y);
   await page.waitForTimeout(250);
   const ringMid = await page.evaluate(() => {
@@ -222,11 +235,14 @@ const CLAIM_COUNT = `document.querySelectorAll('.cat-claimed').length`;
   ok('the HUD says what you have reclaimed', /reclaimed/.test(caption), JSON.stringify(caption));
 
   // drifting resets the hold rather than banking it
-  const spot2 = await page.evaluate(() => {
-    const c = document.querySelector('.cat-claimed');
-    const r = c.getBoundingClientRect();
-    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
-  });
+  /*
+   * Dealt for, like the hold above — and here it matters *more*, because this check asserts that
+   * something does **not** happen. A pointer drifting over nothing takes nothing, so an unworkable
+   * claim would have passed it vacuously: a false green rather than a red.
+   */
+  const drift = await holdSpot(page);
+  fixture('a claim to drift over', drift, drift.value ? `${drift.value.x},${drift.value.y}` : '');
+  const spot2 = drift.value ?? { x: 640, y: 450 };
   const mid = await page.evaluate(CLAIM_COUNT);
   for (let i = 0; i < 14; i++) {
     await page.mouse.move(spot2.x + (i % 2 ? 14 : -14), spot2.y + (i % 3 ? 11 : -11));
@@ -250,12 +266,11 @@ const CLAIM_COUNT = `document.querySelectorAll('.cat-claimed').length`;
   const fighting = await page.evaluate(SNAPSHOT);
   ok('the fight does change the page', fighting !== clean);
 
-  // scrub one back first, so the restore has both kinds of element to put back
-  const spot = await page.evaluate(() => {
-    const c = document.querySelector('.cat-claimed');
-    const r = c.getBoundingClientRect();
-    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
-  });
+  // Scrub one back first, so the restore has both kinds of element to put back — which means the
+  // claim has to be one the pointer can reach, or the section only ever tests half of what it says.
+  const restoreDeal = await holdSpot(page);
+  fixture('a claim to reclaim before restoring', restoreDeal, restoreDeal.value ? `${restoreDeal.value.x},${restoreDeal.value.y}` : '');
+  const spot = restoreDeal.value ?? { x: 640, y: 450 };
   await page.mouse.move(spot.x, spot.y);
   await page.waitForTimeout(1600);
 

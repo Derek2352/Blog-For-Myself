@@ -153,7 +153,21 @@ async function catPosition() {
 
 let won = false;
 let reclaimed = 0;
-for (let fight = 0; fight < 6 && !won; fight++) {
+/*
+ * **The rematch budget is a fixture, and six was too few to be one.**
+ *
+ * 1.3 measured a 25–50% per-fight win rate for this playstyle, because the fight is stance-varied:
+ * siege and sleepy convert fast, ambush and trickster can grind, and §9.4's answer to a stall-loss is
+ * a rematch rather than a bigger margin. At six attempts the chance of no win in a *working* build is
+ * 0.75⁶ ≈ 18% — about one run in five red for no reason at all, which is what happened in sweep 1 of
+ * 2.0's gate (six fights, 13 claims reclaimed, none won; sweep 2 won on the same build).
+ *
+ * Twelve puts it at 0.75¹² ≈ 3%. This is not the assertion being loosened — the claim is still that a
+ * treatless fight is winnable doing only the taught verb, and one win still has to happen. It is the
+ * *budget* being made big enough to be evidence, which is the whole of §12.1's fixture rule applied to
+ * a stochastic gate.
+ */
+for (let fight = 0; fight < 12 && !won; fight++) {
   // Open a fresh fight for this attempt.
   if (fight === 0) {
     const freshToggle = await page.$('#cat-arena-toggle');

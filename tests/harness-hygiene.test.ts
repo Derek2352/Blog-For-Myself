@@ -17,7 +17,10 @@
  *    `{ timeout }` second, where it becomes the page function's *argument* and the bound silently
  *    becomes 30s — a wait asking for 4000ms measured 30104ms, and twenty of those seconds belong to
  *    §11's idle truce, so the wait ended the fight it was waiting on.
- * 3. **An absolute path into a container.** Twelve harnesses imported Playwright as
+ * 3. **A fixture nothing acknowledged.** Positioning a pointer on `querySelector('.cat-claimed')` —
+ *    the first claim in document order — assumes the roll put a workable one there. Rules 1 and 2
+ *    cannot see this one, because the assertion *is* the fixture; rule 5 matches the shape instead.
+ * 4. **An absolute path into a container.** Twelve harnesses imported Playwright as
  *    `/home/user/Blog-For-Myself/node_modules/playwright-core/index.mjs`, and this repo's sessions run
  *    in containers that get reclaimed. `battle.mjs` did it while committed, which is the proof that a
  *    convention nothing checks decays even in tracked code.
@@ -245,6 +248,37 @@ describe('the harness fleet obeys its own rules', () => {
       }
     }
     expect(offenders, `absolute import — breaks in any other checkout:\n${offenders.join('\n')}`).toEqual([]);
+  });
+
+  /*
+   * Rule 5, added after the rules above passed and the fleet went red anyway.
+   *
+   * `document.querySelector('.cat-claimed')` takes the **first claim in document order**. Used to
+   * *position* something — a pointer to hold, a point to tap — it assumes the roll put a workable
+   * claim first, with no band, no hit-test and no fixture report. Three checks in `arena.mjs` did
+   * that, failed in sweep 1 of the gate and passed in sweep 2 on the same build.
+   *
+   * This is the version of the fault the other rules cannot see, and the reason is worth stating:
+   * **they only catch fixtures that were acknowledged.** A section whose assertion silently doubles
+   * as its own fixture has no fallback string to notice and no `fixture()` call to check. So this rule
+   * matches the *shape* instead — the first claim, measured — and asks for `wants.*`/`deal()`, which
+   * hit-test and re-deal. Existence probes (`!!document.querySelector('.cat-claimed')` in a wait) are
+   * untouched: asking whether a board exists is not the same as assuming where it is.
+   */
+  it('never positions anything on whichever claim happens to be first', () => {
+    const offenders: string[] = [];
+    for (const [file, src] of source) {
+      for (const m of src.matchAll(/querySelector\('\.cat-claimed'\)/g)) {
+        const after = src.slice(m.index, m.index + 220);
+        if (/getBoundingClientRect/.test(after)) {
+          offenders.push(`${file}:${src.slice(0, m.index).split('\n').length}`);
+        }
+      }
+    }
+    expect(
+      offenders,
+      `positions on the first claim in document order — use wants.spot()/deal():\n${offenders.join('\n')}`,
+    ).toEqual([]);
   });
 
   /*
