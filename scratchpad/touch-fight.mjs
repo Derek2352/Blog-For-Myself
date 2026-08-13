@@ -100,7 +100,26 @@ async function armAmmo(page, hops = 4) {
  * Its own function because it must be re-asked after **every** scroll: coordinates found before a
  * scroll point at whatever moved into them afterwards, and on this site that is usually a link.
  */
-async function openGround(page) {
+async function openGround(page, tries = 5) {
+  /*
+   * **Scrolled, not re-dealt.** The scan can come up empty — a phone viewport mid-fight is mostly
+   * claims and links, and whether a 3×3 clear neighbourhood exists is a property of where the board
+   * landed. It failed once in a gate run and passed on the re-run, which is this section's signature.
+   *
+   * Scrolling changes what is under the candidate points without touching the fight, so it is the
+   * cheaper of the two moves (`arena5` reached the same conclusion for its band spot): re-dealing here
+   * would throw away the treats and the hold this section has already set up.
+   */
+  for (let i = 0; i < tries; i++) {
+    const hit = await scanGround(page);
+    if (hit) return hit;
+    await page.evaluate((n) => scrollBy({ top: n % 2 ? -160 : 220, behavior: 'instant' }), i);
+    await page.waitForTimeout(220);
+  }
+  return null;
+}
+
+async function scanGround(page) {
   return page.evaluate(() => {
     const PROT = 'a[href], button, input, select, textarea, summary, label, [contenteditable]';
     const free = (x, y) => {
@@ -631,6 +650,69 @@ const place = (page, at, opts = {}) => wants.placed(at, opts)(page);
   const after = await page.evaluate(SNAPSHOT);
   ok('the toggle ends it on touch too, with no Esc key to fall back on', !(await page.evaluate(ARMED)));
   ok('and the page is byte-identical after a touch fight (pillar 2)', after === clean);
+  await ctx.close();
+}
+
+// ---- 7. the cat's furniture is a guest on the page, on short screens too (2.1)
+{
+  /*
+   * **The HUD must never make a page control unreachable.** It is `position: fixed` above the cat and
+   * grows upward, and it grew sideways as well — one control in 1.3, three by 2.0 — so on a short phone
+   * it wrapped into a stack about 130px tall and sat on the hero's own buttons. Measured at 375×667:
+   * `elementFromPoint` on the centre of "See the work" returned the chip, so the page's primary call to
+   * action could not be tapped. §11 promises links keep working during a fight; this was the page not
+   * working *before* one.
+   *
+   * Two checks, because the first fix broke the second: the hero's buttons must be reachable, **and the
+   * way into the game must still be tappable from the top of the page.** Hiding the chip satisfied the
+   * first and quietly failed the second — it is the only way in, on the page most visitors land on.
+   *
+   * The 375×667 SE is the case that matters. A 390×844 phone has room and does not dodge, which is why
+   * this checks the short screen rather than the fashionable one.
+   */
+  const ctx = await context(browser, { mode: 'manual', viewport: { width: 375, height: 667 }, hasTouch: true, isMobile: true });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
+  await page.waitForTimeout(1600);
+
+  const rest = await page.evaluate(() => {
+    const chip = document.querySelector('.cat-arena-chip')?.getBoundingClientRect();
+    return {
+      dodging: document.documentElement.classList.contains('cat-hud-dodge'),
+      chip: chip ? `${Math.round(chip.top)}–${Math.round(chip.bottom)}` : 'none',
+      buttons: [...document.querySelectorAll('.glass a, .glass button')].map((el) => {
+        const r = el.getBoundingClientRect();
+        const at = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2));
+        return { label: el.textContent.trim().slice(0, 16), blocked: !!at?.closest('#cat-hud') };
+      }),
+    };
+  });
+  ok(
+    'the hero’s own buttons are reachable on a short phone, cat and all',
+    rest.buttons.length > 0 && rest.buttons.every((b) => !b.blocked),
+    rest.buttons.map((b) => `${b.label}${b.blocked ? ' BLOCKED' : ''}`).join(', '),
+  );
+  ok('and the HUD stepped aside rather than sitting on them', rest.dodging, `chip at y ${rest.chip}`);
+
+  // …and it is still a control: the game has to be reachable from the page a visitor lands on.
+  const tapped = await page
+    .locator('#cat-arena-toggle')
+    .tap()
+    .then(() => true)
+    .catch(() => false);
+  ok('the way into the game is still tappable from the top of the page', tapped);
+  await page.waitForFunction(() => document.querySelectorAll('.cat-claimed').length > 0, undefined, { timeout: 9000 }).catch(() => {});
+  const claims = await page.evaluate(CLAIMS);
+  ok('and it opens a fight', claims > 0, `${claims} claims`);
+
+  // During a fight the chips are all back — they are the way out, and there is no Esc on a phone.
+  const inFight = await page.evaluate(
+    () => [...document.querySelectorAll('.cat-arena-btn')].filter((b) => b.offsetParent !== null).length,
+  );
+  ok('all three controls are back once the screen is the cat’s', inFight === 3, `${inFight} visible`);
+  ok('no console errors around the mobile HUD', errors.length === 0, errors.slice(0, 2).join(' | '));
   await ctx.close();
 }
 

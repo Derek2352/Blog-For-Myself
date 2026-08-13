@@ -233,6 +233,81 @@ async function openArena(page) {
 }
 
 /* ------------------------------------------------------------------ *
+ * 2b. Sound: on by default, and silent until somebody plays (2.1)
+ * ------------------------------------------------------------------ */
+{
+  /*
+   * The claim is two-sided and both sides matter. **A fight makes a noise with nothing pressed but
+   * the arena toggle** — that is what "sound needs no option" means — and **the site is silent until
+   * that press**, which is what keeps it from being a page that makes noise at a reader.
+   *
+   * Counted at the source: `AudioContext` construction and `createOscillator` calls, patched before
+   * the page loads. Asserting on the chip's `aria-pressed` alone would be asserting on a label, and
+   * §12.1 is explicit that a check reading a caption passes while the mechanic is broken. The
+   * context's `state` is part of it too: a context created outside a user gesture starts `suspended`,
+   * which is silence that no label would ever admit to.
+   */
+  const ctx = await fresh();
+  await ctx.addInitScript(() => {
+    window.__audio = { contexts: 0, oscillators: 0, states: [] };
+    const AC = window.AudioContext;
+    window.AudioContext = class extends AC {
+      constructor(...args) {
+        super(...args);
+        window.__audio.contexts++;
+        window.__audio.states.push(this.state);
+        const make = this.createOscillator.bind(this);
+        this.createOscillator = (...a) => {
+          window.__audio.oscillators++;
+          return make(...a);
+        };
+      }
+    };
+  });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
+  await page.waitForTimeout(1400);
+
+  ok(
+    'the sound chip reads on before anything is pressed',
+    (await page.getAttribute('#cat-sound-toggle', 'aria-pressed')) === 'true',
+  );
+  const quiet = await page.evaluate(() => window.__audio);
+  ok(
+    'and the page is silent anyway — no audio at all until somebody plays',
+    quiet.contexts === 0 && quiet.oscillators === 0,
+    JSON.stringify(quiet),
+  );
+
+  await openArena(page);
+  await page.waitForTimeout(12_000);
+  const during = await page.evaluate(() => window.__audio);
+  ok(
+    'a fight makes a noise with nothing pressed but the arena toggle (2.1)',
+    during.oscillators > 0,
+    `${during.oscillators} cues over 12s`,
+  );
+  ok(
+    'and the context is running, not suspended — the toggle click was the gesture',
+    during.states.length > 0 && during.states.every((st) => st === 'running'),
+    JSON.stringify(during.states),
+  );
+
+  // The chip is a mute now, and §11 needs it to work without leaving the fight.
+  await page.click('#cat-sound-toggle');
+  const beforeMute = await page.evaluate(() => window.__audio.oscillators);
+  await page.waitForTimeout(9000);
+  const afterMute = await page.evaluate(() => window.__audio.oscillators);
+  ok('one tap silences it, mid-fight', afterMute === beforeMute, `${beforeMute} → ${afterMute} cues`);
+  ok('and the chip says so', (await page.getAttribute('#cat-sound-toggle', 'aria-pressed')) === 'false');
+  ok('the fight is still on — muting is not quitting', await state(page).then((st) => st.on));
+  ok('no console errors around the sound', errors.length === 0, errors.slice(0, 2).join(' | '));
+  await ctx.close();
+}
+
+/* ------------------------------------------------------------------ *
  * 3. The orders — both of them, and neither is required
  * ------------------------------------------------------------------ */
 {

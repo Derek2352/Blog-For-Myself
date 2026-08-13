@@ -134,17 +134,18 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
       <span class="cat-arena-pip" aria-hidden="true"></span>
       <span>Cat takes the screen</span>
     </button>
-    {/* 1.3: sound, opt-in, session-only — the second control in the HUD, beside the
-        arena toggle. Deliberately *not* in the accessibility panel: §13.1 already
-        settled that the arena toggle lives here because "a game is not a reading
-        preference", and game sound is the same category. Off by default; a refresh
-        forgets it (§13.4). The browser's autoplay gate aligns: the toggle click is the
-        user gesture that unlocks audio. */}
+    {/* Sound — the second control in the HUD, beside the arena toggle. **On by default since
+        2.1, so this is a mute rather than an opt-in.** Consent is the arena toggle: the cat is
+        silent on every page until somebody presses "cat takes the screen", and asking a second
+        time for permission to make that audible was asking the visitor to opt into their own
+        decision. The control stays because §11 needs a way out — one tap, without leaving the
+        fight. Still deliberately not in the accessibility panel (§13.1: a game is not a reading
+        preference), still session-only (§13.4), and a refresh comes back with sound on. */}
     <button
       id="cat-sound-toggle"
       class="cat-arena-btn tap-safe"
       type="button"
-      aria-pressed="false"
+      aria-pressed="true"
     >
       <span class="cat-arena-pip" aria-hidden="true"></span>
       <span>Cat sounds</span>
@@ -362,6 +363,61 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
     padding: 0.32rem 0.55rem;
     cursor: pointer;
   }
+  /*
+   * **Narrow screens: one control at rest, all three while playing.**
+   *
+   * The HUD is `position: fixed` above the cat and grows *upward*, and it grew sideways too — one
+   * control in 1.3, two by the end of it, three by 2.0. At 390px the labels no longer fit on one line,
+   * so the chips wrapped into a stack roughly 130px tall and sat on top of the page: measured at
+   * 375×667 it covered the hero's "See the work" button, and at 390×844 the first entry card. That is
+   * the cat's furniture eating the page it is supposed to be a guest on — pillar 1 says the page is the
+   * board, not that the board may have the page.
+   *
+   * Which control matters when settles it. **Before a fight there is exactly one thing to do** — start
+   * one — and sound and "which game" are settings for a fight that does not exist yet. During a fight
+   * all three are live, and by then the visitor has chosen to give the screen to the cat, so the
+   * furniture is expected. So on a coarse/narrow screen the other two appear with the fight.
+   *
+   * Mode stays reachable on a phone: §13.8's chip only ever takes effect on the *next* fight anyway, so
+   * pressing it mid-fight is how it was always meant to be used. What a phone loses is choosing manual
+   * before its very first fight, and the default is the gentler mode by design (§15.1).
+   */
+  @media (max-width: 767px) {
+    :global(html:not(.cat-arena-on)) #cat-sound-toggle,
+    :global(html:not(.cat-arena-on)) #cat-manual-toggle {
+      display: none;
+    }
+
+    /* And the last chip steps aside while the hero's own buttons are in that band — see the
+       IntersectionObserver in CatArena's init. Not while a fight is on: then the controls are the way
+       out, and the visitor has already given the screen to the cat. */
+    /*
+     * **It moves rather than disappears.** Hiding it was the first attempt and it worked — the hero's
+     * button became tappable — but it hid the *only* way into the game on the page most visitors land
+     * on, and `touch-fight` taps that button on this exact screen, so the fleet would have gone red for
+     * a reason the design chose on purpose. A control that vanishes is a worse answer than a control
+     * that steps aside.
+     *
+     * So while the hero is in the band, the paw row folds away (it is the taller half and it is only
+     * ever decoration) and the chip drops to the very bottom, over the cat's own walkway. The cat is
+     * decoration too, and it moves; the hero's call to action does not.
+     */
+    :global(html.cat-hud-dodge:not(.cat-arena-on)) #cat-score {
+      display: none;
+    }
+    :global(html.cat-hud-dodge:not(.cat-arena-on)) #cat-hud {
+      bottom: 0.3rem;
+    }
+  }
+
+  /* Packed rather than stacked, so a fight's three chips take two rows instead of three. */
+  .cat-arena-chip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    max-width: 100%;
+  }
+
   .cat-arena-btn:hover {
     border-color: var(--color-accent);
     color: var(--color-accent);

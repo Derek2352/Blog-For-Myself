@@ -6,13 +6,27 @@
  * visual — the telegraph, the landing, a reclaim, and each ending — so the sound never
  * carries information the picture lacks; it underlines it.
  *
- * **Off by default, opt-in, session-only.** The toggle lives in the cat's HUD beside the
- * arena toggle (§13's second control). It deliberately does *not* live in A11Y_PREFS:
- * §13.1 already settled the placement — "a game is not a reading preference" — and game
- * sound is the same category. And per §13.4/§7.2 nothing here is stored: you opt into
- * the game and its sound together, and both die on a refresh. The browser's autoplay
- * gate happens to align with the design: audio unlocks on a user gesture, and the toggle
- * click is one, so consent and capability arrive at the same moment.
+ * **On by default since 2.1, and the chip is a mute rather than an opt-in.**
+ *
+ * 1.3 shipped it off by default and argued the case at length — but the argument was about a
+ * *page* making noise at a reader, and this is not that. Sound here can only happen inside a
+ * fight, a fight can only start by pressing "cat takes the screen", and nobody presses that
+ * button by accident. Asking a second time, in a second control, for permission to make the
+ * thing you just started audible is asking the visitor to opt into their own decision — and
+ * 2.0's whole finding was that this game asks too much before anything good happens.
+ *
+ * **Consent is the arena toggle, and it has not moved.** The cat is silent on every page of
+ * this site until somebody chooses to play. What the chip does now is turn sound *off*, which
+ * §11 still requires: a visitor who wants the game without the noise presses it once, and
+ * anyone on a shared desk or a quiet carriage can silence it in one tap without leaving the
+ * fight. Removing the control entirely would have left no way to do that, so it stays — the
+ * request was that sound need no option to *start*, and it does not.
+ *
+ * The browser's autoplay gate lines up with this rather than against it: audio needs a user
+ * gesture, the arena toggle *is* one, and `primeSfx()` is called inside that click so the
+ * context is unlocked before the first cue rather than at some later moment. Still
+ * session-only, still nothing stored (§13.4/§7.2) — a refresh comes back with sound on,
+ * because that is the default now.
  *
  * The client half is marked like `a11y-prefs.ts`: the module itself is import-safe at
  * build time (no top-level `window` access), and the browser-only functions create the
@@ -38,7 +52,7 @@ export type SfxCue =
  * Session state — the toggle's only memory
  * ------------------------------------------------------------------ */
 
-let enabled = false;
+let enabled = true;
 
 /** Is sound on for this visit? */
 export function sfxEnabled(): boolean {
@@ -67,6 +81,19 @@ function audio(): AudioContext | null {
 export function setSfxEnabled(on: boolean): void {
   enabled = on;
   if (on) audio();
+}
+
+/**
+ * Unlock the audio context from inside a user gesture.
+ *
+ * Sound is on by default now, so there is no toggle click to create the `AudioContext` in — and a
+ * context created outside a gesture starts `suspended`, which would silence the first cues of the
+ * first fight and then mysteriously fix itself. The arena toggle's own click is the gesture, so this
+ * is called there: it is the same "consent and capability arrive together" the opt-in version had,
+ * moved to the button the visitor actually presses.
+ */
+export function primeSfx(): void {
+  if (enabled) audio();
 }
 
 /** A short oscillator blip with an exponential decay. */

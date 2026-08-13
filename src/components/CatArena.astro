@@ -595,7 +595,7 @@
   import { motionReduced } from '@/lib/a11y-prefs';
   import { runCurtain, stop as stopCurtain, HOLD_FLOOR_MS, REVEAL_MS } from '@/lib/curtain';
   import { tallyFor, resolveTreat } from '@/lib/cat-game';
-  import { playCue, setSfxEnabled, sfxEnabled } from '@/lib/cat-sfx';
+  import { playCue, primeSfx, setSfxEnabled, sfxEnabled } from '@/lib/cat-sfx';
   import {
     CLAIMABLE,
     PROTECTED,
@@ -3198,9 +3198,48 @@
     // component is ever dropped from the layout, the button never appears.
     btn.closest<HTMLElement>('.cat-arena-chip')?.removeAttribute('hidden');
 
-    // 1.3: the sound toggle, beside the arena toggle in the same chip. Session-only,
-    // off by default — setSfxEnabled creates the AudioContext inside this click (a user
-    // gesture), which is the browser's autoplay gate and the consent moment at once.
+    /*
+     * 2.1: **the chip gets out of the hero's way on a small screen.**
+     *
+     * The HUD is fixed above the cat and grows upward, and on a short phone the hero pane's own
+     * buttons are exactly where it grows into: measured at 375×667, `elementFromPoint` on the centre of
+     * "See the work" returned the *chip*, so the page's primary call to action could not be tapped.
+     * A game that makes the page unusable has stopped being a guest on it, whatever §11 says about
+     * links elsewhere still working.
+     *
+     * So while the hero is in the band the chip would occupy, the chip steps aside — and comes back the
+     * moment you scroll past it, which is the first thing anyone does. Deliberately *not* applied while
+     * a fight is on: by then the visitor has given the screen to the cat and the controls are the way
+     * out. Narrow screens only, by the CSS in SiteCat — a desktop has margin to spare and this would be
+     * solving a problem it does not have.
+     *
+     * `rootMargin`'s **top** is negative by everything above the HUD, which shrinks the observer's root
+     * to the bottom band the HUD occupies — so "intersecting" means "in the chip's way" rather than
+     * "anywhere on screen". Getting this the wrong way round shrank the root to the *top* 170px, where
+     * the hero never is, and the dodge silently never fired: `dodging: false` at every viewport size,
+     * which is exactly what "it looks implemented" looks like.
+     */
+    const hero = document.querySelector('.glass');
+    if (hero && 'IntersectionObserver' in window) {
+      const band = 170; // the HUD at its tallest at rest: the paw row plus one chip, plus its offset
+      new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            document.documentElement.classList.toggle('cat-hud-dodge', e.isIntersecting);
+          }
+        },
+        { rootMargin: `-${Math.max(0, window.innerHeight - band)}px 0px 0px 0px`, threshold: 0 },
+      ).observe(hero);
+    }
+
+    /*
+     * The sound chip, beside the arena toggle. **2.1 turned it around: sound is on by default and
+     * this mutes it.** The consent that used to live here lives in the arena toggle, which is the
+     * button that starts the only thing capable of making a noise — asking twice was asking the
+     * visitor to opt into their own decision. It stays because §11 needs a way *out* (a shared desk,
+     * a quiet carriage, one tap, without leaving the fight), and `aria-pressed` follows `sfxEnabled()`
+     * so it reads "on" when the page loads.
+     */
     const soundBtn = el('cat-sound-toggle') as HTMLButtonElement | null;
     const syncSound = () => {
       soundBtn?.setAttribute('aria-pressed', sfxEnabled() ? 'true' : 'false');
@@ -3246,6 +3285,13 @@
         note.classList.add('cat-arena-note-nudge');
         return;
       }
+      /*
+       * 2.1: unlock audio here, in the click, because sound is on by default now and there is no
+       * toggle press to create the `AudioContext` in. A context created outside a user gesture starts
+       * suspended, which would silence the first cues of the first fight and then fix itself later —
+       * the worst kind of half-working. This is the gesture the visitor actually makes.
+       */
+      primeSfx();
       // The toggle is the same gesture as Esc, so it gets the same parting line.
       if (arena.want) truce();
       else setArena(true);
