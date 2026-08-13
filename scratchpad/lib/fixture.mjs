@@ -580,13 +580,23 @@ export async function idlePoint(page, { avoidClaims = true } = {}) {
   );
 }
 
-/** The nearest throwable point to somewhere in particular. */
-export async function throwSpot(page, near) {
+/**
+ * The nearest throwable point to somewhere in particular.
+ *
+ * `avoidClaims` defaults to **false**, which is what the three copies this replaced did — they aim at
+ * a far corner, where claims are unlikely, and excluding them would have changed which point they
+ * picked. It has to be `true` when aiming *at the cat*, because the cat usually stands on a claim and
+ * a click on a claim throws nothing at all: `battle`'s control throw did exactly that and reported "5
+ * in hand" with no treat on the board. Two callers, two correct answers, so it is an argument.
+ */
+export async function throwSpot(page, near, { avoidClaims = false } = {}) {
   return page.evaluate(
-    ([nx, ny, INTER]) => {
+    ([nx, ny, INTER, noClaims]) => {
       const okAt = (x, y) => {
         const el = document.elementFromPoint(x, y);
-        return el && !el.closest(INTER) && !el.closest('#cat-hud') ? { x, y } : null;
+        if (!el || el.closest(INTER) || el.closest('#cat-hud')) return null;
+        if (noClaims && el.closest('.cat-claimed')) return null;
+        return { x, y };
       };
       const here = okAt(nx, ny);
       if (here) return here;
@@ -603,7 +613,7 @@ export async function throwSpot(page, near) {
         }
       return best;
     },
-    [near.x, near.y, INTERACTIVE],
+    [near.x, near.y, INTERACTIVE, avoidClaims],
   );
 }
 

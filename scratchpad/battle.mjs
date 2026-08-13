@@ -34,6 +34,7 @@ import {
   deal,
   fresh as context,
   launch,
+  overFor,
   press as sharedPress,
   release as sharedRelease,
   report,
@@ -501,10 +502,33 @@ async function farTarget(page) {
    * ahead of a moving cursor and sometimes lands out of radius, so "the counter is reachable" is
    * measured over several attempts. One attempt would be measuring luck.
    */
+  /*
+   * **The loop used to race its own reclaiming.** Baiting means holding still on the claim nearest the
+   * cat — and a hold that survives 1400ms *reclaims* that claim, so a few baits in, the board is empty,
+   * the fight is won and there is no cat left to commit. Measured across the gate: three commitments in
+   * one run, one in another, which is not a property of the build but of how fast the holds happened to
+   * land. A fight that ends mid-measurement is a fixture problem, so the loop starts another one and
+   * keeps its own count across them.
+   */
   let commitments = 0;
-  const baitAndCounter = async (ms = 40_000) => {
+  let refights = 0;
+  const baitAndCounter = async (ms = 60_000) => {
     const t0 = Date.now();
     while (Date.now() - t0 < ms) {
+      const alive = await page.evaluate(
+        `document.documentElement.classList.contains('cat-arena-on') && document.querySelectorAll('.cat-claimed').length > 0`,
+      );
+      if (!alive) {
+        // Won, or truced. Open another and pin the same stance — the section is about the counter, and
+        // which fight it is measured in was never part of the claim.
+        if (refights >= 4) return false;
+        refights++;
+        await overFor(page, 9000);
+        await press(page);
+        await stanceDeal(page, 'ambush');
+        await page.waitForTimeout(200);
+        continue;
+      }
       const spot = await page.evaluate(() => {
         const c = document.getElementById('site-cat').getBoundingClientRect();
         const cx = c.left + c.width / 2;
@@ -562,7 +586,19 @@ async function farTarget(page) {
    * sweep 2 got enough and reported it working. Whether the *build* counters is the assertion below;
    * whether this run got enough bites to ask is this line.
    */
-  fixture('the cat committed often enough to try a counter', commitments >= 3 || null, `${commitments} commitments`);
+  /*
+   * **One commitment is the bar, because one is what the counter needs.** This line first asked for
+   * three, and promptly failed at two on a run where the counter *landed* — a fixture failing while the
+   * thing it gates succeeds, which is the fixture rule used as a comfort blanket rather than a
+   * precondition. The threshold belongs to what the assertion needs: no commitment, no window, nothing
+   * measured. The count still goes in the detail, because "it worked on the second of two bites" and
+   * "it worked on the second of twenty" are different things to know.
+   */
+  fixture(
+    'the cat committed at least once, so there was a window to counter',
+    commitments >= 1 || null,
+    `${commitments} commitments${refights ? ` across ${refights + 1} fights` : ''}`,
+  );
   ok(
     'a treat landing on a recovering cat swats it (§5.4’s counter)',
     swatted,
@@ -632,7 +668,7 @@ async function farTarget(page) {
       const r = document.getElementById('site-cat').getBoundingClientRect();
       return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
     });
-    const at = (await throwSpot(page, cat)) ?? cat;
+    const at = (await throwSpot(page, cat, { avoidClaims: true })) ?? cat;
     await page.mouse.click(at.x, at.y);
     threw = await bounded(page, () => !document.getElementById('cat-throw').hasAttribute('hidden'), 1500);
     await page.waitForTimeout(THROW_ARC_MS + 500);

@@ -2424,6 +2424,24 @@ section is about. None of the three was the consolidation:
 The generalisation, and the reason this section exists twice over: **a rule that catches the fault's
 usual wording does not catch the fault.** Two of these three had no wording at all.
 
+**And `battle` took three passes, because the first two fixes were each half of it.** Aiming the control
+throw at open ground fixed the wrong half: `throwSpot` excludes links and the HUD but **not claims**,
+and the cat stands on claims, so the click still threw nothing. It takes an `avoidClaims` argument now —
+false for the three callers that aim at a far corner, true for the one that aims at the cat, because two
+callers can want two different things from one helper. Then the counter section turned out to be
+**racing its own reclaiming**: baiting means holding still on the claim nearest the cat, a hold that
+survives `SCRUB_MS` *reclaims* that claim, and a few baits in the board is empty, the fight is won and
+there is no cat left to commit. Measured across the gate: three commitments in one run, one in another —
+a property of how fast the holds landed, not of the build. The loop opens another fight and keeps its
+count across them.
+
+**The last red was my own fixture threshold, and it is the sharpest lesson here.** "The cat committed
+often enough to try a counter" was written as `commitments >= 3`, and it failed at two on a run where
+the counter **landed** — a fixture going red while the thing it gates goes green. A threshold has to
+come from what the assertion actually needs (no commitment, no window, nothing measured — so one), not
+from what feels like a comfortable margin. **A fixture used as a comfort blanket is just a second way to
+fail a passing build.**
+
 ---
 
 ## 13. The arena toggle
