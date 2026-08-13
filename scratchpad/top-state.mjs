@@ -1,5 +1,6 @@
 /**
- * §7.1's top state — the cat sits on the cursor once you have earned both proofs.
+ * §7.1's top state on the card game (2.2) — the cat sits on the cursor once you have
+ * earned both proofs.
  *
  * The interesting checks here are not "does it happen". They are the two claims §7.1 and 0.6
  * make *about* it:
@@ -11,9 +12,27 @@
  * 2. **The reader pays nothing.** 0.6 deferred this as "worth building deliberately" because it
  *    changes ambient browsing on a portfolio somebody may be reading. On a mouse the cat is a
  *    live hit target so it can be petted; parked under the cursor that is a dead zone exactly
- *    where a click is about to land. So: a link under a perched cat must still be clickable.
+ *    where a click is about to land. So the perched cat must be inert to the pointer — its own
+ *    half of the click-through promise, which survives the card.
  *
- * Mirrors src/lib/cat-game.ts:
+ * **2.2 conversion.** The subject of this file is the **ambient cat** (`#site-cat`), which the
+ * card build leaves alone — it still walks at the bottom-left, wears the collar (`lv6`) when
+ * every treat is found and the notch (`.notched`) after a fight is won. Only the fight-earning
+ * half changed: the page-board arena is gone, so a win is now a **card fight**, played here with
+ * arena8's proven flee-and-scrub (imports `CARD_SAFE_FLEE_PX` + `wants.stance` from
+ * `./lib/fixture.mjs`, board-relative coords, `[data-board]`/`[data-boss]`/`.cat-tile[data-state="claimed"]`,
+ * `#cat-card-toggle`/`#cat-card-panel`, and the rematch budget — §9.4's answer to a stall-loss).
+ * The card's `finish('win')` adds `.notched` to `#site-cat` (CatCard.astro), so the notch check
+ * is unchanged: read the class off the ambient cat.
+ *
+ * **Dropped as page-only (2.2's drop list).** The link-click-through family — scrolling a link
+ * into the cat's band, `elementFromPoint` on the page, clicking and expecting a navigation — is
+ * page scrolling, page DOM probing and link navigation, which the card never touches. And the
+ * arena-era "opening a fight drops the perch" (§9's page arena set `html.cat-arena-on` and the
+ * cat answered it) is gone with the arena: CatCard explicitly never touches the ambient cat, so
+ * there is no designed perch-drop on card open to measure.
+ *
+ * Mirrors src/lib/cat-game.ts and src/components/SiteCat.astro:
  */
 const PERCH_STILL_MS = 620;
 const PERCH_SNAP_PX = 4;
@@ -21,9 +40,15 @@ const PERCH_BREAK_PX = 22;
 
 import {
   BASE,
+  CARD_SAFE_FLEE_PX,
+  deal,
   fresh as context,
   launch,
+  overFor,
+  press as sharedPress,
+  release as sharedRelease,
   report,
+  wants,
 } from './lib/fixture.mjs';
 
 /*
@@ -34,22 +59,21 @@ import {
 const browser = await launch();
 const { ok, note, fixture, done } = report();
 
+/** Shared with the fleet; this file has always allowed 8000ms for the open. */
+const press = (page) => sharedPress(page, { timeout: 8000 });
+const release = (page) => sharedRelease(page, { timeout: 8000 });
 
-
-
-/** A desktop context playing **manual mode** — the top state is reached by winning §3's fight. */
+/** A desktop context playing **manual mode** — the top state is reached by winning the card's fight. */
 const fresh = (opts = {}) => context(browser, { mode: 'manual', ...opts });
-
 
 const PERCHED = `document.getElementById('site-cat').classList.contains('perched')`;
 const LEVEL = `[...document.getElementById('site-cat').classList].filter((c) => /^lv\\d$/.test(c)).pop() ?? ''`;
 const NOTCHED = `document.getElementById('site-cat').classList.contains('notched')`;
 
-/** Where the cat's body centre is, in client coordinates. */
-const CAT_CENTRE = `(() => {
-  const r = document.getElementById('site-cat').getBoundingClientRect();
-  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-})()`;
+/** Claims left on the card's board. */
+const CLAIMS = `document.querySelectorAll('.cat-tile[data-state="claimed"]').length`;
+/** What the card's ribbon currently says ('' when hidden/empty). */
+const RIBBON = `document.querySelector('[data-ribbon]')?.textContent?.trim() ?? ''`;
 
 /**
  * Somewhere inside the cat's notice band that is not a link.
@@ -84,147 +108,165 @@ async function collectAll(page) {
 }
 
 /**
- * Win a fight — the confrontation path to the notch. **Retried, because a loss is a result.**
+ * A cat that leaps, on a board with something to work — one deal, both conditions.
  *
- * Every fight this harness plays is treatless: the collar is earned before or after, never
- * during, so `ammo` is 0 for the whole thing. `isLost` is territory at 100% *and* nothing left
- * to throw, so with no treats a single stalled exchange — 7s where the flight found nowhere far
- * enough to hold — lets the cat regrow to the whole board and the fight ends in a loss. Runs
- * with 0 stalls won every time; the one run with 1 stall lost, and was reported as "the top
- * state does not work".
- *
- * That is the game behaving exactly as §9.4's floor describes, so the retry is the honest
- * response rather than a papered-over flake: §9.4 makes the toggle itself the rematch, and
- * pressing it again is what a player who just lost actually does. Whether a treatless fight is
- * *winnable* is arena8 section 4's question and it answers yes; this file only needs a notch.
+ * 1.4 measured that flee-and-hold is the *leaper's* counter: against a floor-bound siege cat it
+ * is four of every six seconds spent luring something that cannot come. So every section that
+ * plays it pins a leaper. Siege's own winnability is measured where the strategy fits it, in
+ * `scratchpad/battle.mjs`.
  */
-async function winAFight(page, budgetMs = 130_000, tries = 3) {
-  let last = null;
-  for (let i = 0; i < tries; i++) {
-    last = await winAFightOnce(page, budgetMs);
-    if (last.notched) return { ...last, tries: i + 1 };
-    await page.waitForTimeout(800);
-  }
-  return { ...last, tries };
+const leaper = (page, want = 'ambush') =>
+  deal(page, wants.stance([want], { claims: 'any' }), {
+    deals: 14,
+    settle: 0,
+    reopen: async () => {
+      await release(page);
+      await press(page);
+    },
+  });
+
+/** Park the cursor where nothing can be scrubbed — a bare corner of the board. */
+async function parkNeutral(page) {
+  const p = await page.evaluate(() => {
+    const b = document.querySelector('[data-board]').getBoundingClientRect();
+    return { x: b.left + b.width - 8, y: b.top + 8 };
+  });
+  await page.mouse.move(p.x, p.y);
+  await page.waitForTimeout(80);
 }
 
-async function winAFightOnce(page, budgetMs = 130_000) {
-  await page.click('#cat-arena-toggle');
-  /*
-   * **Re-roll until the cat is one this strategy answers (added 2.0).** Everything below lures the
-   * cat to the top of the screen and works a claim on the far side, which is the counter to a
-   * *leaper*; siege never leaves the floor, so the lure waits for an arrival that cannot happen and
-   * the fight plateaus. 1.4 measured that and pinned a leaper in `arena8` section 1; 2.0 found the
-   * same fault still sitting in this file and in `arena8` section 2, which is what a shared strategy
-   * fixed at one call site looks like. Reported here as "notched false (3 left, 2 stalls, 144s)".
-   *
-   * This file needs a **notch**, not a verdict on any particular stance — §9.4's floor is `arena8`
-   * section 4's question and siege's own winnability is `battle.mjs`'s.
-   */
-  for (let roll = 0; roll < 12; roll++) {
-    const stance = await page.evaluate(`document.getElementById('site-cat')?.dataset.stance ?? ''`);
-    const claims = await page.evaluate(`document.querySelectorAll('.cat-claimed').length`);
-    if (stance !== 'siege' && stance !== 'sleepy' && claims > 0) break;
-    await page.keyboard.press('Escape');
-    await page
-      .waitForFunction(() => !document.querySelector('.cat-claimed'), undefined, { timeout: 8000 })
-      .catch(() => {});
-    await page.waitForTimeout(300);
-    await page.click('#cat-arena-toggle');
-    await page
-      .waitForFunction(() => !!document.querySelector('.cat-claimed'), undefined, { timeout: 9000 })
-      .catch(() => {});
+/**
+ * One exchange: pick the claimed tile farthest from the boss; **hold only if it is beyond
+ * the safe distance**, and otherwise park the cursor at the corner (which pulls the boss
+ * along) and report "not taken" so the caller retries. This is the loop that measured a
+ * win in first-run.mjs and the gate probe: at CARD_SAFE_FLEE_PX ≈ 85px the boss cannot
+ * arrive inside one 1400ms scrub, so a far hold is uninterruptible — but holding a close
+ * tile is a pounce, so those are never attempted.
+ */
+async function fleeAndScrub(page, ms = 7000) {
+  const spot = await placeFarTarget(page, CARD_SAFE_FLEE_PX);
+  if (!spot) return { took: false, why: 'nothing parkable' };
+
+  if (!spot.far) {
+    // Park so the boss follows the cursor to the corner; the next pick starts from distance.
+    await parkNeutral(page);
+    await page.waitForTimeout(900);
+    return { took: false, why: 'no far target yet' };
   }
-  await page
-    .waitForFunction(() => !!document.querySelector('.cat-claimed'), undefined, { timeout: 9000 })
-    .catch(() => {});
-  const t0 = Date.now();
-  let stalls = 0;
-  while (Date.now() - t0 < budgetMs && stalls < 9) {
-    if (await page.evaluate(`!document.documentElement.classList.contains('cat-arena-on')`)) break;
-    if ((await page.evaluate(`document.querySelectorAll('.cat-claimed').length`)) === 0) break;
-    await page.mouse.move(640, 60); // decoy at the top
-    await page
-      .waitForFunction(
-        () => {
-          const r = document.getElementById('site-cat').getBoundingClientRect();
-          return Math.hypot(r.left + r.width / 2 - 640, r.top + r.height / 2 - 60) < 200;
-        },
-        undefined,
-        { timeout: 4000 },
-      )
-      .catch(() => {});
-    const spot = await page.evaluate(async () => {
-      /*
-       * Wait for the element to stop travelling before hit-testing it (added 1.2). The site
-       * reveals content on scroll with a `translateY`, so a claim scrolled into place keeps
-       * moving for a few hundred ms and a point taken at its centre lands off its edge — which
-       * is what `winAFightOnce` kept hitting, and why 1.1 had to give this file a *retry*. The
-       * retry stays, for genuine losses; this removes the reason it was needed.
-       */
-      const stable = async (el) => {
-        let last = null;
-        for (let i = 0; i < 40; i++) {
-          await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 25)));
-          const t = el.getBoundingClientRect().top;
-          if (last !== null && Math.abs(t - last) < 0.5) return;
-          last = t;
-        }
-      };
-      const claims = [...document.querySelectorAll('.cat-claimed')];
-      const maxScroll = Math.max(0, document.documentElement.scrollHeight - innerHeight);
-      const lowY = innerHeight - 170;
-      for (const el of claims) {
-        const r0 = el.getBoundingClientRect();
-        const want = Math.max(
-          0,
-          Math.min(maxScroll, Math.round(r0.top + scrollY + r0.height / 2 - lowY)),
-        );
-        scrollTo({ top: want, behavior: 'instant' });
-        await stable(el);
+
+  const before = await page.evaluate(CLAIMS);
+  await page.mouse.move(spot.x, spot.y);
+  await page.waitForTimeout(1750);
+  const took = (await page.evaluate(CLAIMS)) < before;
+  if (!took) {
+    // The boss got there — park the cursor away so the next pick starts from distance.
+    await parkNeutral(page);
+    await page.waitForTimeout(900);
+  }
+  return { took, away: spot.away, why: took ? 'reclaimed' : 'held but not taken' };
+}
+
+/**
+ * A claimed tile far from the boss, on the card's own board — the card has no scroll, so
+ * "far" is board distance, not screen distance. Returns the point to hold and its distance
+ * from the boss.
+ */
+async function placeFarTarget(page, safe) {
+  const spot = await page.evaluate((safePx) => {
+    const board = document.querySelector('[data-board]');
+    if (!board) return null;
+    const b = board.getBoundingClientRect();
+    const boss = document.querySelector('[data-boss]')?.getBoundingClientRect();
+    const cx = boss ? boss.left + boss.width / 2 : b.left;
+    const cy = boss ? boss.top + boss.height / 2 : b.top;
+    const claims = [...document.querySelectorAll('.cat-tile[data-state="claimed"]')]
+      .map((el) => {
         const r = el.getBoundingClientRect();
-        const x = Math.round(Math.min(Math.max(r.left + r.width / 2, 60), innerWidth - 60));
-        const y = Math.round(Math.min(Math.max(r.top + r.height / 2, 170), innerHeight - 110));
-        if (document.elementFromPoint(x, y)?.closest('.cat-claimed') === el) return { x, y };
-      }
-      return null;
-    });
-    if (!spot) {
+        const x = r.left + r.width / 2;
+        const y = r.top + r.height / 2;
+        return { x: Math.round(x), y: Math.round(y), away: Math.round(Math.hypot(x - cx, y - cy)) };
+      })
+      .sort((a, z) => z.away - a.away);
+    const hit = claims[0];
+    if (!hit) return null;
+    return hit.away >= safePx ? { ...hit, far: true } : { ...hit, far: false };
+  }, safe);
+  if (spot) await page.waitForTimeout(120);
+  return spot;
+}
+
+/** Play a card fight to a conclusion by fleeing, never spending. Returns a report. */
+async function playByFleeing(page, budgetMs = 150_000) {
+  const t0 = Date.now();
+  let took = 0;
+  let stalls = 0;
+  const why = {};
+  let closest = Infinity;
+  let minAway = Infinity;
+  let ribbon = '';
+  while (Date.now() - t0 < budgetMs) {
+    if (await page.evaluate(`document.querySelector('#cat-card-panel').hidden`)) break;
+    // The win line only lives for the beat before the card closes — catch it live.
+    if (await page.evaluate(`document.getElementById('site-cat')?.classList.contains('notched')`)) {
+      ribbon = await page.evaluate(RIBBON);
+      break;
+    }
+    const left = await page.evaluate(CLAIMS);
+    if (left === 0) break;
+    closest = Math.min(closest, left);
+    const r = await fleeAndScrub(page);
+    if (r.away !== undefined) minAway = Math.min(minAway, r.away);
+    if (r.took) took++;
+    else if (r.why === 'no far target yet') {
+      // A re-park, not a stall: the loop is repositioning, not failing.
+    } else {
       stalls++;
-      continue;
+      why[r.why] = (why[r.why] ?? 0) + 1;
     }
-    await page.waitForTimeout(250);
-    const before = await page.evaluate(`document.querySelectorAll('.cat-claimed').length`);
-    await page.mouse.move(spot.x, spot.y);
-    let took = false;
-    const h0 = Date.now();
-    while (Date.now() - h0 < 7000) {
-      await page.waitForTimeout(150);
-      if ((await page.evaluate(`document.querySelectorAll('.cat-claimed').length`)) < before) {
-        took = true;
-        break;
-      }
-    }
-    if (!took) stalls++;
+    if (stalls > 8) break;
   }
-  // Let the win beat and the exit curtain finish.
-  await page
-    .waitForFunction(
-      () =>
-        !document.querySelector('.cat-claimed') &&
-        !document.documentElement.classList.contains('cat-arena-on'),
-      undefined,
-      { timeout: 9000 },
-    )
-    .catch(() => {});
-  await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
-  await page.waitForTimeout(400);
   return {
-    notched: await page.evaluate(NOTCHED),
-    left: await page.evaluate(`document.querySelectorAll('.cat-claimed').length`),
+    took,
     stalls,
+    left: await page.evaluate(CLAIMS),
+    fewest: closest === Infinity ? -1 : closest,
+    minAway: minAway === Infinity ? -1 : minAway,
+    why: Object.entries(why).map(([k, n]) => `${k}x${n}`).join(', ') || 'none',
     seconds: (Date.now() - t0) / 1000,
+    won: await page.evaluate(`document.getElementById('site-cat').classList.contains('notched')`),
+    ribbon,
   };
+}
+
+/**
+ * Win a card fight — the confrontation path to the notch. **Retried, because a loss is a result.**
+ *
+ * Every fight this harness plays is treatless: the collar is earned before or after, never
+ * during, so `ammo` is 0 for the whole thing. With no treats a single stalled exchange lets the
+ * cat regrow to the whole board and the fight ends in a loss — the game behaving exactly as
+ * §9.4's floor describes, so the retry is the honest response rather than a papered-over flake:
+ * §9.4 makes the toggle itself the rematch, and pressing it again is what a player who just lost
+ * actually does. Whether a treatless fight is *winnable* is arena8 section 4's question and it
+ * answers yes; this file only needs a notch. After a win the card closes back to collapsed
+ * (2.2 pillar 2), which is what the perch needs to measure the ambient page.
+ */
+async function winAFight(page, budgetMs = 150_000, tries = 4) {
+  let last = null;
+  let attemptsUsed = 0;
+  for (let attempt = 0; attempt < tries && (!last || !last.won); attempt++) {
+    attemptsUsed = attempt + 1;
+    if (attempt > 0) {
+      await release(page);
+      await overFor(page, 9000);
+    }
+    await press(page);
+    const stanceDeal = await leaper(page);
+    const stance = stanceDeal.value;
+    fixture('against a cat the flight strategy answers', stanceDeal, stance ?? '');
+    last = await playByFleeing(page, budgetMs);
+  }
+  if (last?.won) await overFor(page, 9000);
+  return { ...last, tries: attemptsUsed };
 }
 
 /** Rest the pointer at a low spot and report whether the cat comes and sits on it. */
@@ -246,8 +288,6 @@ async function tryPerch(page, x = 640, waitMs = 5000) {
 {
   const ctx = await fresh();
   const page = await ctx.newPage();
-  const page2 = await ctx.newPage();
-  await page2.close();
   await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
   await page.waitForTimeout(1500);
 
@@ -273,11 +313,12 @@ async function tryPerch(page, x = 640, waitMs = 5000) {
   await page.waitForTimeout(1500);
 
   const fight = await winAFight(page);
-  const notched = fight.notched;
+  const notched = fight.won;
   ok(
-    'the confrontation path reaches the notch',
+    'the confrontation path reaches the notch — a card win',
     notched,
-    `${fight.left} claims left, ${fight.stalls} stalls, ${fight.seconds.toFixed(0)}s`,
+    `${fight.took} reclaimed, ${fight.stalls} stalls (${fight.why}), ${fight.left} left, ` +
+      `${fight.seconds.toFixed(0)}s, on try ${fight.tries}`,
   );
   const lv = await page.evaluate(LEVEL);
   ok(
@@ -298,12 +339,12 @@ async function tryPerch(page, x = 640, waitMs = 5000) {
   await page.waitForTimeout(1500);
 
   const f1 = await winAFight(page);
-  const notched = f1.notched;
+  const notched = f1.won;
   const lv = await collectAll(page);
   ok(
     'earned both, fight first',
     notched && lv === 'lv6',
-    `notched ${notched} (${f1.left} left, ${f1.stalls} stalls, ${f1.seconds.toFixed(0)}s), ${lv}`,
+    `notched ${notched} (${f1.took} reclaimed, ${f1.stalls} stalls, ${f1.seconds.toFixed(0)}s), ${lv}`,
   );
 
   const got = await tryPerch(page, 640, 6000);
@@ -324,103 +365,17 @@ async function tryPerch(page, x = 640, waitMs = 5000) {
     );
 
     /*
-     * The check this whole design turns on. 0.6 deferred the top state because it changes
-     * ambient browsing; the answer was to make the perched cat scenery. If a link under it
-     * cannot be clicked, the reward has cost the reader something and the feature is wrong.
+     * The reader-pays-nothing half that lives on the cat itself: while perched, `.cat-svg` is
+     * `pointer-events: none`, so the perched cat is scenery rather than a dead zone under the
+     * cursor. (The other half — clicking a link under it — is page behaviour and belongs to the
+     * 2.2 drop list; the mechanism is this CSS.)
      */
-    const reach = await page.evaluate(
-      ([cx, cy]) => {
-        const el = document.elementFromPoint(cx, cy);
-        return {
-          tag: el ? el.tagName : '(nothing)',
-          isCat: !!el?.closest('#site-cat'),
-        };
-      },
-      [got.spot.x, got.spot.y],
-    );
-    ok(
-      'the page is still what is under the cursor, not the cat',
-      !reach.isCat,
-      `elementFromPoint → ${reach.tag}`,
-    );
     ok(
       'and the cat is inert to the pointer while perched',
       (await page.evaluate(
         `getComputedStyle(document.querySelector('#site-cat .cat-svg')).pointerEvents`,
       )) === 'none',
     );
-
-    // Now the real thing: park the cat over a link and click it.
-    /*
-     * **Scroll** a link into the cat's band rather than hoping one is already there. The band is
-     * the bottom ~234px and the homepage at rest had nothing in it, so the first run skipped the
-     * only check that matters. The page moves; the cat is fixed to the floor — so putting a link
-     * where the cat can sit on it is arithmetic, the same move arena8 uses to place a claim.
-     */
-    const clicked = await page.evaluate(async () => {
-      // Its own copy: `page.evaluate` bodies are separate scopes, and defining this only in the
-      // claim finder above left a `stable is not defined` here — one edit, two closures.
-      const stable = async (el) => {
-        let last = null;
-        for (let i = 0; i < 40; i++) {
-          await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 25)));
-          const t = el.getBoundingClientRect().top;
-          if (last !== null && Math.abs(t - last) < 0.5) return;
-          last = t;
-        }
-      };
-      const cands = [...document.querySelectorAll('main a[href^="/"]')].filter((a) => {
-        const r = a.getBoundingClientRect();
-        return r.width > 40 && r.height > 12;
-      });
-      const maxScroll = Math.max(0, document.documentElement.scrollHeight - innerHeight);
-      const bandY = innerHeight - 90; // inside the notice band, clear of the very edge
-      for (const link of cands) {
-        const r0 = link.getBoundingClientRect();
-        const want = Math.max(
-          0,
-          Math.min(maxScroll, Math.round(r0.top + scrollY + r0.height / 2 - bandY)),
-        );
-        scrollTo({ top: want, behavior: 'instant' });
-        await stable(link);
-        const r = link.getBoundingClientRect();
-        const x = Math.round(r.left + r.width / 2);
-        const y = Math.round(r.top + r.height / 2);
-        if (y < innerHeight - 150 || y > innerHeight - 30) continue; // not in the band
-        if (document.elementFromPoint(x, y)?.closest('a[href]') !== link) continue;
-        return { found: true, x, y, href: link.getAttribute('href') };
-      }
-      return { found: false };
-    });
-    if (clicked.found) await page.waitForTimeout(300);
-    // A *scan* of the page's own links rather than a roll — nothing to re-deal, but still the harness
-    // setting itself up, and `FIXTURE` says which of the two failed when it does.
-    fixture('found a link inside the cat’s band to test against', clicked.found || null, clicked.href ?? '');
-    if (clicked.found) {
-      const settled = await tryPerch(page, clicked.x, 6000);
-      // Move onto the link's exact centre and let the cat settle there too.
-      await page.mouse.move(clicked.x, clicked.y);
-      await page.waitForTimeout(PERCH_STILL_MS + 900);
-      const over = await page.evaluate(
-        ([lx, ly]) => {
-          const el = document.elementFromPoint(lx, ly);
-          return { isCat: !!el?.closest('#site-cat'), isLink: !!el?.closest('a[href]') };
-        },
-        [clicked.x, clicked.y],
-      );
-      ok(
-        'a link under the perched cat is still the click target',
-        over.isLink && !over.isCat,
-        `perched ${settled.perched}, elementFromPoint isLink=${over.isLink} isCat=${over.isCat}`,
-      );
-      await page.mouse.click(clicked.x, clicked.y);
-      await page.waitForTimeout(1200);
-      ok(
-        'and clicking it actually navigates',
-        new URL(page.url()).pathname === clicked.href,
-        `${new URL(page.url()).pathname} (wanted ${clicked.href})`,
-      );
-    }
   }
 
   ok('no console errors from the top state', errors.length === 0, errors.slice(0, 2).join(' | '));
@@ -436,11 +391,11 @@ async function tryPerch(page, x = 640, waitMs = 5000) {
 
   const lv = await collectAll(page);
   const f2 = await winAFight(page);
-  const notched = f2.notched;
+  const notched = f2.won;
   ok(
     'earned both, collecting first',
     notched && lv === 'lv6',
-    `${lv}, notched ${notched} (${f2.left} left, ${f2.stalls} stalls, ${f2.seconds.toFixed(0)}s)`,
+    `${lv}, notched ${notched} (${f2.took} reclaimed, ${f2.stalls} stalls, ${f2.seconds.toFixed(0)}s)`,
   );
 
   const got = await tryPerch(page, 560, 6000);
@@ -476,50 +431,7 @@ async function tryPerch(page, x = 640, waitMs = 5000) {
   await ctx.close();
 }
 
-// ---- 5. the arena wins any argument about who owns the cat
-{
-  const ctx = await fresh();
-  const page = await ctx.newPage();
-  await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
-  await page.waitForTimeout(1500);
-  const lv = await collectAll(page);
-  const f3 = await winAFight(page);
-  const notched = f3.notched;
-  /*
-   * **Reaching the top state is a fixture, and an expensive one.** It needs every treat found and a
-   * fight won, and both are plays against a rolled opponent — so when it does not happen, this harness
-   * has measured nothing, which is a different statement from "the arena mishandles a perch". Written
-   * as `ok(..., false)` it made the second statement in the words of the first.
-   */
-  const top = notched && lv === 'lv6' && (await tryPerch(page, 640, 6000)).perched;
-  fixture(
-    'reached the top state to test the arena against',
-    top || null,
-    `${lv}, notched ${notched} (${f3.left} left, ${f3.stalls} stalls, ${f3.seconds.toFixed(0)}s)`,
-  );
-  if (top) {
-    await page.click('#cat-arena-toggle');
-    await page
-      .waitForFunction(() => !!document.querySelector('.cat-claimed'), undefined, { timeout: 9000 })
-      .catch(() => {});
-    ok(
-      'opening a fight drops the perch',
-      (await page.evaluate(PERCHED)) === false,
-      `perched ${await page.evaluate(PERCHED)}`,
-    );
-    // A boss must be able to be under the cursor without being click-through furniture.
-    await page.waitForTimeout(2500);
-    ok(
-      'and it does not come back mid-fight',
-      (await page.evaluate(PERCHED)) === false,
-    );
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(2000);
-  }
-  await ctx.close();
-}
-
-// ---- 6. reduced motion never perches
+// ---- 5. reduced motion never perches
 {
   const ctx = await fresh({ reducedMotion: 'reduce' });
   const page = await ctx.newPage();

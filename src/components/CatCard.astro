@@ -881,6 +881,11 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
 
     function clearWash(node: HTMLElement): void {
       node.style.removeProperty('--scrub');
+      // A dropped hold is not a freed claim: the tile returns to *claimed*, not
+      // unclaimed. Leaving it as `scrubbing` (a 2.2 port bug the arena3 A/B caught:
+      // after a pounced hold the tile read `scrubbing` forever, so a second hold on
+      // the same claim found no `claimed` tile at that point) wedged the state.
+      if (node.dataset.state === 'scrubbing') node.dataset.state = 'claimed';
     }
 
     /* ---------------------------------------------------------------- *
@@ -2007,11 +2012,20 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       touch.at = 0;
     });
 
-    // The pointer leaving the card is not the same as holding still.
+    // The pointer leaving the card is not the same as holding still. The board is the
+    // only game surface, so *any* leave of it ends the hold — relatedTarget is non-null
+    // when the pointer glides onto the page behind the card, and that is still a leave
+    // (measured: a pointer that left for the page kept scrubbing the last tile, because
+    // board pointermove stopped updating `scrub.x/y` and `inside` never cleared). A hold
+    // that survives the pointer leaving is a hold the player cannot end.
     boardEl.addEventListener('pointerout', (e) => {
-      if (!(e as PointerEvent).relatedTarget) {
+      const rt = (e as PointerEvent).relatedTarget as Node | null;
+      if (!rt || !boardEl.contains(rt)) {
         scrub.inside = false;
+        scrub.x = scrub.y = -1;
+        scrub.ax = scrub.ay = -1;
         scrub.vx = scrub.vy = 0;
+        dropHold(scrub);
         hideRing();
       }
     });

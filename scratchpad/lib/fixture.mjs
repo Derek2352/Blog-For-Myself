@@ -569,7 +569,9 @@ export async function throwSpot(page, near, { avoidClaims = false } = {}) {
       const board = document.querySelector('[data-board]');
       if (!board) return null;
       const b = board.getBoundingClientRect();
+      const inBoard = (x, y) => x >= b.left + 4 && x <= b.right - 4 && y >= b.top + 4 && y <= b.bottom - 4;
       const okAt = (x, y) => {
+        if (!inBoard(x, y)) return null;
         const el = document.elementFromPoint(x, y);
         if (!el || el.closest('.cat-tile')) return null;
         if (noClaims && el.closest('.cat-tile[data-state="claimed"]')) return null;
