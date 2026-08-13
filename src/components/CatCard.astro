@@ -565,7 +565,7 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
 
 <script>
   import { motionReduced } from '@/lib/a11y-prefs';
-  import { primeSfx, playCue } from '@/lib/cat-sfx';
+  import { primeSfx, playCue, setSfxEnabled, sfxEnabled } from '@/lib/cat-sfx';
   import { tallyFor, resolveTreat } from '@/lib/cat-game';
   import {
     INITIAL_CLAIM_FRACTION,
@@ -690,10 +690,11 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     let open = false;
 
     /* ---------------------------------------------------------------- *
-     * Which game this is (§15, 2.0). Mirrors the page chip.
+     * Which game this is (§15, 2.0). Owned here — the page chips are gone
+     * in the card model (§2.2: the HUD controls moved into the card).
      * ---------------------------------------------------------------- */
-    const pageModeBtn = document.querySelector<HTMLButtonElement>('#cat-manual-toggle');
-    const commanding = () => pageModeBtn?.getAttribute('aria-pressed') !== 'true';
+    let mode: 'commander' | 'manual' = 'commander';
+    const commanding = () => mode === 'commander';
 
     /* ---------------------------------------------------------------- *
      * State — the same shape as CatArena's, on tile elements.
@@ -1889,23 +1890,23 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
      * Header controls
      * ---------------------------------------------------------------- */
 
-    // Sound: forward to the page's own chip so one source of truth stays honest.
-    const pageSoundBtn = document.querySelector<HTMLButtonElement>('#cat-sound-toggle');
+    // Sound — owned here, session-only like every other fight setting (§13.4).
+    // 2.1's decision carries: sound is on by default, so this is a mute, and a
+    // refresh comes back with sound on.
     const syncSound = () =>
-      soundBtn?.setAttribute('aria-pressed', pageSoundBtn?.getAttribute('aria-pressed') ?? 'true');
+      soundBtn?.setAttribute('aria-pressed', sfxEnabled() ? 'true' : 'false');
     soundBtn?.addEventListener('click', () => {
-      pageSoundBtn?.click();
+      setSfxEnabled(!sfxEnabled());
       syncSound();
     });
     syncSound();
 
-    // Mode: mirrored to the page game's chip so both stay honest about the next fight.
-    const syncMode = () => {
-      const manual = pageModeBtn?.getAttribute('aria-pressed') === 'true';
-      modeBtn?.setAttribute('aria-pressed', manual ? 'true' : 'false');
-    };
+    // Mode — owned here too. Pressed means manual (§15); the switch takes effect
+    // on the next round, never mid-fight.
+    const syncMode = () =>
+      modeBtn?.setAttribute('aria-pressed', mode === 'manual' ? 'true' : 'false');
     modeBtn?.addEventListener('click', () => {
-      pageModeBtn?.click();
+      mode = mode === 'manual' ? 'commander' : 'manual';
       syncMode();
       if (arena.on) {
         // §15: mode takes effect on the next round — say what it will do.
