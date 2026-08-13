@@ -188,8 +188,13 @@ export interface Worker {
  * The kitten's whole cost, in one number, and the reason the policy below can be stated as a
  * comparison rather than a ranking.
  */
-export function workTimeMs(kitten: { x: number; y: number }, c: Candidate, speed = KITTEN_SPEED): number {
-  return (Math.hypot(c.x - kitten.x, c.y - kitten.y) / speed) * 1000 + KITTEN_WORK_MS;
+export function workTimeMs(
+  kitten: { x: number; y: number },
+  c: Candidate,
+  speed = KITTEN_SPEED,
+  workMs = KITTEN_WORK_MS,
+): number {
+  return (Math.hypot(c.x - kitten.x, c.y - kitten.y) / speed) * 1000 + workMs;
 }
 
 /**
@@ -200,9 +205,14 @@ export function workTimeMs(kitten: { x: number; y: number }, c: Candidate, speed
  * range answers 0, which is correct and is what makes a claim under the cat's nose unattractive
  * without needing a special case.
  */
-export function threatTimeMs(boss: { x: number; y: number }, c: Candidate): number {
-  const gap = Math.max(0, Math.hypot(c.x - boss.x, c.y - boss.y) - POUNCE_RANGE);
-  return (gap / (STALK_SPEED * AGGRO_DESPERATE)) * 1000;
+export function threatTimeMs(
+  boss: { x: number; y: number },
+  c: Candidate,
+  pounceRange = POUNCE_RANGE,
+  speed = STALK_SPEED * AGGRO_DESPERATE,
+): number {
+  const gap = Math.max(0, Math.hypot(c.x - boss.x, c.y - boss.y) - pounceRange);
+  return (gap / speed) * 1000;
 }
 
 /**
@@ -216,8 +226,12 @@ export function canFinish(
   kitten: { x: number; y: number },
   c: Candidate,
   boss: { x: number; y: number },
+  scale: { pounceRange?: number; stalkSpeed?: number; kittenSpeed?: number } = {},
 ): boolean {
-  return threatTimeMs(boss, c) > workTimeMs(kitten, c);
+  return (
+    threatTimeMs(boss, c, scale.pounceRange, scale.stalkSpeed) >
+    workTimeMs(kitten, c, scale.kittenSpeed)
+  );
 }
 
 /**
@@ -263,6 +277,7 @@ export function pickWork(
   candidates: readonly Candidate[],
   boss: { x: number; y: number },
   taken: readonly number[] = [],
+  scale: { pounceRange?: number; stalkSpeed?: number; kittenSpeed?: number } = {},
 ): number {
   const busy = new Set(taken.filter((t) => t !== kitten.target));
   let safe = -1;
@@ -271,8 +286,8 @@ export function pickWork(
   let bestRatio = -1;
   for (const c of candidates) {
     if (busy.has(c.index)) continue;
-    const mine = workTimeMs(kitten, c);
-    const theirs = threatTimeMs(boss, c);
+    const mine = workTimeMs(kitten, c, scale.kittenSpeed);
+    const theirs = threatTimeMs(boss, c, scale.pounceRange, scale.stalkSpeed);
     if (theirs > mine) {
       if (mine < safeSoonest) {
         safeSoonest = mine;

@@ -430,8 +430,13 @@ export function nextPhase(phase: Phase, elapsed: number, scale = 1): Phase | nul
  * `patience` is a stance's addition to the threshold (§9.3) — Sleepy waits until you have
  * nearly finished before it can be bothered.
  */
-export function provoked(distance: number, progress: number, patience = 0): boolean {
-  return distance <= POUNCE_RANGE && progress >= POUNCE_THRESHOLD + patience;
+export function provoked(
+  distance: number,
+  progress: number,
+  patience = 0,
+  range = POUNCE_RANGE,
+): boolean {
+  return distance <= range && progress >= POUNCE_THRESHOLD + patience;
 }
 
 /**
@@ -474,11 +479,18 @@ export const AIM_LEAD_MS = TELEGRAPH_MS + LEAP_MS;
  * screen to somewhere the cursor was never going, which reads as a bug rather
  * than as being outsmarted.
  */
-export function predict(x: number, y: number, vx: number, vy: number, ms = LEAP_MS): { x: number; y: number } {
+export function predict(
+  x: number,
+  y: number,
+  vx: number,
+  vy: number,
+  ms = LEAP_MS,
+  cap = PREDICT_CAP,
+): { x: number; y: number } {
   const lx = (vx * ms) / 1000;
   const ly = (vy * ms) / 1000;
   const lead = Math.hypot(lx, ly);
-  const k = lead > PREDICT_CAP ? PREDICT_CAP / lead : 1;
+  const k = lead > cap ? cap / lead : 1;
   return { x: x + lx * k, y: y + ly * k };
 }
 
@@ -505,12 +517,13 @@ export function leapPos(
   bx: number,
   by: number,
   t: number,
+  height = LEAP_HEIGHT,
 ): { x: number; y: number } {
   const c = t < 0 ? 0 : t > 1 ? 1 : t;
   return {
     x: ax + (bx - ax) * c,
     // screen coordinates, so "up" is a subtraction
-    y: ay + (by - ay) * c - leapArc(c) * LEAP_HEIGHT,
+    y: ay + (by - ay) * c - leapArc(c) * height,
   };
 }
 
@@ -522,8 +535,14 @@ export function leapPos(
  * A dodge has to be the player's read, and a cat that adjusts mid-air is a dice
  * roll with extra steps.
  */
-export function pounceHit(landX: number, landY: number, curX: number, curY: number): boolean {
-  return Math.hypot(landX - curX, landY - curY) <= HIT_RADIUS;
+export function pounceHit(
+  landX: number,
+  landY: number,
+  curX: number,
+  curY: number,
+  radius = HIT_RADIUS,
+): boolean {
+  return Math.hypot(landX - curX, landY - curY) <= radius;
 }
 
 /* ------------------------------------------------------------------ *
