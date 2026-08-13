@@ -276,8 +276,24 @@ async function openArena(page) {
   await page.waitForTimeout(1400);
   await openArena(page);
 
-  // A claim well away from whatever the squad is already doing, and a point verified on it.
-  const pick = await page.evaluate(() => {
+  /*
+   * A claim well away from whatever the squad is already doing, and a point verified on it —
+   * **and a point that belongs to the game rather than to the page.**
+   *
+   * The first version of this pick skipped that last clause and picked the furthest usable claim,
+   * which on one board was a card's `<figure>`: a claim sitting inside a link. Clicking it did
+   * exactly what 1.2's `PROTECTED`/`INTERACTIVE` split promises — the page won, the browser
+   * navigated, and the fight ended. The trace read `claims=0 round=undefined` two frames after the
+   * click, which is a new document, not a lost order. So the check was measuring §11's guarantee and
+   * calling it an ordering failure, and it only did so on the boards where the furthest claim
+   * happened to be a link (the board is rolled per fight, so it failed intermittently — the worst
+   * kind of red).
+   *
+   * §15.3 records the design consequence: **a claim under a link cannot be ordered.** That is the
+   * intended priority and not a bug, so the harness must aim where a commander can actually give an
+   * order, and there is no point in the whole fleet asserting otherwise.
+   */
+  const pick = await page.evaluate((INTERACTIVE) => {
     const kits = [...document.querySelectorAll('.cat-kit')];
     const centre = (el) => {
       const r = el.getBoundingClientRect();
@@ -290,13 +306,15 @@ async function openArena(page) {
       if (r.top < 200 || r.bottom > innerHeight - 150) continue;
       const x = Math.round(r.left + r.width / 2);
       const y = Math.round(r.top + r.height / 2);
-      if (document.elementFromPoint(x, y)?.closest('.cat-claimed') !== el) continue;
+      const at = document.elementFromPoint(x, y);
+      if (at?.closest('.cat-claimed') !== el) continue;
+      if (at.closest(INTERACTIVE) || at.closest('#cat-hud')) continue; // the page's click, not the game's
       // Furthest from every kitten, so "a kitten came here" cannot be true by accident.
       const away = Math.min(...kits.map((k) => Math.hypot(centre(k).x - x, centre(k).y - y)));
       if (!best || away > best.away) best = { x, y, away: Math.round(away) };
     }
     return best;
-  });
+  }, 'a[href], button, input, select, textarea, summary, label, [contenteditable]');
   ok('found a claim no kitten was standing near', !!pick, pick ? `at ${pick.x},${pick.y}, ${pick.away}px from the nearest kitten` : 'none free');
 
   if (pick) {

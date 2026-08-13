@@ -855,6 +855,21 @@
     el: HTMLElement;
     /** The claim it is on its way to. `target` is the one it has arrived at and is holding. */
     seek: HTMLElement | null;
+    /**
+     * Did a visitor point at this errand? (§15.3)
+     *
+     * 2.0 deleted this field once as dead state, correctly at the time: nothing re-picked for a
+     * kitten that already had a `seek`, so an order stuck by construction. Then the re-pick rule
+     * arrived — abandon an errand that cannot be finished, because otherwise the fallback marches —
+     * and it quietly started overruling **orders**, which §15.3 promises are honoured even when they
+     * are bad. Found by reading rather than by a red check, and worth saying so: the failing check
+     * that sent me here turned out to have a different cause entirely (§12), so this is a promise
+     * kept on purpose rather than a bug traced to a symptom.
+     *
+     * So the flag is back with a job: it is what the re-pick rule refuses to touch. A commander is
+     * allowed to be wrong, and a unit that second-guesses you is not following orders.
+     */
+    ordered: boolean;
     /** Flinching from a landed pounce until this moment — visual only (§15). */
     flinchUntil: number;
     /** Which way it is facing, so the drawing flips like the cat's does. */
@@ -1336,6 +1351,7 @@
       inside: true,
       target: null,
       seek: null,
+      ordered: false,
       flinchUntil: 0,
       facing: 1,
     };
@@ -1436,6 +1452,7 @@
       // Has what it was going for gone? Somebody else may have freed it, or the cat re-took it.
       if (k.seek && (!k.seek.isConnected || !arena.claimed.includes(k.seek))) {
         k.seek = null;
+        k.ordered = false;
       }
       /*
        * Pick, or **re-pick when the trip stopped being worth making**.
@@ -1452,7 +1469,10 @@
       const seekIndex = k.seek ? arena.order.indexOf(k.seek) : -1;
       const stillWorth =
         k.seek !== null &&
-        (k.target === k.seek ||
+        // An order outranks the policy — see `Kitten.ordered`. It is dropped when the claim is,
+        // which the invalidation above has already done, so this cannot pin a kitten to nothing.
+        (k.ordered ||
+          k.target === k.seek ||
           candidates.some((c) => c.index === seekIndex && canFinish(k, c, at)));
       if (!stillWorth) {
         const mine = pickWork(
@@ -1469,6 +1489,7 @@
           if (!k.seek || worth) {
             dropHold(k);
             k.seek = chosen;
+            k.ordered = false;
             taken[slot] = mine;
           }
         }
@@ -1523,12 +1544,16 @@
   /**
    * §15's order: send somebody to that claim.
    *
-   * The commander's whole vocabulary, and it is one line of state — the kitten's `seek`. Everything
-   * that makes it *work* is already here: the kitten walks with the same code it always walks with,
-   * holds with the same code any hand holds with. Nothing needs to mark it as *ordered*, because
-   * `stepSquad` only ever re-picks for a kitten with no `seek` at all — so an instruction survives
-   * by construction until the claim is freed or taken back, and a bad order is honoured like any
-   * other. That is the right behaviour: a commander is allowed to be wrong.
+   * The commander's whole vocabulary, and it is nearly no state at all — the kitten's `seek`, plus one
+   * bit saying a human chose it. Everything that makes it *work* is already here: the kitten walks
+   * with the same code it always walks with, holds with the same code any hand holds with.
+   *
+   * The bit is not decoration. When this was written `stepSquad` only re-picked for a kitten with no
+   * `seek`, so an order survived by construction and `ordered` was dead state — correctly deleted.
+   * The re-pick rule then arrived (drop an errand that cannot be finished, or a kitten marches across
+   * the document chasing distance) and began quietly overruling orders, which is the one thing the
+   * policy is not allowed to do: **a bad order is honoured, because a commander is allowed to be
+   * wrong.** So the flag is back with exactly one job — marking what re-pick must not touch.
    *
    * An order is a suggestion about *what*, never about how or when. There is no cancel, no queue and
    * no cost, because each of those would turn a nudge into an interface — and the mode is for
@@ -1546,6 +1571,7 @@
     // half-full mark that `claim()` would later snapshot as its original style (pillar 2).
     dropHold(k);
     k.seek = claim;
+    k.ordered = true;
     playCue('order');
     k.el.classList.add('kit-called');
     window.setTimeout(() => k.el.classList.remove('kit-called'), 360);
@@ -2820,6 +2846,26 @@
   function dealBoard(now: number, behindCurtain = false): boolean {
     const board = candidates();
     if (!board.length) return false;
+    /*
+     * **Hand the old board back before dealing a new one.** `open()` has called `close()` first
+     * since 0.3 for exactly this reason, and its comment says why: replacing `arena.claimed`
+     * wholesale strands whatever was in it, and `claim()` snapshots an element's style — so a
+     * stranded claim keeps its `--claim-tilt` and there is nothing left tracking it to take it off.
+     *
+     * A round boundary is the same hazard arriving somewhere new, and it bit. `clearRound` fires
+     * when the board empties, but §15 deliberately does *not* set `arena.ending` for a round beat —
+     * the fight is not over, so the regrow keeps running — which means the cat can take a claim or
+     * two during the 1500ms breath, and those were still in `arena.claimed` when the next board
+     * replaced it. `commander.mjs` caught one: `--claim-tilt: -0.098deg` left on an `h2` after a
+     * three-round run, which is **pillar 2 failing** and the one thing this design will not trade.
+     * A restart is worse still, because there the board is *full* by definition.
+     *
+     * Not `celebrate`: this is bookkeeping between rounds, and a dozen elements flashing their
+     * reclaim animation would announce something that did not happen.
+     */
+    for (const node of arena.claimed) free(node, false);
+    clearAllWash();
+    arena.claimed = [];
     const seed = (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0;
     const picked = pickClaims(board.length, INITIAL_CLAIM_FRACTION, seed);
     arena.order = board;
