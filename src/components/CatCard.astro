@@ -1479,6 +1479,52 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
         bossNode.dataset.groom = '';
       }
 
+      /*
+       * The regrow clock ticks before the stalk guard, deliberately. In the page game this block
+       * sat after the `quarry.inside` early-return, where it did not matter — the arena *was* the
+       * page, so a pointer was effectively always "inside". On the card the board is a few hundred
+       * pixels and the pointer is off it as often as on, so gating the clock behind the guard
+       * froze regrow whenever the visitor's cursor left the board: a watched fight never grew back
+       * and a player who stepped away got a free pause on the one pressure that reaches a distant
+       * hand (2.2 port bug — §9.3's "the walls come in" is a clock, not a stance the pointer has
+       * to be inside to hear). Stalking still needs the pointer on the board; the clock does not.
+       */
+      if (
+        spec.regrowMs > 0 &&
+        !arena.ending &&
+        t > boss.regrowAt &&
+        arena.claimed.length < arena.order.length
+      ) {
+        let took = 0;
+        const back = takeGround();
+        if (back) {
+          took = 1;
+          claim(back, arena.order.indexOf(back), arena.seed);
+          arena.claimed.push(back);
+          arena.total = Math.max(arena.total, arena.claimed.length);
+          boss.regrows++;
+          if (spec.pin && boss.regrows % SIEGE_SWEEP_EVERY === 0) {
+            const held = arena.claimed.map((n) => arena.order.indexOf(n)).filter((i) => i >= 0);
+            const partner = sweepPartner(arena.order.indexOf(back), held, arena.order.length);
+            const alsoTake = partner >= 0 ? arena.order[partner] : undefined;
+            if (alsoTake?.isConnected && !arena.claimed.includes(alsoTake)) {
+              const wasFreed = arena.freed.indexOf(alsoTake);
+              if (wasFreed >= 0) arena.freed.splice(wasFreed, 1);
+              claim(alsoTake, partner, arena.seed);
+              arena.claimed.push(alsoTake);
+              arena.total = Math.max(arena.total, arena.claimed.length);
+              took = 2;
+            }
+          }
+          arena.movedAt = t;
+          caption(arenaCaption(arena.claimed.length, arena.total));
+          paintTerritory();
+          if (!checkRound() && isLost(arena.claimed.length, arena.order.length, ammo().length))
+            finish('lose', t);
+        }
+        boss.regrowAt = t + roundRegrowMs(spec.regrowMs, boss.mood, took, arena.round);
+      }
+
       if (!quarry.inside || quarry.x < 0) return;
       const dx = quarry.x - boss.x;
       const dy = quarry.y - boss.y;
@@ -1529,42 +1575,6 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
         ny = Math.max(8, Math.min(h - 8, ny));
         placeBoss(nx, ny);
         faceToward(dx);
-      }
-
-      if (
-        spec.regrowMs > 0 &&
-        !arena.ending &&
-        t > boss.regrowAt &&
-        arena.claimed.length < arena.order.length
-      ) {
-        let took = 0;
-        const back = takeGround();
-        if (back) {
-          took = 1;
-          claim(back, arena.order.indexOf(back), arena.seed);
-          arena.claimed.push(back);
-          arena.total = Math.max(arena.total, arena.claimed.length);
-          boss.regrows++;
-          if (spec.pin && boss.regrows % SIEGE_SWEEP_EVERY === 0) {
-            const held = arena.claimed.map((n) => arena.order.indexOf(n)).filter((i) => i >= 0);
-            const partner = sweepPartner(arena.order.indexOf(back), held, arena.order.length);
-            const alsoTake = partner >= 0 ? arena.order[partner] : undefined;
-            if (alsoTake?.isConnected && !arena.claimed.includes(alsoTake)) {
-              const wasFreed = arena.freed.indexOf(alsoTake);
-              if (wasFreed >= 0) arena.freed.splice(wasFreed, 1);
-              claim(alsoTake, partner, arena.seed);
-              arena.claimed.push(alsoTake);
-              arena.total = Math.max(arena.total, arena.claimed.length);
-              took = 2;
-            }
-          }
-          arena.movedAt = t;
-          caption(arenaCaption(arena.claimed.length, arena.total));
-          paintTerritory();
-          if (!checkRound() && isLost(arena.claimed.length, arena.order.length, ammo().length))
-            finish('lose', t);
-        }
-        boss.regrowAt = t + roundRegrowMs(spec.regrowMs, boss.mood, took, arena.round);
       }
     }
 
