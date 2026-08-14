@@ -1,168 +1,253 @@
 /**
- * Build step 4: territory, endings, dialogue — "first full loop".
+ * Build step 4: territory, endings, dialogue — "first full loop", on the card game (2.2).
  *
  * A loop is only closed if both ends are reachable, so this harness *plays two whole
- * fights*: one lost on purpose (stand still with no treats and let the cat take the page)
- * and one won (browse for ammo, then work the far side of the board). Anything less than
- * playing them proves the code runs, not that the game ends.
+ * fights*: one lost on purpose (stand still with no treats and let the cat take the
+ * card) and one won (browse for ammo, then work the far side of the card's board).
+ * Anything less than playing them proves the code runs, not that the game ends.
  *
- * Mirrors src/lib/arena.ts:
+ * 2.2's drop list applies. The board is the card's own (~296×180), so there is no page
+ * scrolling and no viewport band to hunt — a claim is reachable by construction. The
+ * territory bar is a strip across the top of the card (`[data-territory]`, sized by a
+ * 0..1 `--territory` custom property) rather than a page-edge bar; the ribbon is the
+ * card's `[data-ribbon]`; the boss is `[data-boss]`. Pillar 2 becomes "the card never
+ * touches the page": the snapshot check asserts the page is byte-identical *while* the
+ * card plays and after it closes, instead of "the page is restored after the fight".
+ *
+ * Two mechanics the page game had and the card changed, noted where they matter:
+ *
+ * - The **parting line**. The page game's ribbon was the ambient cat's, and a truce line
+ *   outlived the fight. The card's ribbon lives *inside* the card, and `truce()` says the
+ *   line then `endFight()`→`hushRibbon()` clears it in the same synchronous task — so no
+ *   read taken after `release` can see it. The line is still *produced* (`truce()` calls
+ *   `say()`), so `WATCH_LINES` records the text node that passes through the DOM rather
+ *   than a visible ribbon. That keeps the assertion (a truce gets an in-character parting
+ *   line) without pretending the card leaves the ribbon up.
+ *
+ * - The **notch**. A win still lands on the *ambient* cat (`#site-cat.notched`), not the
+ *   card's boss — §7.1's promise is session-scoped on the animal the visitor meets in the
+ *   corner. The checks that read the notch are unchanged.
  */
 
 import {
   BASE,
   SCRUB_MS,
+  CARD_SAFE_FLEE_PX,
   armAmmo,
   deal,
   fresh as context,
   idlePoint,
   launch,
-  overFor,
-  press,
+  press as sharedPress,
   reachClaim,
-  release,
+  release as sharedRelease,
   report,
-  throwSpot,
+  snapDiff,
+  snapshotOf,
   wants,
 } from './lib/fixture.mjs';
 
 /*
  * The reporter, the context factory, the launcher and the open/close waits come from
- * `lib/fixture.mjs` (§12.1's charter). This file carried its own copy of each, which is how one
- * idea ended up with eleven implementations and a fix at one call site could never be a fix.
+ * `lib/fixture.mjs` (§12.1's charter). This file carried its own copy of each, which is
+ * how one idea ended up with eleven implementations and a fix at one call site could
+ * never be a fix.
  */
 const browser = await launch();
 const { ok, note, fixture, done } = report();
 
-
-
-/**
- * Wait for a fight to be genuinely over, not merely conceded.
- *
- * Step 7 made `aria-pressed` follow the visitor's *intent* rather than the arena's state
- * (§13.5): the button answers the press, and a curtain runs afterwards. So the loops below,
- * which broke on `aria-pressed === 'false'`, now exit while the exit transition is still up
- * and `close()` has not run — and the snapshot that follows caught `cat-arena-on` still on
- * `<html>` and reported 15 differences. What the page being restored looks like is the
- * *claims* being gone.
- */
+/** Shared with the fleet; this file has always allowed 8000ms for the open. */
+const press = (page) => sharedPress(page, { timeout: 8000 });
+const release = (page) => sharedRelease(page, { timeout: 8000 });
 
 /**
- * Press the toggle and wait for the state change to have actually landed.
- *
- * Step 6 put a ~1.9s ink curtain between the press and the fight. Every `click` in these
- * scripts was followed by a fixed 120–200ms wait, which was ample against an instant swap and
- * is now a race the script always loses — the first symptom was `getBoundingClientRect` on a
- * null `.cat-claimed`. Waiting on the observable rather than on a stopwatch is both correct
- * and, on the close path, usually shorter.
- */
-
-/**
- * A desktop context playing **manual mode**: this file plays two whole fights with a pointer, so the
- * mode is declared before either of them opens.
+ * A desktop context playing **manual mode** — this file plays two whole fights with a
+ * pointer, so the mode is declared before either of them opens.
  */
 const fresh = (opts = {}) => context(browser, { mode: 'manual', ...opts });
 
-const CLAIMS = `document.querySelectorAll('.cat-claimed').length`;
+const CLAIMS = `document.querySelectorAll('.cat-tile[data-state="claimed"]').length`;
 const AMMO = `document.querySelectorAll('#cat-score .cat-paw.got').length`;
-const MINE = `parseFloat(document.querySelector('#cat-territory .territory-mine').style.width) || 0`;
-const RIBBON = `(() => { const r = document.getElementById('cat-ribbon'); return r.hidden ? '' : r.textContent.trim(); })()`;
+/** The player's share of the card board, 0..1 — read off the territory fill's `--territory`. */
+const MINE = `parseFloat(document.querySelector('[data-territory]')?.style.getPropertyValue('--territory')) || 0`;
+const OPEN = `!document.querySelector('#cat-card-panel').hidden`;
+const NOTCHED = `document.getElementById('site-cat').classList.contains('notched')`;
 
-/** Every line the ribbon shows, with a timestamp. */
+/**
+ * Every line the ribbon shows, with a timestamp — plus the lines the card says and hushes
+ * in the same breath, which no read taken after the fact can see.
+ *
+ * `__said` is the visible dialogue (the seven §8 rules read this). `__transient` is the
+ * union of every text node that passed through the ribbon, visible or not — the truce line
+ * is the one that matters, since `truce()` calls `say()` and `endFight()` back-to-back.
+ * A MutationObserver records the *mutations* (the text node was added and removed), so it
+ * still names the line even though the ribbon is already hidden and empty when any later
+ * sample runs.
+ */
 const WATCH_LINES = () => {
-  const node = document.getElementById('cat-ribbon');
+  const node = document.querySelector('[data-ribbon]');
   window.__said = [];
+  window.__transient = [];
   const push = () => {
     const t = node.hidden ? '' : node.textContent.trim();
     if (t && window.__said.at(-1)?.text !== t) window.__said.push({ text: t, t: performance.now() });
   };
+  const seen = (n) => {
+    if (n.nodeType === 3 && n.data.trim() && !window.__transient.includes(n.data.trim()))
+      window.__transient.push(n.data.trim());
+  };
   push();
-  new MutationObserver(push).observe(node, {
-    attributes: true,
-    childList: true,
-    characterData: true,
-    subtree: true,
-  });
+  new MutationObserver((muts) => {
+    for (const m of muts) {
+      for (const n of m.addedNodes) seen(n);
+      for (const n of m.removedNodes) seen(n);
+    }
+    push();
+  }).observe(node, { childList: true, characterData: true, subtree: true });
 };
 
-const SNAP_LIST = `(() => [...document.querySelectorAll('*')]
-  .filter((el) => !el.closest('#site-cat, #cat-hud, #cat-treat, #cat-scrub, #cat-throw, #cat-ribbon, #cat-territory, header'))
-  .map((el, i) => i + ':' + el.tagName + ':' + el.className + ':' + (el.getAttribute('style') ?? '')))()`;
-
-const SNAPSHOT = `(() => [...document.querySelectorAll('*')]
-  .filter((el) => !el.closest('#site-cat, #cat-hud, #cat-treat, #cat-scrub, #cat-throw, #cat-ribbon, #cat-territory, header'))
-  .map((el, i) => i + ':' + el.tagName + ':' + el.className + ':' + (el.getAttribute('style') ?? ''))
-  .join('|'))()`;
+/**
+ * The page as pillar 2 defines it: every element's tag, classes and inline style, in order.
+ * The card's chrome (`.cat-card-root`), the ambient cat and the HUD paw row are excluded —
+ * they legitimately differ. Everything else must be byte-identical whether the card is
+ * open, playing, or closed again, because the card never touches the page.
+ */
+const SNAPSHOT = snapshotOf('.cat-card-root, #site-cat, #cat-hud');
 
 /**
- * How the page differs from a baseline, and where.
+ * Settle the site's scroll-reveal before snapshotting (1.2's lesson, in one function).
  *
- * A boolean "it differs" is a check that makes you go and write a second script to find
- * out why — which is exactly what happened twice here. Report the first difference.
+ * Scrolling fires the site's own observer, which permanently adds `io-in` to whatever came
+ * into view — so a snapshot taken at the top of an unscrolled page can never match one taken
+ * after a fight that scrolled. The card's fight does not scroll, but `armAmmo` navigates,
+ * and the reveal must be spent before the baseline so nothing fires mid-fight.
  */
-async function snapDiff(page, clean) {
-  const now = await page.evaluate(SNAP_LIST);
-  const diffs = [];
-  for (let i = 0; i < Math.max(clean.length, now.length); i++) {
-    if (clean[i] !== now[i]) diffs.push({ before: clean[i], after: now[i] });
-  }
-  return {
-    n: diffs.length,
-    detail: diffs.length
-      ? `${diffs.length} differences, first: ${diffs[0].before} → ${diffs[0].after}`
-      : 'identical',
-  };
+async function settlePage(page) {
+  await page.evaluate(async () => {
+    for (let y = 0; y < document.body.scrollHeight; y += 180) {
+      scrollTo({ top: y, behavior: 'instant' });
+      await new Promise((r) => setTimeout(r, 90));
+    }
+    scrollTo({ top: 0, behavior: 'instant' });
+  });
+  await page.waitForTimeout(500);
 }
 
-
-/**
- * A claim to work on, re-rolling the board if this fight dealt none in view.
- *
- * Which claims land above the fold varies per fight (the seed is fresh each time), and a
- * run that dealt none used to crash the harness rather than report anything.
- */
 /**
  * Roll the fight until it is both winnable-by-measurement and losable at all.
  *
  * Step 5's stances made both endings conditional on the opponent, which is what stances are
  * *for* and is also why three harnesses started timing out: a **sleepy** cat will not
- * interrupt a hold at all (it waits until 70%, by which point the hold is done) and takes no
- * ground, so standing still empty-handed *wins* rather than loses; a **siege** cat cannot
- * reach anything off the floor. Neither is a bug. But a check that says "a fight can be lost"
- * has to be given a cat that can win one.
- *
- * Stance and board are chosen in the same loop on purpose: separate helpers that each re-roll
- * the fight spend their time undoing each other.
- */
-/**
- * Roll the fight until it is both winnable-by-measurement and losable at all.
- *
- * Step 5's stances made both endings conditional on the opponent, which is what stances are *for* and
- * also why three harnesses started timing out: a **sleepy** cat will not interrupt a hold (it waits
- * until 70%, by which point the hold is done) and takes no ground, so standing still empty-handed
- * *wins*; a **siege** cat cannot reach anything off the floor. Neither is a bug, but a check that says
+ * interrupt a hold at all and takes no ground, so standing still empty-handed *wins*; a
+ * **siege** cat cannot reach anything off the floor. Neither is a bug, but a check that says
  * "a fight can be lost" has to be given a cat that can win one.
  *
- * Stance and board in the same deal, for the reason §12.1 records: separate re-rollers spend their
- * time undoing each other. Forty deals is this file's own budget kept — a named stance is one of four
- * weighted rolls, so six is not enough to be sure of it.
+ * Stance and board in the same deal, for the reason §12.1 records: separate re-rollers spend
+ * their time undoing each other. Forty deals is this file's own budget kept — a named stance
+ * is one of four weighted rolls, so six is not enough to be sure of it.
  */
 const fighter = (page, want = ['ambush', 'trickster']) =>
-  deal(page, wants.stance(want, { claims: 'inView', top: 160, bottom: 40, maxHeight: 420 }), { deals: 40, settle: 190 });
+  deal(page, wants.stance(want, { claims: 'inView' }), { deals: 40, settle: 190 });
 
-/** A claim the pointer can sit on, re-dealing the board if this fight dealt none in view. */
-const spotDeal = (page) => deal(page, wants.spot({ top: 160, bottom: 40, maxHeight: 420 }), { deals: 6, settle: 240 });
-
-/**
- * Scroll until a claim is somewhere the pointer can sit on it, and return that point.
- *
- * Most of the board is below the fold on this site — on /timeline/ only 4 of 24 claims
- * are in view at once — so a harness that only fights what it can already see runs out of
- * targets and then reports a fight that "ended" when it actually gave up. A player
- * scrolls; so does this. It walks candidate scroll positions rather than trusting one,
- * because a claim taller than the band is reachable from a different offset.
+/*
+ * The flee-and-hold counter (§5.2 / §9.4), card-scaled. The boss cannot arrive inside one
+ * 1400ms scrub from beyond `CARD_SAFE_FLEE_PX` (≈85px), so a far hold is uninterruptible —
+ * but holding a close tile is a pounce, so those are never attempted. These helpers are
+ * arena8's, proven green on the card; one copy of a strategy now lives there, and this file
+ * keeps its own because the fleet's charter is that a shared strategy is one edit, not four.
  */
 
+/** Park the cursor where nothing can be scrubbed — a bare corner of the board. */
+async function parkNeutral(page) {
+  const p = await page.evaluate(() => {
+    const b = document.querySelector('[data-board]').getBoundingClientRect();
+    return { x: b.left + b.width - 8, y: b.top + 8 };
+  });
+  await page.mouse.move(p.x, p.y);
+  await page.waitForTimeout(80);
+}
+
+/** The claimed tile farthest from the boss, and whether it is beyond the safe distance. */
+async function placeFarTarget(page, safe) {
+  const spot = await page.evaluate((safePx) => {
+    const board = document.querySelector('[data-board]');
+    if (!board) return null;
+    const b = board.getBoundingClientRect();
+    const boss = document.querySelector('[data-boss]')?.getBoundingClientRect();
+    const cx = boss ? boss.left + boss.width / 2 : b.left;
+    const cy = boss ? boss.top + boss.height / 2 : b.top;
+    const claims = [...document.querySelectorAll('.cat-tile[data-state="claimed"]')]
+      .map((el) => {
+        const r = el.getBoundingClientRect();
+        const x = r.left + r.width / 2;
+        const y = r.top + r.height / 2;
+        return { x: Math.round(x), y: Math.round(y), away: Math.round(Math.hypot(x - cx, y - cy)) };
+      })
+      .sort((a, z) => z.away - a.away);
+    const hit = claims[0];
+    if (!hit) return null;
+    return hit.away >= safePx ? { ...hit, far: true } : { ...hit, far: false };
+  }, safe);
+  if (spot) await page.waitForTimeout(120);
+  return spot;
+}
+
+/** One exchange: hold a far claim; park the cursor away if there is no far target yet. */
+async function fleeAndScrub(page) {
+  const spot = await placeFarTarget(page, CARD_SAFE_FLEE_PX);
+  if (!spot) return { took: false, why: 'nothing parkable' };
+  if (!spot.far) {
+    await parkNeutral(page);
+    await page.waitForTimeout(900);
+    return { took: false, why: 'no far target yet' };
+  }
+  const before = await page.evaluate(CLAIMS);
+  await page.mouse.move(spot.x, spot.y);
+  await page.waitForTimeout(1750);
+  const took = (await page.evaluate(CLAIMS)) < before;
+  if (!took) {
+    await parkNeutral(page);
+    await page.waitForTimeout(900);
+  }
+  return { took, away: spot.away, why: took ? 'reclaimed' : 'held but not taken' };
+}
+
+/** Play a fight to a conclusion by fleeing, never spending. Returns a report. */
+async function playByFleeing(page, budgetMs = 150_000) {
+  const t0 = Date.now();
+  let took = 0;
+  let stalls = 0;
+  const why = {};
+  let closest = Infinity;
+  let minAway = Infinity;
+  while (Date.now() - t0 < budgetMs) {
+    if (!(await page.evaluate(OPEN))) break;
+    if (await page.evaluate(NOTCHED)) break;
+    const left = await page.evaluate(CLAIMS);
+    if (left === 0) break;
+    closest = Math.min(closest, left);
+    const r = await fleeAndScrub(page);
+    if (r.away !== undefined) minAway = Math.min(minAway, r.away);
+    if (r.took) took++;
+    else if (r.why === 'no far target yet') {
+      // A re-park, not a stall: the loop is repositioning, not failing.
+    } else {
+      stalls++;
+      why[r.why] = (why[r.why] ?? 0) + 1;
+    }
+    if (stalls > 8) break;
+  }
+  return {
+    took,
+    stalls,
+    left: await page.evaluate(CLAIMS),
+    fewest: closest === Infinity ? -1 : closest,
+    minAway: minAway === Infinity ? -1 : minAway,
+    why: Object.entries(why).map(([k, n]) => `${k}x${n}`).join(', ') || 'none',
+    seconds: (Date.now() - t0) / 1000,
+    won: await page.evaluate(NOTCHED),
+  };
+}
 
 // ---- 1. the bar
 {
@@ -170,37 +255,56 @@ const spotDeal = (page) => deal(page, wants.spot({ top: 160, bottom: 40, maxHeig
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
-  await page.goto(BASE + '/', { waitUntil: 'load' });
+  await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
   await page.waitForTimeout(700);
-  ok('no bar before a fight', await page.evaluate(() => document.getElementById('cat-territory').hidden));
+  ok('no bar before a fight', await page.evaluate(() => document.getElementById('cat-card-panel').hidden));
 
   await press(page);
   await page.waitForTimeout(250);
   const bar = await page.evaluate(() => {
-    const b = document.getElementById('cat-territory');
+    const panel = document.getElementById('cat-card-panel');
+    const b = document.querySelector('.cat-card-territory');
     const r = b.getBoundingClientRect();
-    return { h: r.height, top: r.top, wide: r.width, text: b.textContent.trim(), aria: b.getAttribute('aria-hidden') };
+    const pr = panel.getBoundingClientRect();
+    return {
+      h: r.height,
+      top: r.top,
+      // The panel carries a 1px border, so "full width" means the card's *content* box
+      // (`clientWidth`/`clientTop` exclude the border), not the border-box.
+      panelTop: pr.top,
+      borderTop: panel.clientTop,
+      wide: r.width,
+      contentWide: panel.clientWidth,
+      text: b.textContent.trim(),
+      aria: b.getAttribute('aria-hidden'),
+    };
   });
-  ok('the bar is 3px on the top edge, full width', bar.h === 3 && bar.top === 0 && bar.wide >= 1279, JSON.stringify(bar));
+  ok(
+    'the bar is 3px across the top of the card, full width',
+    bar.h === 3 && Math.abs(bar.wide - bar.contentWide) < 1 && Math.abs(bar.top - (bar.panelTop + bar.borderTop)) < 1,
+    JSON.stringify(bar),
+  );
   ok('and carries no numbers (§6)', bar.text === '', JSON.stringify(bar.text));
   ok('and is aria-hidden like the rest of the cat', bar.aria === 'true');
 
   const opening = await page.evaluate(MINE);
-  ok('it opens showing the visitor’s minority share', opening > 20 && opening < 60, `${opening.toFixed(1)}% mine`);
+  ok('it opens showing the visitor’s minority share', opening > 0.2 && opening < 0.6, `${opening.toFixed(2)} mine`);
 
   // free one claim and watch the bar move
-  const dealt = await spotDeal(page);
+  const dealt = await deal(page, reachClaim, { deals: 6, settle: 240 });
   const spot = dealt.value;
-  fixture('the board dealt a claim in view', dealt, spot ? `${spot.x},${spot.y}` : '');
-  await page.mouse.move(spot.x, spot.y);
-  await page.waitForTimeout(SCRUB_MS + 700);
-  const after = await page.evaluate(MINE);
-  ok('the bar tracks a reclaim', after > opening, `${opening.toFixed(1)}% → ${after.toFixed(1)}%`);
+  fixture('the board dealt a claim to hold', dealt, spot ? `${spot.x},${spot.y}` : '');
+  if (spot) {
+    await page.mouse.move(spot.x, spot.y);
+    await page.waitForTimeout(SCRUB_MS + 700);
+    const after = await page.evaluate(MINE);
+    ok('the bar tracks a reclaim', after > opening, `${opening.toFixed(2)} → ${after.toFixed(2)}`);
+  }
   ok('no console errors', errors.length === 0, errors.join(' | '));
 
   await release(page);
   await page.waitForTimeout(150);
-  ok('the bar goes away with the fight', await page.evaluate(() => document.getElementById('cat-territory').hidden));
+  ok('the bar goes away with the fight', await page.evaluate(() => document.getElementById('cat-card-panel').hidden));
   await ctx.close();
 }
 
@@ -208,19 +312,41 @@ const spotDeal = (page) => deal(page, wants.spot({ top: 160, bottom: 40, maxHeig
 {
   const ctx = await fresh();
   const page = await ctx.newPage();
-  await page.goto(BASE + '/', { waitUntil: 'load' });
+  await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
   await page.waitForTimeout(700);
   await press(page);
   await page.waitForTimeout(150);
   await page.evaluate(WATCH_LINES);
 
-  // stand on a claim with no treats: it will interrupt, and it will comment
-  const dealt = await spotDeal(page);
+  /*
+   * Stand on a claim with no treats: it will interrupt, and it will comment. One loop does
+   * both jobs the page version split in two — collect lines *and* catch the ribbon while it
+   * is up — because the ribbon is only visible for `LINE_MS` at a time and a separate poll
+   * that starts after the fight has gone quiet can run its whole budget and see nothing.
+   */
+  const dealt = await deal(page, wants.spot(), { deals: 6, settle: 240 });
   const spot = dealt.value;
-  fixture('the board dealt a claim in view', dealt, spot ? `${spot.x},${spot.y}` : '');
-  for (let i = 0; i < 26; i++) {
-    await page.mouse.move(spot.x + (i % 2 ? 1 : 0), spot.y);
-    await page.waitForTimeout(500);
+  fixture('the board dealt a claim to hold', dealt, spot ? `${spot.x},${spot.y}` : '');
+  let placed = null;
+  for (let i = 0; i < 56; i++) {
+    if (spot) {
+      await page.mouse.move(spot.x + (i % 2 ? 1 : 0), spot.y);
+      await page.waitForTimeout(400);
+    }
+    if (!placed) {
+      placed = await page.evaluate(() => {
+        const node = document.querySelector('[data-ribbon]');
+        if (node.hidden) return null;
+        const r = node.getBoundingClientRect();
+        const boss = document.querySelector('[data-boss]')?.getBoundingClientRect();
+        if (!boss) return null;
+        return {
+          cx: r.left + r.width / 2,
+          cy: r.top + r.height / 2,
+          nearBoss: Math.hypot(r.left + r.width / 2 - (boss.left + boss.width / 2), r.top - boss.top),
+        };
+      });
+    }
   }
   const said = await page.evaluate(() => window.__said);
   ok('the cat says something', said.length > 0, said.map((s) => `“${s.text}”`).join(' '));
@@ -237,53 +363,24 @@ const spotDeal = (page) => deal(page, wants.spot({ top: 160, bottom: 40, maxHeig
     said.every((s, i) => i === 0 || s.t - said[i - 1].t > 1200),
     said.length > 1 ? `tightest gap ${Math.min(...said.slice(1).map((s, i) => s.t - said[i].t)).toFixed(0)}ms` : 'one line',
   );
-  /*
-   * Measured while a line is actually up. The first version of this check read the rect
-   * whenever it happened to run, got 0,0 from a hidden element, and passed for the wrong
-   * reason — a hidden ribbon is trivially not in the middle of the page.
-   */
-  /*
-   * Polled from **out here**, with the jiggle still running.
-   *
-   * The first version of this wait sat inside one `page.evaluate` for twelve seconds without
-   * touching the mouse, and was the flakiest check in the suite. A parked cursor gives the cat
-   * almost nothing to say — and §8's "never says the same thing twice running" means the one
-   * line it does have is then suppressed as a repeat, so the whole window can pass in silence
-   * and the ribbon stays hidden for a reason that is the game working. Keeping the pointer
-   * alive keeps lines coming, which is the state this check is actually about.
-   */
-  let placed = null;
-  for (let i = 0; i < 48 && !placed; i++) {
-    placed = await page.evaluate(() => {
-      const node = document.getElementById('cat-ribbon');
-      if (node.hidden) return null;
-      const r = node.getBoundingClientRect();
-      const cat = document.getElementById('site-cat').getBoundingClientRect();
-      return {
-        cx: r.left + r.width / 2,
-        cy: r.top + r.height / 2,
-        nearCat: Math.hypot(r.left + r.width / 2 - (cat.left + cat.width / 2), r.bottom - cat.top),
-      };
-    });
-    if (placed) break;
-    await page.mouse.move(spot.x + (i % 2 ? 1 : 0), spot.y);
-    await page.waitForTimeout(250);
-  }
   ok('the ribbon was on screen to be measured', !!placed);
   ok(
-    'it sits above the cat, not in the middle of the page',
-    placed && placed.nearCat < 140 && Math.hypot(placed.cx - 640, placed.cy - 450) > 120,
-    placed ? `${placed.cx.toFixed(0)},${placed.cy.toFixed(0)} — ${placed.nearCat.toFixed(0)}px from the cat` : 'never shown',
+    'it sits above the boss, not in the middle of the page',
+    placed && placed.nearBoss < 140 && Math.hypot(placed.cx - 640, placed.cy - 450) > 120,
+    placed
+      ? `${placed.cx.toFixed(0)},${placed.cy.toFixed(0)} — ${placed.nearBoss.toFixed(0)}px from the boss`
+      : 'never shown',
   );
 
-  // Esc gets its own line, and it outlives the fight
+  // Esc gets its own line, and the card closes back over it (see the header note: the card
+  // hushes the parting line in the same breath it closes, so read the transient text node).
   await release(page);
   await page.waitForTimeout(150);
-  const parting = await page.evaluate(RIBBON);
-  ok('a truce gets a parting line', /sensible|cowardly/.test(parting), `“${parting}”`);
+  const transient = await page.evaluate(() => window.__transient.join(' '));
+  ok('a truce gets a parting line', /sensible|cowardly/.test(transient), JSON.stringify(transient));
   ok(
-    'and the page is already restored while it is still muttering',
-    (await page.evaluate(CLAIMS)) === 0,
+    'and the card is already closed while it was being said',
+    await page.evaluate(() => document.getElementById('cat-card-panel').hidden),
   );
   await ctx.close();
 }
@@ -294,9 +391,9 @@ const spotDeal = (page) => deal(page, wants.spot({ top: 160, bottom: 40, maxHeig
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
-  await page.goto(BASE + '/', { waitUntil: 'load' });
+  await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
   await page.waitForTimeout(700);
-  const clean = await page.evaluate(SNAP_LIST);
+  const clean = await page.evaluate(SNAPSHOT);
   ok('starting a losing fight with nothing to throw', (await page.evaluate(AMMO)) === 0);
 
   await press(page);
@@ -305,24 +402,22 @@ const spotDeal = (page) => deal(page, wants.spot({ top: 160, bottom: 40, maxHeig
    * A siege, and then simply refuse to play.
    *
    * The obvious losing script — stand still on a claim empty-handed and let the cat grind you
-   * down — turns out not to lose, and working out why is the most useful thing this check
-   * found. A pounce resets your hold, but the cat then has to *recover* before it can commit
-   * again: baseline that is 700ms, and every stance lengthens it (the whiff invariant forces
-   * that). By the time it is ready your hold has already completed, so after the first hit the
-   * player wins every subsequent exchange. **No stance's pounce can take the page from a
-   * stationary player.** Ambush least of all, whose 1.45x recovery is exactly the "punish the
-   * whiff" counter §9.3 promises.
+   * down — turns out not to lose. A pounce resets your hold, but the cat then has to *recover*
+   * before it can commit again, and by the time it is ready your hold has already completed:
+   * after the first hit the player wins every subsequent exchange. **No stance's pounce can
+   * take the card from a stationary player.**
    *
-   * What can take the page is siege's regrowing board (§9.3), which does not care what you are
-   * doing. So the losing player here is the one who stops playing: park somewhere harmless,
-   * empty-handed, and watch the page close over.
+   * What can take the card is siege's regrowing board (§9.3), which does not care what you are
+   * doing: every regrow interval it takes back the nearest free tile until the board is full,
+   * and a full board with empty paws is §2's loss. So the losing player here is the one who
+   * stops playing — park somewhere harmless, empty-handed, and watch the card close over.
    */
   const foeDeal = await fighter(page, ['siege']);
-  fixture('rolled the one stance that can take a page on its own', foeDeal, foeDeal.value ?? '');
+  fixture('rolled the one stance that can take a card on its own', foeDeal, foeDeal.value ?? '');
   await page.evaluate(WATCH_LINES);
-  const board = await page.evaluate(() => document.querySelectorAll('.cat-claimed').length);
+  const board = await page.evaluate(CLAIMS);
 
-  // Somewhere the pointer can rest without playing — a scan of the viewport, so nothing to re-deal.
+  // Somewhere the pointer can rest without playing — a scan of the board, so nothing to re-deal.
   const idle = await idlePoint(page);
   fixture('found somewhere harmless to stand', idle, idle ? `${idle.x},${idle.y}` : '');
 
@@ -334,10 +429,10 @@ const spotDeal = (page) => deal(page, wants.spot({ top: 160, bottom: 40, maxHeig
     await page.waitForTimeout(300);
     await page.mouse.move(idle.x + 1, idle.y);
     await page.waitForTimeout(300);
-    if ((await page.getAttribute('#cat-arena-toggle', 'aria-pressed')) === 'false') {
+    if (await page.evaluate(() => document.getElementById('cat-card-panel').hidden)) {
       ended = true;
-      // The button has conceded; the arena has not finished putting the page back yet.
-      await overFor(page);
+      // The card has closed; the fight is over.
+      await page.waitForTimeout(150);
       break;
     }
   }
@@ -349,9 +444,9 @@ const spotDeal = (page) => deal(page, wants.spot({ top: 160, bottom: 40, maxHeig
     said.some((t) => /you may read on/.test(t)),
     said.map((t) => `“${t}”`).join(' '),
   );
-  const lossDiff = await snapDiff(page, clean);
-  ok('losing restores the page anyway', lossDiff.n === 0, lossDiff.detail);
-  ok('losing earns no notch', !(await page.evaluate(() => document.getElementById('site-cat').classList.contains('notched'))));
+  const lossDiff = await snapDiff(page, SNAPSHOT, clean);
+  ok('losing leaves the page untouched (the card owns its board)', lossDiff.n === 0, lossDiff.detail);
+  ok('losing earns no notch', !(await page.evaluate(NOTCHED)));
   ok('no console errors through a loss', errors.length === 0, errors.join(' | '));
   await ctx.close();
 }
@@ -362,120 +457,57 @@ const spotDeal = (page) => deal(page, wants.spot({ top: 160, bottom: 40, maxHeig
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
-  await page.goto(BASE + '/', { waitUntil: 'load' });
-  await page.waitForTimeout(600);
-  const armed = await armAmmo(page, { hops: 5, pool: 6, dwell: 650, settle: 750, home: '/timeline/' });
+  await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
+  await page.waitForTimeout(700);
+  const armed = await armAmmo(page, { hops: 5, pool: 6, dwell: 650, settle: 750, home: '/' });
   ok('armed for a real fight', armed >= 3, `${armed} treats`);
 
-  /*
-   * Settle the page before snapshotting it. Scrolling fires the site's own scroll-reveal
-   * observer, which permanently adds `io-in` to whatever came into view — so a snapshot
-   * taken at the top of an unscrolled page can never match one taken after a fight that
-   * scrolled, and the mismatch says nothing about whether the arena restored anything.
-   * Run the page end to end once, come back, and then take the baseline.
-   */
-  await page.evaluate(async () => {
-    for (let y = 0; y < document.body.scrollHeight; y += 180) {
-      scrollTo({ top: y, behavior: 'instant' });
-      await new Promise((r) => setTimeout(r, 90));
-    }
-    scrollTo({ top: 0, behavior: 'instant' });
-  });
-  await page.waitForTimeout(500);
-  const clean = await page.evaluate(SNAP_LIST);
+  await settlePage(page);
+  const clean = await page.evaluate(SNAPSHOT);
 
   await press(page);
   await page.waitForTimeout(200);
-  // Pinned as well, so the duration below is a fight against a cat that fights back rather
-  // than whichever one turned up.
+  // Pinned to a leaper, so the flee-and-hold below is a fight against a cat that fights back
+  // rather than whichever one turned up.
   const oppDeal = await fighter(page);
   fixture('rolled an opponent for the timed win', oppDeal, oppDeal.value ?? '');
   await page.evaluate(WATCH_LINES);
-  const started = Date.now();
 
-  // Play it the way the design says it should be played: work the far side of the board,
-  // scroll to reach what is below the fold, and spend a treat when the cat closes in.
-  let rounds = 0;
-  let threw = 0;
-  while (Date.now() - started < 170000) {
-    if ((await page.getAttribute('#cat-arena-toggle', 'aria-pressed')) === 'false') {
-      await overFor(page);
-      break;
-    }
-    const target = await reachClaim(page);
-    if (!target) break;
-
-    const near = await page.evaluate(
-      ([tx, ty]) => {
-        const r = document.getElementById('site-cat').getBoundingClientRect();
-        return Math.hypot(r.left + r.width / 2 - tx, r.top + r.height / 2 - ty);
-      },
-      [target.x, target.y],
-    );
-    const treatOut = await page.evaluate(`!document.getElementById('cat-throw').hidden`);
-    if (near < 300 && !treatOut && (await page.evaluate(AMMO)) > 0) {
-      const far = await throwSpot(page, {
-        x: target.x > 640 ? 60 : 1220,
-        y: target.y > 450 ? 180 : 780,
-      });
-      if (far) {
-        await page.mouse.move(far.x, far.y);
-        await page.mouse.down();
-        await page.mouse.up();
-        threw++;
-        await page.waitForTimeout(140);
-      }
-    }
-    await page.mouse.move(target.x, target.y);
-    await page.waitForTimeout(SCRUB_MS + 300);
-    rounds++;
-  }
-  const took = (Date.now() - started) / 1000;
-  const said = await page.evaluate(() => window.__said.map((s) => s.text));
   /*
-   * "Did it win" is a question about **state**, not about prose.
-   *
-   * This used to match the ribbon against `/keep it|bribe me|show-off/`, and §9.4 broke it by
-   * adding a win line: a fight ending on "again? i keep one back." is a win the pattern does
-   * not recognise, and the section reported a loss on a fight it had just won. The words the
-   * cat says are content and will keep changing; the notch is the thing a win *does*.
+   * Play it the way §5.2 says: work the far side of the board, hold what the cat cannot reach
+   * inside one scrub. Treats are armed — the loop is only closed if the player *could* have
+   * spent them — but the flee counter needs none, which is the point §9.4's floor makes.
    */
-  const won = await page.evaluate(() =>
-    document.getElementById('site-cat').classList.contains('notched'),
+  const run = await playByFleeing(page, 150_000);
+  const said = await page.evaluate(() => window.__said.map((s) => s.text));
+  ok(
+    'a fight can be won',
+    run.won,
+    `${run.seconds.toFixed(0)}s over ${run.took} holds, ${run.left} left, stalls: ${run.why}`,
   );
-  ok('a fight can be won', won, `${took.toFixed(0)}s over ${rounds} holds, ${threw} treats thrown`);
   /*
-   * Reported, and only loosely bounded. §10's 90–180s is a target for a *human*, who has
-   * to find the claims, misjudge dodges and decide when to spend. A script that always
-   * picks the farthest claim and never mis-aims is strictly faster, so treating its time
-   * as the human number would be measuring the harness. What is worth asserting is only
-   * that the fight is neither trivial nor endless.
-   *
-   * **The floor was 15s and that was one sample's worth of calibration.** Measured across runs:
-   * 17s over 9 holds, 15s over 8, and 13s over 7 — because the board is `MIN_BOARD`..`MAX_BOARD`
-   * candidates and `pickClaims` takes 55% of them, so the number of holds a win needs varies by a
-   * couple either way and the time follows it. A floor inside that variance fails on a build where
-   * nothing changed except which claims were dealt, which is the most expensive kind of red line:
-   * it costs an investigation and teaches nothing.
-   *
-   * So the floor is stated as arithmetic instead. The fastest a scripted win can *possibly* go is
-   * about `MIN_BOARD × INITIAL_CLAIM_FRACTION` holds at `SCRUB_MS` each — 5.5 × 1.4s ≈ 7.7s with no
-   * travel and no interruptions at all. Anything under 8s would mean the fight had stopped being a
-   * fight; anything over 200s would mean it had stopped ending. Those are the two things this check
-   * is for, and neither of them depends on the deal.
+   * "Did it win" is a question about **state**, not prose: the notch is the thing a win *does*.
+   * The floor and ceiling are arithmetic rather than samples — a script that always picks the
+   * farthest claim and never mis-aims is strictly faster than the §10 human target, so only
+   * that the fight is neither trivial nor endless is asserted.
    */
   ok(
     'a win takes work but ends',
-    won && took >= 8 && took <= 200,
-    `${took.toFixed(0)}s scripted over ${rounds} holds (§10 targets 90–180s for a human, who is slower)`,
+    run.won && run.seconds >= 8 && run.seconds <= 200,
+    `${run.seconds.toFixed(0)}s scripted over ${run.took} holds (§10 targets 90–180s for a human, who is slower)`,
   );
   ok(
     'and says one of §8.4’s ending lines while doing it',
-    // Kept as its own check rather than as the win signal: that the cat *speaks* on a win is
-    // worth pinning, but it must not be what decides whether the win happened.
     said.some((t) => /keep it|bribe me|show-off|keep one back|kept everything/.test(t)),
     said.map((t) => `“${t}”`).join(' ') || '(silent)',
   );
+
+  // Let the win beat finish and the card close on its own.
+  await page
+    .waitForFunction(() => document.getElementById('cat-card-panel').hidden, undefined, { timeout: 8000 })
+    .catch(() => {});
+  await page.waitForTimeout(200);
+
   ok(
     'and the notch is actually drawn',
     await page.evaluate(() => {
@@ -483,43 +515,21 @@ const spotDeal = (page) => deal(page, wants.spot({ top: 160, bottom: 40, maxHeig
       return !!n && getComputedStyle(n).display !== 'none';
     }),
   );
-  // Wait for the `.cat-freed` flash to finish rather than guessing at a delay: the class
-  // is part of the snapshot, so a lingering animation reads as an unrestored page.
-  await page
-    .waitForFunction(() => !document.querySelector('.cat-freed'), undefined, { timeout: 4000 })
-    .catch(() => {});
-  await page.waitForTimeout(200);
-  await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
-  await page.waitForTimeout(300);
-  const winDiff = await snapDiff(page, clean);
+  const winDiff = await snapDiff(page, SNAPSHOT, clean);
   ok('the page comes back whole after a win', winDiff.n === 0, winDiff.detail);
   ok(
-    // §7.1 says "for the rest of the session", so the interesting moment is *after* the fight
-    // has ended and the page been restored — not during the win beat, when everything is still
-    // up. Read here because the win signal moved to the notch and this is the claim it makes.
     'and the ear stays marked once the fight is over (§7.1)',
-    await page.evaluate(() => document.getElementById('site-cat').classList.contains('notched')),
+    await page.evaluate(NOTCHED),
   );
-  ok('the toggle un-presses itself', (await page.getAttribute('#cat-arena-toggle', 'aria-pressed')) === 'false');
+  ok(
+    'the toggle un-presses itself',
+    (await page.getAttribute('#cat-card-toggle', 'aria-expanded')) === 'false',
+  );
   /*
-   * **Wait for it to move; do not sample a window and hope.**
-   *
-   * This check is about the handover — SiteCat has the element back and is driving it. It read
-   * 30–51px for five versions and was believed, then read `0.0px` and looked like a broken
-   * handover. It was not. A trace (`diag-endwalk.mjs`) shows the cat wandering perfectly well
-   * either side of the sample: `994 → 999 → 1056 → 1145 → 1178 → 1130`, with the `walking`
-   * class coming and going.
-   *
-   * The cat's ambient loop *alternates*: `chooseNext` picks a walk, then an idle, and the idles
-   * run for seconds — the same trace has one lasting 2.6s. A fixed 900ms sample is therefore a
-   * coin toss against the phase of that cycle, and it had simply been landing heads. Nothing
-   * about "the cat is walking" is true at every instant, so no instantaneous measurement of it
-   * can be a reliable check.
-   *
-   * Poll instead, and give it several cycles. The pointer goes to a corner first because a
-   * pointer resting low on the page is something the cat legitimately comes and sits beside —
-   * a different correct behaviour that this line was never about, and the win loop above leaves
-   * the cursor exactly there.
+   * The ambient cat's loop *alternates* walk and idle, so no instantaneous measurement of "is
+   * it walking" is reliable. Poll across several cycles instead — and park the pointer in a
+   * corner first, because a pointer resting low on the page is something the cat legitimately
+   * comes and sits beside.
    */
   await page.mouse.move(20, 20);
   await page.waitForTimeout(300);
