@@ -262,13 +262,20 @@ function tierSpans(log, tier, endT, notBefore = 0) {
 /**
  * A point near `spot` that is **not** on any claim, so the boss can be lured into range
  * without the player accruing any scrub progress.
+ *
+ * 2.2: the radii climb from small — the card's tiles are ~95×44px with a ~7px gap, so the
+ * nearest off-tile point is the **vertical gap between rows, ~24px from a claim centre**,
+ * which is just outside the 18px pounce range. Parking the boss there means the probe's
+ * latency is the *decision* (how far into the hold the cat commits) rather than the walk:
+ * at the page game's 55–120px lure the boss was a whole pounce-range away and the latency
+ * measured travel, which is why §2's "decides sooner" read empty or backwards on the card.
  */
 async function lurePoint(page, spot) {
   return page.evaluate(
     ([x, y]) => {
       const b = document.querySelector('[data-board]')?.getBoundingClientRect();
       if (!b) return null;
-      for (const r of [55, 75, 95, 120]) {
+      for (const r of [20, 24, 28, 32, 38, 46, 55, 70, 90, 110]) {
         for (const deg of [0, 45, 90, 135, 180, 225, 270, 315]) {
           const px = Math.round(x + r * Math.cos((deg * Math.PI) / 180));
           const py = Math.round(y + r * Math.sin((deg * Math.PI) / 180));
@@ -300,6 +307,15 @@ async function commitLatencies(page, attempts = 6) {
     const lure = await lurePoint(page, spot);
     if (!lure) continue;
     await page.mouse.move(lure.x, lure.y);
+    /*
+     * 2.2: the boss settles on the **lure** (the cursor's resting point), so wait for it to
+     * arrive *there* — not at the claim, which is where the cursor is not. `lurePoint` now
+     * parks it in the vertical gap between tile rows, ~24px from the claim centre, i.e. just
+     * outside the 18px pounce range, so the latency read below is the *decision* (how far
+     * into the hold it commits) rather than the walk. On the page game the 55–75px lure sat
+     * inside the 90px pounce range and this wait was keyed off the claim; on the card both
+     * of those would leave the boss a pounce-range away and the measurement would be travel.
+     */
     const ready = await page
       .waitForFunction(
         ([x, y]) => {
@@ -307,11 +323,11 @@ async function commitLatencies(page, attempts = 6) {
           const root = document.querySelector('[data-boss]');
           if (!root || !b) return false;
           const r = root.getBoundingClientRect();
-          const near = Math.hypot(r.left + r.width / 2 - x, r.top + r.height / 2 - y) <= 50;
+          const near = Math.hypot(r.left + r.width / 2 - x, r.top + r.height / 2 - y) <= 10;
           const stalking = !['telegraph', 'leap', 'recover', 'eat', 'fetch'].includes(root.dataset.phase);
           return near && stalking;
         },
-        [spot.x, spot.y],
+        [lure.x, lure.y],
         { timeout: 8000 },
       )
       .then(() => true)
@@ -345,7 +361,7 @@ async function commitLatencies(page, attempts = 6) {
         }
         return { latency: -1, mood };
       },
-      [spot.x, spot.y, 1250],
+      [spot.x, spot.y, 3000],
     );
     if (probe.latency > 0) out.push(probe);
     await page.waitForTimeout(400);
