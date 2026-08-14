@@ -36,7 +36,6 @@ import {
   armAmmo,
   deal,
   fresh as context,
-  idlePoint,
   launch,
   press as sharedPress,
   reachClaim,
@@ -417,8 +416,25 @@ async function playByFleeing(page, budgetMs = 150_000) {
   await page.evaluate(WATCH_LINES);
   const board = await page.evaluate(CLAIMS);
 
-  // Somewhere the pointer can rest without playing — a scan of the board, so nothing to re-deal.
-  const idle = await idlePoint(page);
+  /*
+   * Somewhere the pointer can rest without playing.
+   *
+   * Two card-specific traps here, and both are about *where the pointer lands*, not the game:
+   *
+   * - The card opens with a 0.18s scale-up animation, so any `getBoundingClientRect` taken
+   *   right after `press` reads the board mid-flight. `idlePoint` measured during the
+   *   animation returns a point that is on a tile once the card settles — and a pointer that
+   *   jiggles on a claimed tile *scrubs* it free, which fights the very siege that is meant
+   *   to lose this fight (measured: the claim count oscillates regrow-claims vs accidental
+   *   scrubs, and the loss stalls past the 120s budget). So wait for the card to settle
+   *   first, and park in the board's top-left *padding*, which is tile-free by construction —
+   *   the tiles start after the 0.6rem padding.
+   */
+  await page.waitForTimeout(400);
+  const idle = await page.evaluate(() => {
+    const b = document.querySelector('[data-board]').getBoundingClientRect();
+    return { x: Math.round(b.left + 5), y: Math.round(b.top + 5) };
+  });
   fixture('found somewhere harmless to stand', idle, idle ? `${idle.x},${idle.y}` : '');
 
   const t0 = Date.now();
