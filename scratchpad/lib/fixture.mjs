@@ -180,7 +180,21 @@ export async function launch(opts = {}) {
     console.error('No Chrome found. Set CHROME_PATH or install Chrome.');
     process.exit(2);
   }
-  return chromium.launch({ executablePath, headless: true, ...opts });
+  return chromium.launch({
+    executablePath,
+    headless: true,
+    // Long harnesses (arena7's 5-page ammo run + multi-round fights) can exhaust
+    // headless Chrome's default /dev/shm and kill the renderer mid-probe — measured as
+    // "Page crashed" at the second commitLatencies call. These two flags are the standard
+    // container fix and are harmless on a desktop. --mute-audio is for a different,
+    // nastier crash: headless Chrome has no audio device, and enough rapid playCue() calls
+    // (arena7's desperate tier fires telegraph/land/reclaim cues back-to-back) make the
+    // WebAudio renderer throw "The AudioContext encountered an error from the audio device"
+    // and take the whole renderer down. Audio synthesis is not what these harnesses verify,
+    // so mute it rather than fight a device that is not there.
+    args: ['--disable-dev-shm-usage', '--no-sandbox', '--mute-audio', '--disable-gpu'],
+    ...opts,
+  });
 }
 
 /**
@@ -218,6 +232,48 @@ const DENY_STORAGE = () => {
 };
 
 /**
+ * Stub out WebAudio before any page script runs.
+ *
+ * Headless Chrome has no audio device, and enough rapid `playCue()` calls (arena7's
+ * desperate tier fires telegraph/land/reclaim cues back-to-back) make the real
+ * `AudioContext` throw "The AudioContext encountered an error from the audio device" and
+ * take the whole renderer down mid-probe. `--mute-audio` is not enough — the context is
+ * still created and still throws. The card's `audio()` already tolerates a missing
+ * `AudioContext` (returns null, plays nothing), so giving it a stub that reports a state
+ * and swallows every node method keeps the game running while the harness measures
+ * behaviour, not sound. The stub is deliberately minimal: it must only satisfy the code
+ * in `cat-sfx.ts` (`new AudioContext()`, `.state`, `.resume()`, `.currentTime`,
+ * `.createOscillator/.createGain/.createBiquadFilter/.createBuffer`, `.destination`,
+ * `.sampleRate`) and is replaced by the real thing on any normal desktop run.
+ */
+const NO_AUDIO = () => {
+  const node = {
+    connect: () => node,
+    disconnect: () => {},
+    start: () => {},
+    stop: () => {},
+    setValueAtTime: () => {},
+    exponentialRampToValueAtTime: () => {},
+    linearRampToValueAtTime: () => {},
+  };
+  const param = { setValueAtTime: () => {}, exponentialRampToValueAtTime: () => {}, linearRampToValueAtTime: () => {} };
+  const stub = {
+    state: 'running',
+    currentTime: 0,
+    sampleRate: 44100,
+    destination: node,
+    resume: () => Promise.resolve(),
+    createOscillator: () => ({ ...node, type: 'sine', frequency: { ...param } }),
+    createGain: () => ({ ...node, gain: { ...param } }),
+    createBiquadFilter: () => ({ ...node, type: 'lowpass', frequency: { ...param } }),
+    createBuffer: (_ch, len) => ({ getChannelData: () => new Float32Array(len) }),
+    createBufferSource: () => ({ ...node, buffer: null }),
+  };
+  Object.defineProperty(window, 'AudioContext', { value: function () { return stub; }, writable: true });
+  Object.defineProperty(window, 'webkitAudioContext', { value: undefined, writable: true });
+};
+
+/**
  * A context with the welcome dismissed and the mode declared.
  *
  * @param mode     'manual' presses §13.8's chip before any fight; 'commander' (default) leaves 2.0's
@@ -233,6 +289,7 @@ export async function fresh(browser, { mode = 'commander', storage = true, phone
     ...ctxOpts,
   });
   if (welcomed) await ctx.addInitScript(() => localStorage.setItem('welcomed', '1'));
+  await ctx.addInitScript(NO_AUDIO);
   if (mode === 'manual') await ctx.addInitScript(PICK_MANUAL);
   if (!storage) await ctx.addInitScript(DENY_STORAGE);
   return ctx;

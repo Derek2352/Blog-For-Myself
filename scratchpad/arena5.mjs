@@ -1,11 +1,14 @@
 /**
- * Build step 5: stances and loadout — replayability.
+ * Build step 5: stances and loadout — replayability, on the card game (2.2).
  *
  * Both are *variation*, so the checks are about difference: fights must not all be the same
  * fight, and treats must not all be the same treat. The way to see that in a browser is to
  * force a stance or a treat and watch a number that only that one changes.
  *
- * Mirrors src/lib/arena.ts:
+ * 2.2: the boss is the card's own `[data-boss]` (stance in its `dataset.stance`, phase in
+ * `dataset.phase`, feint in `dataset.feint`), claims are `.cat-tile[data-state="claimed"]`,
+ * the treat is `[data-treat] use[href^="#treat-"]`, and the "floor" the siege cat refuses to
+ * leave is the bottom edge of the card's board.
  */
 const TELEGRAPH_MS = 420;
 const SCRUB_MS = 1400;
@@ -23,69 +26,42 @@ import {
   wants,
 } from './lib/fixture.mjs';
 
-/*
- * The reporter, the context factory, the launcher and the open/close waits come from
- * `lib/fixture.mjs` (§12.1's charter). This file carried its own copy of each, which is how one
- * idea ended up with eleven implementations and a fix at one call site could never be a fix.
- */
 const browser = await launch();
 const { ok, note, fixture, done } = report();
-
-
-
-/**
- * Press the toggle and wait for the state change to have actually landed.
- *
- * Step 6 put a ~1.9s ink curtain between the press and the fight. Every `click` in these
- * scripts was followed by a fixed 120–200ms wait, which was ample against an instant swap and
- * is now a race the script always loses — the first symptom was `getBoundingClientRect` on a
- * null `.cat-claimed`. Waiting on the observable rather than on a stopwatch is both correct
- * and, on the close path, usually shorter.
- */
 
 /** A desktop context playing **manual mode** — the stances are measured against a pointer. */
 const fresh = (opts = {}) => context(browser, { mode: 'manual', ...opts });
 
-const STANCE = `document.getElementById('site-cat').dataset.stance ?? ''`;
+const STANCE = `document.querySelector('[data-boss]')?.dataset.stance ?? ''`;
 const AMMO = `document.querySelectorAll('#cat-score .cat-paw.got').length`;
+const CLAIMS = `document.querySelectorAll('.cat-tile[data-state="claimed"]').length`;
 
 /** Phase changes with timestamps, plus whether each wind-up was a bluff. */
 const RECORDER = () => {
-  const root = document.getElementById('site-cat');
+  const root = document.querySelector('[data-boss]');
   window.__phases = [];
-  const phase = () =>
-    ['telegraph', 'leap', 'recover', 'fetch', 'eat'].find((p) => root.classList.contains('boss-' + p)) ??
-    (root.classList.contains('boss') ? 'stalk' : 'off');
+  const phase = () => root?.dataset.phase ?? 'off';
   /*
    * **Keyed on phase *and* feint, since 1.4.** The dedupe used to be on the phase string alone,
    * and §9.3's double tell then became invisible: a feint that re-commits stays in `telegraph`
-   * and only drops `boss-feint`, so the second wind-up produced no record at all. This harness
-   * reported "5 wind-ups" against its own `>= 6` floor and blamed the game.
-   *
-   * The feint class going false *is* the observable commitment — §9.3's "a bluff gathers without
-   * dropping its shoulders", so the shoulders dropping is the tell — which makes phase+feint the
-   * right key rather than a workaround.
+   * and only drops `data-feint`, so the second wind-up produced no record at all. The feint
+   * going false *is* the observable commitment — the shoulders dropping is the tell — which
+   * makes phase+feint the right key. On the card the tell is `[data-boss] dataset.feint`.
    */
-  const key = () => phase() + (root.classList.contains('boss-feint') ? '+feint' : '');
+  const key = () => phase() + (root?.dataset.feint ? '+feint' : '');
   let seen = key();
   const push = () => {
     const k = key();
     if (k === seen) return;
     seen = k;
-    window.__phases.push({ phase: phase(), t: performance.now(), feint: root.classList.contains('boss-feint') });
+    window.__phases.push({ phase: phase(), t: performance.now(), feint: !!root?.dataset.feint });
   };
-  new MutationObserver(push).observe(root, { attributes: true, attributeFilter: ['class'] });
+  new MutationObserver(push).observe(root, { attributes: true, attributeFilter: ['data-phase', 'data-feint'] });
 };
 
-
-/** Re-open the fight until the cat rolls the stance we want to look at. */
 /**
  * Open a fight, and keep re-dealing until the cat rolls the stance this section is about.
- *
- * The budgets here are the largest in the fleet and they are not padding: §9.3 weights the roll, and
- * **sleepy is deliberately rare**, so section 4 asks for two hundred deals to be sure of seeing one.
- * A named stance is a fixture like any other — `deal()` reports which attempt produced it, so a
- * section that had to work for its opponent says so instead of looking flaky.
+ * Sleepy is deliberately rare, so section 3 asks for two hundred deals to be sure of seeing one.
  */
 async function stanceDeal(page, want, deals = 120) {
   await press(page);
@@ -93,51 +69,23 @@ async function stanceDeal(page, want, deals = 120) {
 }
 
 /**
- * A point that is neither a link nor a claim: the pointer can rest there without throwing
- * anything and without scrubbing anything. Used for measurements that must not be
- * confounded by the player accidentally playing.
- */
-
-/**
- * A claim to work on — by **scrolling**, never by re-rolling the fight.
- *
- * The earlier version pressed Escape and re-opened when nothing was in view, which rolls a
- * fresh seed and therefore a fresh stance. Every section here forces a stance first, so that
- * quietly measured a different cat than the one it had just chosen: a "sleepy" wind-up came
- * out at 467ms, which is a trickster's, and the check failed for a reason that had nothing to
- * do with sleepy.
- */
-/**
- * A claim in the band, found by **scrolling** rather than by re-dealing.
- *
- * Deliberately not `deal()`: this file has just spent up to two hundred fights pinning a stance, and
- * re-dealing the board would throw that away — the trap §12.1 names as two re-rollers undoing each
- * other. Scrolling changes which claims are reachable without touching the fight at all, so it is the
- * cheaper and safer of the two moves, and the name says which one this is.
+ * A claimed tile on the board, found without re-dealing (a re-deal rolls a fresh seed and
+ * therefore a fresh stance — the trap §12.1 names as two re-rollers undoing each other).
+ * The card's whole board is on screen, so "band" is board-relative and there is no scroll.
  */
 async function bandSpot(page) {
-  const tops = await page.evaluate(() =>
-    [...document.querySelectorAll('.cat-claimed')]
-      .map((n) => n.getBoundingClientRect().top + scrollY)
-      .sort((a, b) => a - b),
-  );
-  for (const top of [null, ...tops]) {
-    if (top !== null) {
-      await page.evaluate((y) => scrollTo({ top: Math.max(0, y), behavior: 'instant' }), top - 320);
-      await page.waitForTimeout(130);
-    }
-    const hit = await page.evaluate(() => {
-      const c = [...document.querySelectorAll('.cat-claimed')]
-        .map((n) => n.getBoundingClientRect())
-        .filter((r) => r.top > 170 && r.bottom < innerHeight - 50 && r.height < 420)[0];
-      return c ? { x: Math.round(c.left + c.width / 2), y: Math.round(c.top + c.height / 2) } : null;
-    });
-    if (hit) return hit;
-  }
-  return null;
+  const hit = await page.evaluate(() => {
+    const b = document.querySelector('[data-board]')?.getBoundingClientRect();
+    if (!b) return null;
+    const c = [...document.querySelectorAll('.cat-tile[data-state="claimed"]')]
+      .map((n) => n.getBoundingClientRect())
+      .filter((r) => r.top > b.top + 6 && r.bottom < b.bottom - 6 && r.height < 200)[0];
+    return c ? { x: Math.round(c.left + c.width / 2), y: Math.round(c.top + c.height / 2) } : null;
+  });
+  return hit;
 }
 
-async function lureCat(page, target, within = 65, budgetMs = 14000) {
+async function lureCat(page, target, within = 18, budgetMs = 16000) {
   const started = Date.now();
   let flip = 1;
   while (Date.now() - started < budgetMs) {
@@ -146,7 +94,8 @@ async function lureCat(page, target, within = 65, budgetMs = 14000) {
     await page.waitForTimeout(60);
     const d = await page.evaluate(
       ([tx, ty]) => {
-        const r = document.getElementById('site-cat').getBoundingClientRect();
+        const r = document.querySelector('[data-boss]')?.getBoundingClientRect();
+        if (!r) return Infinity;
         return Math.hypot(r.left + r.width / 2 - tx, r.top + r.height / 2 - ty);
       },
       [target.x, target.y],
@@ -178,7 +127,7 @@ async function lureCat(page, target, within = 65, budgetMs = 14000) {
   await ctx.close();
 }
 
-// ---- 2. siege: never leaves the floor, and the page grows back
+// ---- 2. siege: never leaves the floor, and the board grows back
 {
   const ctx = await fresh();
   const page = await ctx.newPage();
@@ -186,15 +135,21 @@ async function lureCat(page, target, within = 65, budgetMs = 14000) {
   await page.waitForTimeout(700);
   fixture('rolled a siege', await stanceDeal(page, 'siege'));
 
-  // chase it with the cursor up near the top: a floor-bound cat cannot follow
-  await page.mouse.move(900, 220);
+  // chase it with the cursor up near the top of the board: a floor-bound cat cannot follow
+  const topMid = await page.evaluate(() => {
+    const b = document.querySelector('[data-board]').getBoundingClientRect();
+    return { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + 12) };
+  });
+  await page.mouse.move(topMid.x, topMid.y);
   const heights = [];
   for (let i = 0; i < 12; i++) {
     await page.waitForTimeout(280);
     heights.push(
       await page.evaluate(() => {
-        const r = document.getElementById('site-cat').getBoundingClientRect();
-        return innerHeight - r.bottom;
+        const b = document.querySelector('[data-board]').getBoundingClientRect();
+        const r = document.querySelector('[data-boss]')?.getBoundingClientRect();
+        if (!r) return 999;
+        return b.bottom - r.bottom;
       }),
     );
   }
@@ -204,17 +159,12 @@ async function lureCat(page, target, within = 65, budgetMs = 14000) {
     `highest it got: ${Math.max(...heights).toFixed(1)}px off the floor`,
   );
 
-  /*
-   * Park somewhere that is neither a link nor a claim. The first version of this check
-   * parked on a claim, so the player kept scrubbing it back while the board regrew and the
-   * count sat still — a confounded measurement that read as a broken feature.
-   */
   const idle = await idlePoint(page);
   fixture('found somewhere harmless to wait', idle, idle ? `${idle.x},${idle.y}` : '');
   await page.mouse.move(idle.x, idle.y);
-  const before = await page.evaluate(`document.querySelectorAll('.cat-claimed').length`);
+  const before = await page.evaluate(CLAIMS);
   await page.waitForTimeout(11000);
-  const after = await page.evaluate(`document.querySelectorAll('.cat-claimed').length`);
+  const after = await page.evaluate(CLAIMS);
   ok('and the claims grow back without it touching you', after > before, `${before} → ${after} claims`);
   await ctx.close();
 }
@@ -254,14 +204,10 @@ async function lureCat(page, target, within = 65, budgetMs = 14000) {
   await page.goto(BASE + '/', { waitUntil: 'load' });
   await page.waitForTimeout(700);
   /*
-   * **Treats in hand, never thrown — added 1.4, and for the reason `battle.mjs` found.** §2 makes a
-   * loss "every claim taken **and** nothing left to throw", and this section deliberately provokes
-   * without ever *finishing* a hold, so it frees nothing while the cat takes ground on every landed
-   * pounce and every regrow. In 1.3 that stayed inside the window because a third of trickster's
-   * wind-ups were bluffs that took nothing; §9.3's double tell converts some of those into real
-   * attacks, so the board now fills fast enough to end the fight before the sample is big enough
-   * to say anything about a 30% feint rate. Arming removes the loss without touching what is being
-   * measured — the feint roll does not read the paw row.
+   * **Treats in hand, never thrown — added 1.4.** §2 makes a loss "every claim taken **and**
+   * nothing left to throw", and this section deliberately provokes without ever *finishing* a
+   * hold, so it frees nothing while the cat takes ground on every landed pounce and every
+   * regrow. Arming removes the loss without touching what is being measured.
    */
   const held = await armAmmo(page, { hops: 5, pool: 6, dwell: 650, settle: 800, home: '/' });
   ok('treats in hand, so provoking cannot lose the fight (§2)', held >= 3, `${held} found`);
@@ -271,18 +217,8 @@ async function lureCat(page, target, within = 65, budgetMs = 14000) {
   const spot = await bandSpot(page);
   await lureCat(page, spot);
   /*
-   * Provoke over and over without ever finishing.
-   *
-   * Holding still simply *completes* — the claim is freed and there is nothing left to
-   * interrupt, which is why the first version of this got two wind-ups out of twenty-five
-   * seconds. So: hold past the 0.35 that provokes, break the hold before it completes, and
-   * do it again. That is also what a nervous player looks like.
-   */
-  /*
-   * 34 rather than 22 since 1.4: a feint that re-commits (§9.3's double tell) spends a leap, a
-   * recovery and a walk back, where a plain bluff returns to the stalk and can wind up again
-   * almost at once. Same cat, fewer wind-ups per minute — so the window has to be longer to hold
-   * a sample big enough to say anything about a 30% rate.
+   * Provoke over and over without ever finishing: hold past the 0.35 that provokes, break
+   * the hold before it completes, and do it again — what a nervous player looks like.
    */
   for (let i = 0; i < 34; i++) {
     await page.mouse.move(spot.x, spot.y);
@@ -290,14 +226,8 @@ async function lureCat(page, target, within = 65, budgetMs = 14000) {
     await page.mouse.move(spot.x + 70, spot.y + 40);
     await page.waitForTimeout(260);
   }
-  /*
-   * How much of the window was actually a *fight*. 1.4 made this worth asking: the double tell
-   * converts some bluffs into landed attacks, each landed attack takes ground, and a board that
-   * fills with no treats in hand is a §2 loss — so the observation window can close early and the
-   * sample this section needs is bounded by the fight, not by the loop.
-   */
-  const stillOn = await page.evaluate(`document.documentElement.classList.contains('cat-arena-on')`);
-  const leftNow = await page.evaluate(`document.querySelectorAll('.cat-claimed').length`);
+  const stillOn = await page.evaluate(`!document.querySelector('#cat-card-panel').hidden`);
+  const leftNow = await page.evaluate(CLAIMS);
   console.log(`      · fight ${stillOn ? 'still on' : 'ENDED early'}, ${leftNow} claims, ` +
     `${(await page.evaluate(() => window.__phases.length))} phase records`);
   const log = await page.evaluate(() => window.__phases);
@@ -335,14 +265,13 @@ async function lureCat(page, target, within = 65, budgetMs = 14000) {
   const armed = await armAmmo(page, { hops: 5, pool: 6, dwell: 650, settle: 800, home: '/' });
   ok('armed with a kit', armed >= 3, `${armed} treats`);
 
-  // which shapes did this visit actually earn? §9.5's whole point.
   const kit = await page.evaluate(() =>
     [...document.querySelectorAll('#cat-score .cat-paw.got')].map((p) => p.dataset.slug),
   );
   ok('the kit comes from the pages that were read', kit.length > 0, kit.join(', '));
 
   await press(page);
-  await page.waitForTimeout(150);
+  await page.waitForTimeout(200);
   await page.evaluate(RECORDER);
 
   // throw one and watch which shape went out and how long it occupies the cat
@@ -352,7 +281,7 @@ async function lureCat(page, target, within = 65, budgetMs = 14000) {
   await page.mouse.down();
   await page.mouse.up();
   const shape = await page.evaluate(
-    () => document.querySelector('#cat-throw use')?.getAttribute('href') ?? '',
+    () => document.querySelector('[data-treat] use')?.getAttribute('href') ?? '',
   );
   ok('the shape thrown is the shape that was spent', /^#treat-/.test(shape), shape);
 
