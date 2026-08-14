@@ -1,5 +1,5 @@
 /**
- * Build step 7 — the rubber band (§7.3) — checked in a real browser.
+ * Build step 7 — the rubber band (§7.3) — checked in a real browser, on the card game (2.2).
  *
  * §7.3's claim is that difficulty scales *as behaviour you can read*, so the checks have to
  * be about behaviour rather than about the scalar. The shape of every one of them is the
@@ -7,13 +7,17 @@
  * that what the cat does changes. A test that drove the mood and then asserted the mood
  * would be asserting an assignment.
  *
- * The bait below is what makes that possible. Parking on a claim and jiggling ±8px on a
- * fixed cadence keeps scrub progress oscillating just past `POUNCE_THRESHOLD` (0.35) without
- * ever completing a hold: the cat is offered exactly the same provocation every ~520ms
- * forever. So the commitment rate is a clean read of the cat's *willingness*, which is the
- * thing aggression moves.
+ * The bait below is what makes that possible. Parking on a claimed tile and jiggling ±8px
+ * on a fixed cadence keeps scrub progress oscillating just past `POUNCE_THRESHOLD` (0.35)
+ * without ever completing a hold: the boss is offered exactly the same provocation every
+ * ~520ms forever. So the commitment rate is a clean read of the boss's *willingness*, which
+ * is the thing aggression moves.
  *
- * Mirrors src/lib/arena.ts:
+ * 2.2: the boss is the card's own `[data-boss]` (phase in `dataset.phase`, mood in
+ * `dataset.mood`, grooming tell in `dataset.groom`), claims are `.cat-tile[data-state=
+ * "claimed"]`, and the board is fully on screen — there is no scrolling, so the page's
+ * scroll-reveal/prefetch confounds and the DOM snapshot (pillar 2) drop. The tier
+ * measurements themselves are unchanged, because durations are unchanged by the card scale.
  */
 const TELEGRAPH_MS = 420;
 const SCRUB_MS = 1400;
@@ -32,31 +36,18 @@ import {
   wants,
 } from './lib/fixture.mjs';
 
-/*
- * Shared with the rest of the fleet through `lib/fixture.mjs` (§12.1's charter): the reporter with its
- * fixture/assertion split, the context factory that declares the mode, the launcher, and the waits
- * that open and close a fight. This file used to carry its own copy of each.
- */
 const browser = await launch();
 const { ok, note, fixture, done } = report();
 
-
-
-
-/** Shared with the fleet; this file has always allowed 8000ms for the curtain. */
+/** Shared with the fleet; this file has always allowed 8000ms for the open. */
 const press = (page) => sharedPress(page, { timeout: 8000 });
-
-
 const release = (page) => sharedRelease(page, { timeout: 8000 });
 
-
+/** The card closes back to collapsed (2.2's pillar 2). */
 async function settled(page, ms = 8000) {
   await page
     .waitForFunction(
-      () =>
-        document.getElementById('cat-arena-toggle')?.getAttribute('aria-pressed') === 'false' &&
-        !document.querySelector('.cat-claimed') &&
-        document.getElementById('cat-curtain')?.hidden !== false,
+      () => document.querySelector('#cat-card-panel')?.hidden !== false,
       undefined,
       { timeout: ms },
     )
@@ -64,53 +55,20 @@ async function settled(page, ms = 8000) {
   await page.waitForTimeout(120);
 }
 
-/**
- * A desktop context playing **manual mode**: §7.3's tiers are measured against a pointer that plays.
- */
+/** A desktop context playing **manual mode**: §7.3's tiers are measured against a pointer that plays. */
 const fresh = (opts = {}) => context(browser, { mode: 'manual', ...opts });
 
-
-const SNAP_LIST = `(() => [...document.querySelectorAll('*')]
-  .filter((el) => !el.closest('#site-cat, #cat-hud, #cat-treat, #cat-scrub, #cat-throw, #cat-ribbon, #cat-territory, #cat-curtain, header'))
-  .map((el, i) => i + ':' + el.tagName + ':' + el.className + ':' + (el.getAttribute('style') ?? '')))()`;
-
-async function snapDiff(page, clean) {
-  const now = await page.evaluate(SNAP_LIST);
-  const diffs = [];
-  for (let i = 0; i < Math.max(clean.length, now.length); i++) {
-    if (clean[i] !== now[i]) diffs.push({ before: clean[i], after: now[i] });
-  }
-  return {
-    n: diffs.length,
-    detail: diffs.length
-      ? `${diffs.length} differences, first: ${diffs[0].before} → ${diffs[0].after}`
-      : 'identical',
-  };
-}
-
 /**
- * Watch the cat: every phase change, every mood change, every grooming beat, timestamped.
- *
- * One observer for all three because they have to be compared on the same clock — "did the
- * commitments thin out once it got bored" is a question about the interleaving, and two
- * recorders sampled separately cannot answer it.
+ * Watch the boss: every phase change, every mood change, every grooming beat, timestamped.
+ * One observer for all three because they have to be compared on the same clock.
  */
 const RECORDER = () => {
-  const root = document.getElementById('site-cat');
-  const phase = () =>
-    root.classList.contains('boss-telegraph')
-      ? 'telegraph'
-      : root.classList.contains('boss-leap')
-        ? 'leap'
-        : root.classList.contains('boss-recover')
-          ? 'recover'
-          : root.classList.contains('boss')
-            ? 'stalk'
-            : 'off';
+  const root = document.querySelector('[data-boss]');
+  const phase = () => root?.dataset.phase ?? 'off';
   window.__log = [];
   let seenPhase = phase();
-  let seenMood = root.dataset.mood ?? '';
-  let seenGroom = root.classList.contains('grooming');
+  let seenMood = root?.dataset.mood ?? '';
+  let seenGroom = root?.dataset.groom === '1';
   const at = () => performance.now();
   window.__log.push({ k: 'phase', v: seenPhase, t: at() });
   window.__log.push({ k: 'mood', v: seenMood, t: at() });
@@ -120,39 +78,55 @@ const RECORDER = () => {
       seenPhase = p;
       window.__log.push({ k: 'phase', v: p, t: at() });
     }
-    const m = root.dataset.mood ?? '';
+    const m = root?.dataset.mood ?? '';
     if (m !== seenMood) {
       seenMood = m;
       window.__log.push({ k: 'mood', v: m, t: at() });
     }
-    const g = root.classList.contains('grooming');
+    const g = root?.dataset.groom === '1';
     if (g !== seenGroom) {
       seenGroom = g;
       window.__log.push({ k: 'groom', v: g ? 'on' : 'off', t: at() });
     }
     // Territory is what the mood is a function of, so it belongs on the same timeline.
-    const claimed = document.querySelectorAll('.cat-claimed').length;
+    const claimed = document.querySelectorAll('.cat-tile[data-state="claimed"]').length;
     const last = window.__log.findLast((e) => e.k === 'claims');
     if (!last || last.v !== claimed) window.__log.push({ k: 'claims', v: claimed, t: at() });
-  }).observe(root, { attributes: true, attributeFilter: ['class', 'data-mood'] });
+    // The boss's attributes are *not* a complete clock for territory: a trade that keeps
+    // the boss in stalk (siege never pounces, so phase never changes) still moves claims
+    // on every hold and regrow, and those changes would never be recorded. Watch the
+    // board's tile states directly, on the same timeline.
+  }).observe(root, { attributes: true, attributeFilter: ['data-phase', 'data-mood', 'data-groom'] });
+  const board = document.querySelector('[data-board]');
+  if (board) {
+    new MutationObserver(() => {
+      const claimed = document.querySelectorAll('.cat-tile[data-state="claimed"]').length;
+      const last = window.__log.findLast((e) => e.k === 'claims');
+      if (!last || last.v !== claimed) window.__log.push({ k: 'claims', v: claimed, t: at() });
+    }).observe(board, { attributes: true, attributeFilter: ['data-state'], subtree: true });
+  }
 };
 
-/** The cat's current mood, straight off the element. */
-const MOOD = `document.getElementById('site-cat')?.dataset.mood ?? ''`;
-const CLAIMS = `document.querySelectorAll('.cat-claimed').length`;
+/** The boss's current mood, straight off the element. */
+const MOOD = `document.querySelector('[data-boss]')?.dataset.mood ?? ''`;
+const CLAIMS = `document.querySelectorAll('.cat-tile[data-state="claimed"]').length`;
 const AMMO = `document.querySelectorAll('#cat-score .cat-paw.got').length`;
-
-
-
-
 
 /** Throw a treat away from where the player is working, if one is in hand. */
 async function bribe(page, awayFrom) {
   if ((await page.evaluate(AMMO)) === 0) return false;
-  if (await page.evaluate(`!document.getElementById('cat-throw').hidden`)) return false;
+  if (await page.evaluate(`!document.querySelector('[data-treat]').hidden`)) return false;
+  // Aim across the board from the working tile: on the card the board is 318×217 and
+  // page-ish corners (60,180)/(1220,780) fall off it — throwSpot falls back to the
+  // nearest board spot, which can land *next to* the working tile and defeat the point.
+  const b = await page.evaluate(() => {
+    const r = document.querySelector('[data-board]')?.getBoundingClientRect();
+    return r ? { left: r.left, top: r.top, right: r.right, bottom: r.bottom } : null;
+  });
+  if (!b) return false;
   const spot = await throwSpot(page, {
-    x: awayFrom.x > 640 ? 60 : 1220,
-    y: awayFrom.y > 450 ? 180 : 780,
+    x: awayFrom.x > b.left + b.right / 2 ? b.left + 8 : b.right - 8,
+    y: awayFrom.y > b.top + b.bottom / 2 ? b.top + 8 : b.bottom - 8,
   });
   if (!spot) return false;
   await page.mouse.move(spot.x, spot.y);
@@ -163,26 +137,36 @@ async function bribe(page, awayFrom) {
 }
 
 /**
- * Offer the cat the same provocation, over and over, and never complete a scrub.
+ * Offer the boss the same provocation, over and over, and never complete a scrub.
+ * Returns when `until()` says so or the clock runs out.
  *
- * Returns when `until()` says so or the clock runs out. The jiggle is what makes this a
- * *constant* stimulus: `stillEnough` restarts the hold on any drift past 6px, so progress
- * saws between 0 and ~0.37 — over `POUNCE_THRESHOLD` at the even tier, under it once the
- * bored tier's patience is added. Same player, different cat.
+ * **2.2 — plain jiggle, no lead-in.** An earlier lead-in parked the cursor near the tile
+ * and *waited* for the boss to arrive before starting the jiggle; the wait timed out on
+ * the card (boss walks 34px/s, a fifth of the page game's 170) and the harness then
+ * never jiggled at all — the "feed" was pure regrow (mood hit bored at exactly +30s, the
+ * 15s regrow clock twice, with `phases=stalk` in the log). The jiggle itself pulls the
+ * boss over: measured, it closes ~150px in ~12s and the first telegraph follows. So this
+ * is the whole loop, and the section baselines are long enough to include the approach.
  */
 async function bait(page, ms, until = null) {
   const t0 = Date.now();
   let n = 0;
   let spot = null;
   while (Date.now() - t0 < ms) {
-    // Re-pick only when the current point stops landing on a claim. Scrolling every cycle
-    // would jerk the view and change what the cat is walking towards mid-measurement; and
-    // late in a fight there may be two claims left, both below the fold — the run that
-    // measured the desperate tier at 0.30/s had simply run out of anything to provoke with,
-    // so it was comparing a baited cat against an unbaited one.
+    /*
+     * A tile mid-hold reads `data-state="scrubbing"`, not `claimed` — the card flips the
+     * state the moment the jiggle starts (the page game kept `.cat-claimed` on a scrubbed
+     * tile; the card's `showScrub` owns the state). A check that only accepts `claimed`
+     * fails on the very first jiggle and re-picks a *different* tile every cycle — the
+     * cursor teleports around the board, the boss never closes, and the bait provokes
+     * nothing (measured: `phases=stalk` with a mood that only ever moved by regrow).
+     */
     const still = spot
       ? await page.evaluate(
-          ([x, y]) => !!document.elementFromPoint(x, y)?.closest('.cat-claimed'),
+          ([x, y]) =>
+            !!document
+              .elementFromPoint(x, y)
+              ?.closest('.cat-tile[data-state="claimed"], .cat-tile[data-state="scrubbing"]'),
           [spot.x, spot.y],
         )
       : false;
@@ -197,73 +181,54 @@ async function bait(page, ms, until = null) {
 }
 
 /**
- * Scroll the claim furthest from the cat to the middle of the screen and return a point on
- * it that is genuinely parkable — verified, not assumed.
- *
- * Three attempts at "which claims can a harness use" and only this one is right. Filtering
- * by position and `height < 420` left only about **three** usable claims at 900px, because
- * `boardSlice` borrows from below the fold to make its floor — so the climb stalled at three
- * reclaims, every later attempt finding nothing. Widening the viewport worked at 1800px and
- * not at 2200px, which is a coin toss dressed as a fix. Scrolling fixed most of it, and the
- * last claim still failed: the survivors were the *tall* ones the height filter excluded.
- *
- * `elementFromPoint` answers the question the filters were approximating. Scroll it to the
- * centre — where a point is always in the viewport, whatever the element's height — then ask
- * the document whether that point actually lands on this claim, and move on if it does not.
- * Which is also what the arena itself does to decide what you are scrubbing (`claimUnder`),
- * so the harness and the game agree on what "on a claim" means.
+ * A claimed tile on the board, preferring the one furthest from the boss, hit-tested so the
+ * harness and the game agree on what "on a claim" means.
  */
 async function parkableSpot(page) {
   const spot = await page.evaluate(() => {
-    const cat = document.getElementById('site-cat').getBoundingClientRect();
-    const cx = cat.left + cat.width / 2;
-    const cy = cat.top + cat.height / 2;
-    const claims = [...document.querySelectorAll('.cat-claimed')];
-    claims.sort((a, b) => {
+    const b = document.querySelector('[data-board]')?.getBoundingClientRect();
+    if (!b) return null;
+    const boss = document.querySelector('[data-boss]')?.getBoundingClientRect();
+    const cx = boss ? boss.left + boss.width / 2 : b.left;
+    const cy = boss ? boss.top + boss.height / 2 : b.top;
+    const claims = [...document.querySelectorAll('.cat-tile[data-state="claimed"]')];
+    claims.sort((a, z) => {
       const ra = a.getBoundingClientRect();
-      const rb = b.getBoundingClientRect();
+      const rb = z.getBoundingClientRect();
       return (
         Math.hypot(rb.left + rb.width / 2 - cx, rb.top + rb.height / 2 - cy) -
         Math.hypot(ra.left + ra.width / 2 - cx, ra.top + ra.height / 2 - cy)
       );
     });
     for (const el of claims) {
-      el.scrollIntoView({ block: 'center', behavior: 'instant' });
       const r = el.getBoundingClientRect();
-      const x = Math.round(Math.min(Math.max(r.left + r.width / 2, 60), innerWidth - 60));
-      const y = Math.round(Math.min(Math.max(r.top + r.height / 2, 200), innerHeight - 120));
-      if (document.elementFromPoint(x, y)?.closest('.cat-claimed') === el) return { x, y };
+      const x = Math.round(r.left + r.width / 2);
+      const y = Math.round(r.top + r.height / 2);
+      if (document.elementFromPoint(x, y)?.closest('.cat-tile[data-state="claimed"]') === el) return { x, y };
     }
     return null;
   });
-  if (spot) await page.waitForTimeout(250); // let the scroll settle before parking
+  if (spot) await page.waitForTimeout(120);
   return spot;
 }
 
-/**
- * Somewhere that is not a claim.
- *
- * The header is `PROTECTED_TREE`, so `claimUnder` finds nothing and no scrub progress
- * accrues — which makes it the only honest place to leave the cursor between actions.
- * Without this the climb stalemated at eight claims after **thirteen** successful reclaims:
- * the pointer sat on whatever claim it had just finished while the harness scrolled and
- * counted, progress kept building, and the cat took back exactly as much as it lost. The
- * cursor is an input, so parking it on the board is playing the game by accident.
- */
+/** Somewhere that is not a claim — leave the card entirely (a hold must not survive). */
 async function parkNeutral(page) {
-  await page.mouse.move(640, 60);
+  await page.mouse.move(30, 30);
   await page.waitForTimeout(80);
 }
 
 /**
  * Hold perfectly still on a parkable claim until it is taken back.
+ * `spend` throws a treat first (see arena3: without treats an even fight sits near the
+ * opening ratio indefinitely — §5.4's "the safe window is a real decision").
  *
- * `spend` throws a treat first, and it is not optional for a player trying to actually win.
- * Holding still alone stalemates: the run before this one reclaimed **twelve** claims and
- * finished on the same eight it started with, because every landed pounce takes one back and
- * the two rates match. That is not a harness artefact — it is §5.4's "the safe window is a
- * real decision", arrived at from the other direction. Treats are what convert holding still
- * into progress, and without them an even fight sits near the opening ratio indefinitely.
+ * **Fixed-duration hold (2.2):** the treat's fetch gives ~3-4s of immunity; a hold that
+ * *waits* for the count to drop can sit past the immunity and get pounced, which takes the
+ * tile straight back — the poll then never sees a drop and the player's work reads as
+ * nothing. Hold a fixed SCRUB_MS + 350 (the treat's safe window, matching the fleet's
+ * hold cadence) and check once. Measured: waiting-for-drop reclaimed 26 tiles and ended
+ * with 10 still claimed; fixed holds drove the board to 2 and the mood to desperate.
  */
 async function scrubOne(page, ms = 7000, spend = false) {
   const spot = await parkableSpot(page);
@@ -271,68 +236,45 @@ async function scrubOne(page, ms = 7000, spend = false) {
   if (spend) await bribe(page, spot);
   const before = await page.evaluate(CLAIMS);
   await page.mouse.move(spot.x, spot.y);
-  const t0 = Date.now();
-  let won = false;
-  while (Date.now() - t0 < ms) {
-    await page.waitForTimeout(200);
-    if ((await page.evaluate(CLAIMS)) < before) {
-      won = true;
-      break;
-    }
-  }
+  await page.waitForTimeout(Math.min(ms, SCRUB_MS + 350));
+  const after = await page.evaluate(CLAIMS);
   await parkNeutral(page);
-  return won;
+  return after < before;
 }
 
-/**
- * Every interval the cat spent in a given tier.
- *
- * Not "from the first bored marker to the end", which is what the first version did with
- * `findLast` — and with a hysteresis band wide enough to actually be left, a fight can go
- * even→bored→even→bored, so that put an earlier *bored* stretch inside the "even" baseline
- * and duly reported a grooming beat while the fight was supposedly even. A tier is a set of
- * intervals, so the statistics have to be taken over a union of them.
- */
+/** Every interval the boss spent in a given tier (a tier is a set of intervals). */
 function tierSpans(log, tier, endT, notBefore = 0) {
   const moods = log.filter((e) => e.k === 'mood' && e.v);
   const spans = [];
   for (let i = 0; i < moods.length; i++) {
     if (moods[i].v !== tier) continue;
     const from = Math.max(moods[i].t, notBefore);
-    const to = moods[i + 1]?.t ?? endT;
+    // Trim the end as well as the start: the mood event marks the moment the tier
+    // *changed*, and the observer can timestamp a same-frame grooming beat (the bored
+    // tell that *is* the new tier) a hair before the mood mutation lands — measured
+    // with groom:on at the same second as mood:bored landing inside the even span.
+    const to = moods[i + 1] ? moods[i + 1].t - 100 : endT;
     if (to > from) spans.push([from, to]);
   }
   return spans;
 }
 
 /**
- * How far into a fresh hold the cat commits, in ms, over several attempts.
- *
- * This is the measurement that fits what aggression actually does to willingness. The
- * commitment *rate* does not: the cat's cycle is telegraph + leap + **recovery**, and step 7
- * deliberately leaves recovery alone (see `telegraphScale`), so at ambush the cycle is
- * ~1.6s even and ~1.5s desperate — a 6% difference that a 520ms bait cadence buries in
- * noise. Two runs duly reported the desperate cat committing *less* often.
- *
- * Latency from hold-start to wind-up-start is what the patience change moves, directly and
- * with no recovery in it: `POUNCE_THRESHOLD` 0.35 of a 1400ms scrub is ~490ms at the even
- * tier and ~280ms at the desperate one. The hold is 1250ms — long enough for both, short
- * enough never to complete a scrub and end the exchange early.
- */
-/**
- * A point near `spot` that is **not** on any claim, so the cat can be lured into range
+ * A point near `spot` that is **not** on any claim, so the boss can be lured into range
  * without the player accruing any scrub progress.
  */
 async function lurePoint(page, spot) {
   return page.evaluate(
     ([x, y]) => {
+      const b = document.querySelector('[data-board]')?.getBoundingClientRect();
+      if (!b) return null;
       for (const r of [55, 75, 95, 120]) {
         for (const deg of [0, 45, 90, 135, 180, 225, 270, 315]) {
           const px = Math.round(x + r * Math.cos((deg * Math.PI) / 180));
           const py = Math.round(y + r * Math.sin((deg * Math.PI) / 180));
-          if (px < 40 || py < 150 || px > innerWidth - 40 || py > innerHeight - 60) continue;
+          if (px < b.left + 4 || py < b.top + 4 || px > b.right - 4 || py > b.bottom - 4) continue;
           const el = document.elementFromPoint(px, py);
-          if (el && !el.closest('.cat-claimed') && !el.closest('#cat-hud, header')) {
+          if (el && !el.closest('.cat-tile')) {
             return { x: px, y: py };
           }
         }
@@ -349,20 +291,11 @@ async function commitLatencies(page, attempts = 6) {
     const spot = await parkableSpot(page);
     if (!spot) break;
     /*
-     * Wait next to the claim, not on it. Three attempts to get this right:
-     *
-     * 1. Park somewhere neutral, then jump onto the claim — read 1016ms at *both* tiers, in
-     *    multiples of ~508ms, because the number was the cat **walking back from the header**
-     *    at `STALK_SPEED` plus a restarted hold. Travel, not willingness.
-     * 2. Park on the claim and wait for the cat to be near *and* stalking — never fired at
-     *    all, because a still player has progress well past the threshold by the time the cat
-     *    arrives, so it commits on the same frame it comes into range. The window being waited
-     *    for does not exist.
-     * 3. This: hold the cursor on a **non-claim** point a few tens of pixels away. Progress
-     *    cannot accrue, so the cat can never commit; it walks over and settles into a stable
-     *    stalk beside the cursor. Then move onto the claim, which starts a fresh hold with the
-     *    animal already in range — and the clock measures exactly one thing, which is how far
-     *    into that hold it decides.
+     * Wait next to the claim, not on it: hold the cursor on a **non-claim** point a few
+     * tens of pixels away. Progress cannot accrue, so the boss can never commit; it walks
+     * over and settles into a stable stalk beside the cursor. Then move onto the claim,
+     * which starts a fresh hold with the animal already in range — and the clock measures
+     * exactly one thing: how far into that hold it decides.
      */
     const lure = await lurePoint(page, spot);
     if (!lure) continue;
@@ -370,12 +303,12 @@ async function commitLatencies(page, attempts = 6) {
     const ready = await page
       .waitForFunction(
         ([x, y]) => {
-          const root = document.getElementById('site-cat');
+          const b = document.querySelector('[data-board]')?.getBoundingClientRect();
+          const root = document.querySelector('[data-boss]');
+          if (!root || !b) return false;
           const r = root.getBoundingClientRect();
-          const near = Math.hypot(r.left + r.width / 2 - x, r.top + r.height / 2 - y) <= 80;
-          const stalking = !['boss-telegraph', 'boss-leap', 'boss-recover', 'boss-eat', 'boss-fetch'].some(
-            (c) => root.classList.contains(c),
-          );
+          const near = Math.hypot(r.left + r.width / 2 - x, r.top + r.height / 2 - y) <= 50;
+          const stalking = !['telegraph', 'leap', 'recover', 'eat', 'fetch'].includes(root.dataset.phase);
           return near && stalking;
         },
         [spot.x, spot.y],
@@ -387,22 +320,25 @@ async function commitLatencies(page, attempts = 6) {
 
     const probe = await page.evaluate(
       async ([x, y, cap]) => {
-        const root = document.getElementById('site-cat');
+        const root = document.querySelector('[data-boss]');
         // Tagged with the tier it was actually taken in, because the probe *changes* the
         // tier: every landed pounce takes ground back, so six probes at the desperate tier
-        // walked the cat up past `DESPERATE_LEAVE` and four of them were really measuring an
-        // even cat. The rubber band undoing the measurement is the feature working.
-        const mood = root.dataset.mood ?? '';
-        // Nudged 8px, which fails `stillEnough` and so restarts the hold — that restart is
-        // the zero of this measurement. Dispatched rather than driven through Playwright so
-        // the clock starts in the same task the pointer moves in; a round-trip would be a
-        // sizeable fraction of the number being measured.
+        // walked the cat up past `DESPERATE_LEAVE`. The rubber band undoing the
+        // measurement is the feature working.
+        const mood = root?.dataset.mood ?? '';
         const t0 = performance.now();
-        document.dispatchEvent(
+        // 2.2: the card's pointermove listener lives on the board element, not on
+        // `document`. A synthetic pointermove dispatched on `document` bubbles UP to
+        // `window` and never reaches `boardEl`, so `scrub.x/y` never moved, the hold never
+        // started, and the probe returned -1 every round — which left the re-entry loop
+        // with no samples to stop it, and it ground through all 14 rounds of the
+        // desperate oscillation. Dispatch on the board element so the hold actually begins.
+        const board = document.querySelector('[data-board]');
+        (board ?? document).dispatchEvent(
           new PointerEvent('pointermove', { clientX: x, clientY: y, bubbles: true }),
         );
         while (performance.now() - t0 < cap) {
-          if (root.classList.contains('boss-telegraph')) {
+          if (root?.dataset.phase === 'telegraph') {
             return { latency: performance.now() - t0, mood };
           }
           await new Promise((r) => requestAnimationFrame(r));
@@ -412,7 +348,6 @@ async function commitLatencies(page, attempts = 6) {
       [spot.x, spot.y, 1250],
     );
     if (probe.latency > 0) out.push(probe);
-    // Let the pounce it just started play out before offering another hold.
     await page.waitForTimeout(400);
   }
   return out;
@@ -437,12 +372,10 @@ function spanStats(log, spans, guardMs = 400) {
     grooms: log.filter((e) => e.k === 'groom' && e.v === 'on' && inAny(e.t)).length,
     telegraphs,
     /*
-     * The **shortest** wind-up, not the mean, and this is not a way of picking a friendlier
-     * number. A bell doubles the next telegraph (§9.5), and the climb to the desperate tier
-     * has to spend treats to get there — so a mean over three wind-ups with one bell in it
-     * says nothing about the tier. Aggression sets a *floor* on the wind-up; the minimum is
-     * the statistic that floor is about, and the confound only ever lengthens, never
-     * shortens, so it cannot flatter the result.
+     * The **shortest** wind-up, not the mean: a bell doubles the next telegraph, and the
+     * climb to the desperate tier has to spend treats — so a mean with one bell in it says
+     * nothing about the tier. Aggression sets a *floor* on the wind-up; the minimum is the
+     * statistic that floor is about, and the confound only ever lengthens.
      */
     fastest: telegraphs.length ? Math.min(...telegraphs) : 0,
     seconds,
@@ -452,21 +385,17 @@ function spanStats(log, spans, guardMs = 400) {
 
 /**
  * A cat that leaps, on a board with something in reach — one deal, both conditions.
- *
- * Fourteen deals is this file's own budget: an ambush is one of four weighted stances, and the band
- * here is 80px off the bottom rather than 40 because §7.3's measurements park the pointer low.
+ * Fourteen deals is this file's own budget: an ambush is one of four weighted stances.
  */
 const leaper = (page, want = 'ambush') =>
-  deal(page, wants.stance([want], { claims: 'inView', top: 160, bottom: 80, maxHeight: 420 }), {
+  deal(page, wants.stance([want], { claims: 'inView' }), {
     deals: 14,
     settle: 0,
-    // This file's own 8000ms open and close, so a re-deal waits exactly as long as it always has.
     reopen: async () => {
       await release(page);
       await press(page);
     },
   });
-
 
 // ---- 1. bored: the cat eases off a player who is behind and out of options
 {
@@ -477,30 +406,10 @@ const leaper = (page, want = 'ambush') =>
   await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
   await page.waitForTimeout(1800);
 
-  /*
-   * Run the page end to end before baselining — arena4's trick, needed here for a second
-   * reason as well.
-   *
-   * Scrolling permanently adds the site's scroll-reveal classes, so a baseline from an
-   * unscrolled page can never match one taken after a fight that scrolled. And this harness
-   * scrolls to reach claims, which also warms Astro's link prefetch: `<link rel="prefetch">`
-   * elements get injected into `<head>`, so every index in the snapshot shifts and the
-   * compare reported **123 differences** starting with `BODY` turning into `LINK`. Neither
-   * has anything to do with whether the arena put the page back.
-   */
-  await page.evaluate(async () => {
-    for (let y = 0; y < document.body.scrollHeight; y += 180) {
-      scrollTo({ top: y, behavior: 'instant' });
-      await new Promise((r) => setTimeout(r, 80));
-    }
-    scrollTo({ top: 0, behavior: 'instant' });
-  });
-  await page.waitForTimeout(600);
-  const clean = await page.evaluate(SNAP_LIST);
-
   await press(page);
   const stance = await leaper(page);
   ok('dealt a cat that actually leaves the floor', !!stance, stance ?? 'no ambush in 14 rolls');
+  note(`section 1 stance: ${await page.evaluate(`document.querySelector('[data-boss]')?.dataset.stance ?? ''`)}`);
   await page.evaluate(RECORDER);
   const opened = await page.evaluate(() => performance.now());
 
@@ -508,11 +417,15 @@ const leaper = (page, want = 'ambush') =>
 
   /*
    * Feed it. Baiting without ever finishing a hold means every landed pounce is a net gain
-   * for the cat, so territory climbs — which is the only honest way to reach the tier that
-   * fires when the player is losing.
+   * for the cat, so territory climbs — the only honest way to reach the tier that fires
+   * when the player is losing.
    */
   const fed = await bait(page, 70_000, async () => (await page.evaluate(MOOD)) === 'bored');
   const reachedBored = (await page.evaluate(MOOD)) === 'bored';
+  note(
+    `feed: ${Math.round(fed / 1000)}s, ${await page.evaluate(CLAIMS)} claims, mood=${await page.evaluate(MOOD)}, ` +
+      `phases=${(await page.evaluate(() => window.__log)).filter((e) => e.k === 'phase').map((e) => e.v).join('→')}`,
+  );
   ok(
     'a player who keeps losing ground reaches the bored tier',
     reachedBored,
@@ -524,9 +437,13 @@ const leaper = (page, want = 'ambush') =>
     await bait(page, 22_000);
     const log = await page.evaluate(() => window.__log);
     const endT = log.at(-1).t;
-    // The opening grace pins the cat to watching, so it is not part of any tier's baseline.
     const even = spanStats(log, tierSpans(log, 'even', endT, opened + 2500));
     const bored = spanStats(log, tierSpans(log, 'bored', endT));
+    note(
+      `phases=${log.filter((e) => e.k === 'phase').map((e) => e.v).join('→')} ` +
+        `moods=${log.filter((e) => e.k === 'mood').map((e) => `${e.v}@${Math.round((e.t - opened) / 1000)}s`).join(',')} ` +
+        `even=${even.commits}@${even.seconds.toFixed(0)}s bored=${bored.commits}@${bored.seconds.toFixed(0)}s`,
+    );
 
     ok(
       'and then it stops trying — same bait, fewer commitments',
@@ -545,15 +462,8 @@ const leaper = (page, want = 'ambush') =>
       `${even.grooms} in ${even.seconds.toFixed(0)}s of even play`,
     );
     /*
-     * Mercy, not surrender — and the first version of this check was worthless: it asserted
-     * `bored.seconds > 0`, which is true of any window, and reported "0 commitments" as a
-     * pass. It has to ask a different question than the one above it.
-     *
-     * The bait is calibrated to sit *just* over the even tier's threshold, so a bored cat
-     * ignoring it is the feature working, not the cat giving up. What separates the two is
-     * a real hold: park properly, let progress run to 1, and a cat that still wants the page
-     * will come. §10's floor is that below about 0.4 aggression the cat stops being a threat
-     * — this is that floor, measured.
+     * Mercy, not surrender: a real hold still gets answered. §10's floor is that below
+     * about 0.4 aggression the cat stops being a threat — this is that floor, measured.
      */
     const before = await page.evaluate(CLAIMS);
     const still = await parkableSpot(page);
@@ -563,8 +473,8 @@ const leaper = (page, want = 'ambush') =>
       answered = await page
         .waitForFunction(
           (n) =>
-            document.getElementById('site-cat').classList.contains('boss-telegraph') ||
-            document.querySelectorAll('.cat-claimed').length !== n,
+            document.querySelector('[data-boss]')?.dataset.phase === 'telegraph' ||
+            document.querySelectorAll('.cat-tile[data-state="claimed"]').length !== n,
           before,
           { timeout: 9000 },
         )
@@ -582,14 +492,18 @@ const leaper = (page, want = 'ambush') =>
 
   await release(page);
   await settled(page);
-  const diff = await snapDiff(page, clean);
-  ok('the page comes back byte-identical', diff.n === 0, diff.detail);
+  ok(
+    'the card is back to collapsed after the rubber band (2.2 pillar 2)',
+    await page.evaluate(`document.querySelector('#cat-card-panel').hidden`),
+  );
   const leftovers = await page.evaluate(() => {
-    const c = document.getElementById('site-cat');
-    return { groom: c.classList.contains('grooming'), mood: c.dataset.mood ?? '(none)' };
+    const b = document.querySelector('[data-boss]');
+    return { groom: b?.dataset.groom === '1', mood: b?.dataset.mood ?? '(none)' };
   });
-  ok('no grooming class left on the ambient cat', leftovers.groom === false);
-  ok('and no mood left on it either', leftovers.mood === '(none)', leftovers.mood);
+  ok('no grooming marker left on the boss', leftovers.groom === false);
+  // The card's boss element persists (transition:persist) with a resting mood of
+  // 'even' — the fight-scoped tier must not leak, and this asserts exactly that.
+  ok('and the fight tier did not leak onto the resting boss', leftovers.mood === 'even', leftovers.mood);
   await ctx.close();
 }
 
@@ -601,9 +515,6 @@ const leaper = (page, want = 'ambush') =>
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
   await page.waitForTimeout(1800);
-  // A player who is winning is a player who has been exploring — the desperate tier is only
-  // reachable by someone spending the resource §5.4 exists for. Ammo does not gate this tier
-  // (unlike bored), so arming up here changes nothing about what is being measured.
   const armed = await armAmmo(page, { hops: 5, pool: 6, dwell: 650, settle: 750, home: '/timeline/' });
   ok('armed like a player who has been round the site', armed >= 3, `${armed} treats`);
 
@@ -613,20 +524,15 @@ const leaper = (page, want = 'ambush') =>
   await page.evaluate(RECORDER);
   const opened = await page.evaluate(() => performance.now());
 
-  /*
-   * A short baseline of the cat at the even tier, under the constant bait.
-   *
-   * Short on purpose: baiting *feeds* the cat, so a long baseline grows the board it then
-   * has to be driven off. The first run spent 16s here, arrived at the climb with ten
-   * claims instead of eight, and never reached the tier.
-   */
-  await bait(page, 6_000);
+  // A short baseline of the cat at the even tier, under the constant bait.
+  // 16s, not 6: with the plain jiggle the boss takes ~12s just to close the first
+  // ~150px on the card, and a baseline shorter than the approach collects zero
+  // commits and reads as "the cat never tried" (§7.3 needs a real even sample).
+  await bait(page, 16_000);
   const probes = await commitLatencies(page);
   const evenEnd = await page.evaluate(() => performance.now());
 
-  // Then take the page off it. Holding perfectly still completes holds, which is the
-  // playstyle 0.7 found the cat has no answer to — so this is also the route a real
-  // winning player takes.
+  // Then take the page off it: holding perfectly still completes holds.
   let taken = 0;
   for (let i = 0; i < 26; i++) {
     if ((await page.evaluate(MOOD)) === 'desperate') break;
@@ -642,13 +548,9 @@ const leaper = (page, want = 'ambush') =>
   );
 
   if (reachedDesperate) {
-    /*
-     * Let the last thrown treat finish before measuring. A treat in flight or being eaten
-     * means the cat cannot pounce at all (§5.3), so its window would read as a cat that has
-     * lost interest — the opposite of the tier under test.
-     */
+    // Let the last thrown treat finish before measuring.
     await page
-      .waitForFunction(() => document.getElementById('cat-throw')?.hidden !== false, undefined, {
+      .waitForFunction(() => document.querySelector('[data-treat]')?.hidden !== false, undefined, {
         timeout: 8000,
       })
       .catch(() => {});
@@ -656,26 +558,10 @@ const leaper = (page, want = 'ambush') =>
     const despFrom = await page.evaluate(() => performance.now());
     await bait(page, 8_000, async () => (await page.evaluate(CLAIMS)) === 0);
     /*
-     * Probe, and **re-enter the tier when the probing knocks us out of it.**
-     *
-     * Every probe ends in a landed pounce, which takes ground back, which walks the cat up past
-     * `DESPERATE_LEAVE` — so the desperate window is only a couple of samples wide and closes
-     * behind you. One regression run collected fourteen even samples and *zero* desperate ones
-     * and reported a failure on a build that was fine. Tagging each probe with its tier made
-     * that visible; this makes it not happen: push the cat back down and probe again until
-     * there are enough samples to compare, or the attempts run out.
-     */
-    /*
-     * **1.4 widened this loop, because the tier now digs itself out faster.** §7.3's last stand
-     * shortens the regrow clock (`LAST_STAND_REGROW`) exactly while the cat is cornered, so the
-     * board rebuilds sooner and territory climbs back over `DESPERATE_LEAVE` sooner — the window
-     * this loop is chasing is *narrower in time* than the one the note above was written against.
-     * A 6-round budget with one scrub per round collected zero desperate samples and reported a
-     * failure on a build where the tier was working; the tier measuring itself out of existence is
-     * the feature, not the fault.
-     *
-     * So: more rounds, and each round pushes as far down as it takes rather than one claim at a
-     * time — the harness has to out-work a mechanic designed to out-work the player.
+     * Probe, and **re-enter the tier when the probing knocks us out of it.** Every probe
+     * ends in a landed pounce, which takes ground back, which walks the cat up past
+     * `DESPERATE_LEAVE` — so the desperate window is only a couple of samples wide. 1.4
+     * widened this loop because the tier digs itself out faster (`LAST_STAND_REGROW`).
      */
     for (let round = 0; round < 14; round++) {
       if (probes.filter((pr) => pr.mood === 'desperate').length >= 2) break;
@@ -692,14 +578,10 @@ const leaper = (page, want = 'ambush') =>
     }
     const log = await page.evaluate(() => window.__log);
     const endT = log.at(-1).t;
-    // Clipped to the baited baseline, so both tiers are measured under the same stimulus:
-    // the scrubbing stretch in between is the player holding still, which provokes
-    // differently and would flatter whichever tier happened to contain it.
     const even = spanStats(
       log,
       tierSpans(log, 'even', endT, opened + 2500).map(([a, b]) => [a, Math.min(b, evenEnd)]),
     );
-    // Clipped to start after the treats settled, for the reason above.
     const desp = spanStats(
       log,
       tierSpans(log, 'desperate', endT).map(([a, b]) => [Math.max(a, despFrom), b]),
@@ -717,14 +599,6 @@ const leaper = (page, want = 'ambush') =>
       desp.telegraphs.every((t) => t > 200),
       `shortest ${Math.min(...desp.telegraphs).toFixed(0)}ms`,
     );
-    /*
-     * "Comes at you sooner", not "more often" — and the change of wording is the finding.
-     *
-     * The rate cannot show this, because the cat's cycle is dominated by the recovery step 7
-     * deliberately leaves alone: ~1.6s even against ~1.5s desperate at ambush, a 6%
-     * difference that two runs resolved the wrong way. What the patience change actually
-     * moves is *how early in your hold it decides*, and that has no recovery in it.
-     */
     const med = (xs) => (xs.length ? [...xs].sort((a, b) => a - b)[xs.length >> 1] : -1);
     const at = (m) => probes.filter((p) => p.mood === m).map((p) => p.latency);
     const evenLat = at('even');
@@ -757,10 +631,10 @@ const leaper = (page, want = 'ambush') =>
   await press(page);
   await page.evaluate(RECORDER);
 
-  // Trade: bait for a while (cat gains), then scrub (player gains), repeatedly. This is the
-  // shape of play that a boundary with no memory turns into a strobe.
+  // Trade: bait for a while (cat gains), then scrub (player gains), repeatedly.
+  // Bait windows must outlast the ~12s approach or the cat never gains (see §2 note).
   for (let i = 0; i < 4; i++) {
-    await bait(page, 6000);
+    await bait(page, 16000);
     await scrubOne(page, 4000);
     if ((await page.evaluate(CLAIMS)) === 0) break;
   }
@@ -775,13 +649,7 @@ const leaper = (page, want = 'ambush') =>
     `${swings} changes across ${claimSeries.length} samples`,
   );
   /*
-   * The band's own guarantee, measured — not a ratio picked to look strict.
-   *
-   * "Fewer mood changes than territory changes, over three" was arbitrary and duly failed at
-   * 4 vs 8 on a run that was behaving correctly. What the design actually promises is that
-   * the band is at least two claims wide, so **no two tier changes can be one claim apart**.
-   * That is a statement about the gaps rather than the count, and it is the thing that would
-   * break if the band were narrowed again.
+   * The band's own guarantee: no two tier changes can be one claim apart.
    */
   const claimsLog = log.filter((e) => e.k === 'claims');
   const gaps = [];
@@ -802,7 +670,7 @@ const leaper = (page, want = 'ambush') =>
   await ctx.close();
 }
 
-// ---- 4. the ambient cat is handed back unaffected
+// ---- 4. the ambient cat is never touched by any of this
 {
   const ctx = await fresh();
   const page = await ctx.newPage();
@@ -816,14 +684,12 @@ const leaper = (page, want = 'ambush') =>
 
   /*
    * Total distance travelled, sampled, over a window long enough to contain a walk.
-   *
-   * The endpoint-minus-startpoint version read 2.1px and failed — not because the cat was
-   * stuck but because SiteCat alternates walking with idle beats, so a 2.2s window can land
-   * entirely inside one, and a cat that walks out and back nets zero anyway. "Did it move
-   * at all" is the question; a sum answers it and a difference does not.
+   * The ambient cat is never taken over by the card's boss — the card owns its own sprite —
+   * so it should walk the whole time, exactly as it did before the card existed.
    */
   const travelled = await page.evaluate(async () => {
     const c = document.getElementById('site-cat');
+    if (!c) return 0;
     let last = c.getBoundingClientRect().left;
     let total = 0;
     for (let i = 0; i < 60; i++) {
@@ -837,14 +703,14 @@ const leaper = (page, want = 'ambush') =>
   const after = await page.evaluate(() => {
     const c = document.getElementById('site-cat');
     return {
-      boss: c.classList.contains('boss'),
-      groom: c.classList.contains('grooming'),
-      mood: c.dataset.mood ?? '(none)',
+      boss: !!c && c.classList.contains('boss'),
+      groom: !!c && c.classList.contains('grooming'),
+      mood: c?.dataset.mood ?? '(none)',
     };
   });
-  ok('the cat walks again after a rubber-banded fight', travelled > 20, `${travelled.toFixed(0)}px over 7s`);
-  ok('and is not still a boss', after.boss === false);
-  ok('and is not still grooming on the arena’s behalf', after.groom === false);
+  ok('the ambient cat walks throughout a card fight', travelled > 20, `${travelled.toFixed(0)}px over 7s`);
+  ok('and was never made a boss', after.boss === false);
+  ok('and was never made to groom on the card’s behalf', after.groom === false);
   ok('and carries no mood into ambient browsing', after.mood === '(none)', after.mood);
   await ctx.close();
 }
