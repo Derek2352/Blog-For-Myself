@@ -1,8 +1,10 @@
 /**
  * 1.4's combat additions, measured in a real browser — the ship gate for §9.3, §7.3 and §5.4.
+ * 2.2: measured on the **card game** now — the page-board game is gone, so every check below
+ * reads the card's tiles and boss instead of page furniture.
  *
  * Each of these mechanics is a claim about *the machine*, so every check here reads the machine:
- * the claim count, the phase classes the cat writes on itself, the mood attribute, the cat's own
+ * the claim count, the phase the boss writes on itself, the mood attribute, the boss's own
  * coordinates. §12's standing lesson is that a proxy passes when the mechanic is broken — a
  * ribbon can say "the walls come in now" while nothing closes — and 1.4 spent an afternoon
  * proving it again, so nothing below asserts on prose.
@@ -19,12 +21,18 @@
  *      reachable by a player* — `RECOVER_MS` minus the treat's flight — is a browser fact.
  *   5. **The ambush pin holds the cat where it landed**, and then lets go.
  *
+ * 2.2's drop list, applied: no page scrolling, no viewport band, no header twitch — the card's
+ * board is the whole game surface, so "watch without playing" is a keypress (the card's own
+ * presence signal) rather than a cursor parked in the page's furniture. Distances scale 1/5
+ * (the pin's 90px leash is an 18px leash on the card); durations are unchanged.
+ *
  * Run against a built preview on 4416, like every other harness here:
  *   npm run build && npx astro preview --port 4416 &
  *   node scratchpad/battle.mjs
  */
 import {
   BASE,
+  CARD_SCALE,
   IDLE_TRUCE_MS,
   RECOVER_MS,
   SCRUB_MS,
@@ -36,6 +44,7 @@ import {
   launch,
   overFor,
   press as sharedPress,
+  reachClaim,
   release as sharedRelease,
   report,
   throwSpot,
@@ -51,18 +60,29 @@ const browser = await launch();
 const { ok, note, fixture, done } = report();
 
 
-/* Mirrors src/lib/arena.ts — kept as literals so a drift shows up as a failure, not a pass. */
+/* Mirrors src/lib/arena.ts — kept as literals so a drift shows up as a failure, not a pass.
+ * Distances are scaled by CARD_SCALE (§2.2); durations are unchanged. */
 const THROW_ARC_MS = 320;
-const SWAT_RADIUS = 64;
 const SWAT_STUN_MS = 900;
 const AMBUSH_PIN_MS = 2600;
-const AMBUSH_PIN_PX = 90;
+const AMBUSH_PIN_PX = 90 * CARD_SCALE; // 18px — the card's pin leash
 const LAST_STAND_REGROW = 0.55;
 
 
-const CLAIMS = `document.querySelectorAll('.cat-claimed').length`;
+/*
+ * "Unreclaimed", not "labelled claimed". A tile leaves `claimed` for `scrubbing` the moment a
+ * hold *starts* (the card's scrub is a `data-state`, unlike the page game's `--scrub` style which
+ * left `.cat-claimed` on the element while it was worked), so the raw `claimed` count drops on
+ * the beginning of a hold, not on the finish — and a loop that reads it as "reclaimed" thinks it
+ * is winning while the tile is still being worked. That was the 2.2-conversion red: "10
+ * reclaimed, 0 left, never won", and the same miscount is why the cornered tier was "never
+ * reached" — the loop saw `scrubbing` tiles as gone and stopped short of actually reclaiming.
+ * `claimed + scrubbing` is exactly `arena.claimed.length` (a scrubbing tile stays in the array
+ * until the reclaim lands), which is the count that only moves on a real reclaim.
+ */
+const CLAIMS = `document.querySelectorAll('.cat-tile[data-state="claimed"], .cat-tile[data-state="scrubbing"]').length`;
 const AMMO = `document.querySelectorAll('#cat-score .cat-paw.got').length`;
-const ON = `document.documentElement.classList.contains('cat-arena-on')`;
+const ON = `!document.querySelector('#cat-card-panel').hidden`;
 const WON = `document.getElementById('site-cat').classList.contains('notched')`;
 
 /** A desktop context playing **manual mode** — 1.4's additions are all pointer-and-treat mechanics. */
@@ -93,7 +113,7 @@ const stanceDeal = (page, want) =>
     settle: 0,
     // **This file's own open and close, not the defaults.** `release` here carries a 200ms tail, and
     // without it a re-deal presses the toggle again while the previous intent is still standing — which
-    // toggles the wrong way and leaves the arena *off*. Measured: one commitment in forty seconds and a
+    // toggles the wrong way and leaves the card *closed*. Measured: one commitment in forty seconds and a
     // treat that never left the HUD, because there was no fight to throw into.
     reopen: async () => {
       await release(page);
@@ -104,27 +124,19 @@ const stanceDeal = (page, want) =>
 
 
 
-/** Settle the site's scroll-reveal before any hit-testing (1.2's lesson, in one line). */
-async function settlePage(page) {
-  await page.evaluate(async () => {
-    for (let y = 0; y < document.body.scrollHeight; y += 180) {
-      scrollTo({ top: y, behavior: 'instant' });
-      await new Promise((r) => setTimeout(r, 70));
-    }
-    scrollTo({ top: 0, behavior: 'instant' });
-  });
-  await page.waitForTimeout(500);
-}
-
 /**
- * The page's own flight recorder: phase, mood, claim count and the cat's coordinates.
+ * The card's own flight recorder: phase, mood, claim count and the boss's coordinates.
  *
  * Sampled in the page rather than polled over CDP because everything here is measured in
  * *milliseconds* and a round trip per sample would put the measurement error inside the effect.
  * Phase changes are captured by observer so no transition can fall between two samples.
+ *
+ * 2.2: the boss is `[data-boss]` and its phase is `dataset.phase`, not a class list — except the
+ * swat, which is still a `boss-swatted` class layered over `recover` (the card's `stepTreat` adds
+ * it while the phase stays `recover`). Mood is `dataset.mood`.
  */
 const RECORD = (everyMs) => {
-  const cat = document.getElementById('site-cat');
+  const cat = document.querySelector('[data-boss]');
   const w = window;
   w.__rec = { samples: [], phases: [], marks: [], t0: performance.now() };
   /*
@@ -135,10 +147,10 @@ const RECORD = (everyMs) => {
    * into the number, which is §12's oldest trap wearing a new hat.
    */
   w.__mark = (label) => w.__rec.marks.push({ t: Math.round(performance.now() - w.__rec.t0), label });
-  const phaseOf = () =>
-    ['telegraph', 'leap', 'recover', 'eat', 'fetch', 'swatted']
-      .filter((p) => cat.classList.contains('boss-' + p))
-      .join('+') || 'stalk';
+  const phaseOf = () => {
+    if (cat.classList.contains('boss-swatted')) return 'swatted';
+    return cat.dataset.phase ?? 'stalk';
+  };
   let last = '';
   const mark = () => {
     const p = phaseOf();
@@ -147,13 +159,13 @@ const RECORD = (everyMs) => {
       last = p;
     }
   };
-  new MutationObserver(mark).observe(cat, { attributes: true, attributeFilter: ['class'] });
+  new MutationObserver(mark).observe(cat, { attributes: true, attributeFilter: ['data-phase', 'class'] });
   mark();
   w.__recTimer = setInterval(() => {
     const r = cat.getBoundingClientRect();
     w.__rec.samples.push({
       t: Math.round(performance.now() - w.__rec.t0),
-      n: document.querySelectorAll('.cat-claimed').length,
+      n: document.querySelectorAll('.cat-tile[data-state="claimed"], .cat-tile[data-state="scrubbing"]').length,
       mood: cat.dataset.mood ?? '',
       x: Math.round(r.left + r.width / 2),
       y: Math.round(r.top + r.height / 2),
@@ -167,79 +179,42 @@ const stopRec = (page) => page.evaluate(`clearInterval(window.__recTimer)`);
  * Keep a *watched* fight alive without playing it.
  *
  * Sections 2 and 3 measure the board's own clock, which means not touching the board for tens of
- * seconds — and §11 is entitled to call that a truce. So the cursor twitches in the header, which
- * is `PROTECTED_TREE`: it refreshes `scrub.seen` (the truce clock) while never putting a claim
- * under the pointer, so nothing is scrubbed and no pounce is provoked. Watching the game without
- * playing it is exactly what a spectator does, and the game has no rule against it.
+ * seconds — and §11 is entitled to call that a truce. The page game let a spectator twitch the cursor
+ * in the header (a protected tree that refreshed `scrub.seen` without scrubbing anything). The card
+ * has no header to twitch in: its board is the only game surface, and a pointer on it is a lure. The
+ * card's own presence signal is "any key" (`document keydown` sets `scrub.seen`), so a harmless key
+ * keeps the truce clock alive while the pointer stays off the board and the boss sits still, regrowing.
  */
 async function watchFor(page, ms) {
   const t0 = Date.now();
-  let x = 600;
   while (Date.now() - t0 < ms) {
-    x = x === 600 ? 640 : 600;
-    await page.mouse.move(x, 56);
+    await page.keyboard.press('Shift');
     await page.waitForTimeout(Math.min(2000, IDLE_TRUCE_MS / 4));
   }
 }
 
 /**
- * Pick a point on the claim furthest from the cat, verified at the coordinate the cursor will
- * occupy. `placeFarTarget`'s lesson from 1.2, minus the scrolling: sections here need a target
- * *now*, and scrolling is what made that measurement lie.
+ * A claimed tile nearest the boss — the one a bait sits on to provoke a pounce (sections 4 and 5).
+ * The card's board is all on screen, so "nearest" is board distance and nothing needs scrolling.
  */
-async function farTarget(page) {
-  return page.evaluate(async () => {
-    /* The site reveals content on scroll with a `translateY`, so a claim scrolled into place keeps
-     * *travelling* for a few hundred ms and a point taken at its centre is off its edge by the
-     * time `elementFromPoint` tests it. 1.2 found this; it is why the wait is on the rect settling
-     * rather than on a fixed pause. */
-    const stable = async (el) => {
-      let last = null;
-      for (let i = 0; i < 30; i++) {
-        await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 25)));
-        const top = el.getBoundingClientRect().top;
-        if (last !== null && Math.abs(top - last) < 0.5) return;
-        last = top;
-      }
-    };
-    const scan = () => {
-      const c = document.getElementById('site-cat').getBoundingClientRect();
-      const cx = c.left + c.width / 2;
-      const cy = c.top + c.height / 2;
-      let best = null;
-      for (const el of document.querySelectorAll('.cat-claimed')) {
-        const r = el.getBoundingClientRect();
-        if (r.top < 170 || r.bottom > innerHeight - 110) continue; // off-screen or under the HUD
-        const x = Math.round(r.left + r.width / 2);
-        const y = Math.round(r.top + r.height / 2);
-        if (document.elementFromPoint(x, y)?.closest('.cat-claimed') !== el) continue;
-        const away = Math.hypot(x - cx, y - cy);
-        if (!best || away > best.away) best = { x, y, away };
-      }
-      return best;
-    };
-    const here = scan();
-    if (here) return here;
-    /*
-     * Nothing in the strip. **Scroll to a claim rather than nudging at the page**: the geometry is
-     * known (the cat is `position: fixed`, claims are in flow), so the offset that centres one is
-     * arithmetic. The first version nudged by 240px and re-looked, which spent 31 searches failing
-     * to find the *last remaining claim* and reported a fight that had gone 13-for-14 as a loss —
-     * the endgame is exactly when there is only one claim left to find, so a search that cannot
-     * find one claim fails precisely at the moment the measurement matters.
-     */
-    const rest = [...document.querySelectorAll('.cat-claimed')];
-    if (!rest.length) return null;
-    const maxScroll = Math.max(0, document.documentElement.scrollHeight - innerHeight);
-    for (const el of rest) {
-      const r0 = el.getBoundingClientRect();
-      const docCentre = r0.top + scrollY + r0.height / 2;
-      scrollTo({ top: Math.max(0, Math.min(maxScroll, Math.round(docCentre - innerHeight / 2))), behavior: 'instant' });
-      await stable(el);
-      const found = scan();
-      if (found) return found;
+async function nearClaim(page) {
+  return page.evaluate(() => {
+    const boss = document.querySelector('[data-boss]')?.getBoundingClientRect();
+    const board = document.querySelector('[data-board]')?.getBoundingClientRect();
+    if (!boss || !board) return null;
+    const cx = boss.left + boss.width / 2;
+    const cy = boss.top + boss.height / 2;
+    let best = null;
+    for (const el of document.querySelectorAll('.cat-tile[data-state="claimed"]')) {
+      const r = el.getBoundingClientRect();
+      if (r.top <= board.top + 4 || r.bottom >= board.bottom - 4) continue;
+      const x = Math.round(r.left + r.width / 2);
+      const y = Math.round(r.top + r.height / 2);
+      if (document.elementFromPoint(x, y)?.closest('.cat-tile') !== el) continue;
+      const away = Math.hypot(x - cx, y - cy);
+      if (!best || away < best.away) best = { x, y, away };
     }
-    return null;
+    return best;
   });
 }
 
@@ -253,7 +228,6 @@ async function farTarget(page) {
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
   await page.waitForTimeout(1500);
-  await settlePage(page);
   await press(page);
   const isSiegeDeal = await stanceDeal(page, 'siege');
   const isSiege = !!isSiegeDeal.value;
@@ -275,15 +249,16 @@ async function farTarget(page) {
   const budget = 150_000;
   while (Date.now() - t0 < budget) {
     if (!(await page.evaluate(ON))) break;
+    // The win leaves a single "parting" claim behind (the card's `finish('win')` re-claims one),
+    // so `notched` — not an empty board — is the signal the fight is over.
+    if (await page.evaluate(WON)) break;
     const left = await page.evaluate(CLAIMS);
     if (left === 0) break;
-    const spot = await farTarget(page);
+    const spot = await reachClaim(page);
     if (!spot) {
-      // `farTarget` has already scrolled to every remaining claim and failed to verify a point on
-      // any of them, so this is a genuinely unreachable board rather than a bad viewport. Keep the
-      // cursor alive (§11's truce clock) and try once more before giving up on the fight.
+      // `reachClaim` found no claim to hold; the board has already run out. Keep the fight alive
+      // (a key is presence, §11) and try once more before giving up on the fight.
       misses++;
-      await page.mouse.move(640, 56);
       await page.waitForTimeout(400);
       if (misses > 8) break;
       continue;
@@ -304,7 +279,7 @@ async function farTarget(page) {
     'siege is winnable by holding what it cannot reach (§9.4’s floor, for the stance nothing tested)',
     won,
     `${took} reclaimed, ${await page.evaluate(CLAIMS)} left after ${((Date.now() - t0) / 1000).toFixed(0)}s` +
-      (misses ? `, ${misses} searches found nothing on screen` : ''),
+      (misses ? `, ${misses} searches found nothing to hold` : ''),
   );
   ok('no console errors through a siege fight', errors.length === 0, errors.slice(0, 2).join(' | '));
   await ctx.close();
@@ -334,7 +309,6 @@ async function farTarget(page) {
    */
   const armedToWatch = await armAmmo(page, { hops: 5, pool: 5, dwell: 650, settle: 1200, home: '/' });
   ok('treats in hand, so a watched fight cannot lose itself (§2)', armedToWatch >= 3, `${armedToWatch} found`);
-  await settlePage(page);
   await press(page);
   const isSiegeDeal = await stanceDeal(page, 'siege');
   const isSiege = !!isSiegeDeal.value;
@@ -356,9 +330,8 @@ async function farTarget(page) {
    */
   let guard = 0;
   while ((await page.evaluate(CLAIMS)) > 2 && (await page.evaluate(ON)) && guard++ < 40) {
-    const spot = await farTarget(page);
+    const spot = await reachClaim(page);
     if (!spot) {
-      await page.evaluate(() => scrollBy({ top: 240, behavior: 'instant' }));
       await page.waitForTimeout(300);
       continue;
     }
@@ -480,7 +453,6 @@ async function farTarget(page) {
   await page.waitForTimeout(1500);
   const armed = await armAmmo(page, { hops: 5, pool: 5, dwell: 650, settle: 1200, home: '/' });
   ok('treats in hand to spend on a counter', armed >= 3, `${armed} found`);
-  await settlePage(page);
   await press(page);
   const isAmbushDeal = await stanceDeal(page, 'ambush');
   const isAmbush = !!isAmbushDeal.value;
@@ -490,7 +462,7 @@ async function farTarget(page) {
   /**
    * Bait a pounce and counter it, the way a player would.
    *
-   * **Throw at the leap, not at the recovery.** The first version waited for `boss-recover` and
+   * **Throw at the leap, not at the recovery.** The first version waited for `recover` and
    * then threw, which spends most of the 380ms window on the wait resolving and the click
    * arriving — measured, it lands after the recovery has closed about half the time, and reports
    * a working counter as broken. A player does not react to the recovery either: they read the
@@ -516,7 +488,7 @@ async function farTarget(page) {
     const t0 = Date.now();
     while (Date.now() - t0 < ms) {
       const alive = await page.evaluate(
-        `document.documentElement.classList.contains('cat-arena-on') && document.querySelectorAll('.cat-claimed').length > 0`,
+        `!document.querySelector('#cat-card-panel').hidden && document.querySelectorAll('.cat-tile[data-state="claimed"], .cat-tile[data-state="scrubbing"]').length > 0`,
       );
       if (!alive) {
         // Won, or truced. Open another and pin the same stance — the section is about the counter, and
@@ -529,24 +501,8 @@ async function farTarget(page) {
         await page.waitForTimeout(200);
         continue;
       }
-      const spot = await page.evaluate(() => {
-        const c = document.getElementById('site-cat').getBoundingClientRect();
-        const cx = c.left + c.width / 2;
-        const cy = c.top + c.height / 2;
-        let best = null;
-        for (const el of document.querySelectorAll('.cat-claimed')) {
-          const r = el.getBoundingClientRect();
-          if (r.top < 170 || r.bottom > innerHeight - 110) continue;
-          const x = Math.round(r.left + r.width / 2);
-          const y = Math.round(r.top + r.height / 2);
-          if (document.elementFromPoint(x, y)?.closest('.cat-claimed') !== el) continue;
-          const away = Math.hypot(x - cx, y - cy);
-          if (!best || away < best.away) best = { x, y, away };
-        }
-        return best;
-      });
+      const spot = await nearClaim(page);
       if (!spot) {
-        await page.evaluate(() => scrollBy({ top: 200, behavior: 'instant' }));
         await page.waitForTimeout(300);
         continue;
       }
@@ -555,7 +511,7 @@ async function farTarget(page) {
       // somewhere else, not waiting out the truce.
       const committed = await bounded(
         page,
-        () => document.getElementById('site-cat').classList.contains('boss-leap'),
+        () => document.querySelector('[data-boss]')?.dataset.phase === 'leap',
         6000,
       );
       if (!committed) continue;
@@ -567,7 +523,7 @@ async function farTarget(page) {
        */
       await page.mouse.click(spot.x, spot.y);
       if (
-        await bounded(page, () => document.getElementById('site-cat').classList.contains('boss-swatted'), 2500)
+        await bounded(page, () => document.querySelector('[data-boss]')?.classList.contains('boss-swatted'), 2500)
       )
         return true;
       // Missed the window or the radius. Let the treat clear (one on the board at a time) and
@@ -604,7 +560,7 @@ async function farTarget(page) {
     swatted,
     swatted
       ? `landed inside the ${RECOVER_MS - THROW_ARC_MS}ms window (RECOVER_MS − THROW_ARC_MS) after ${commitments} pounce(s)`
-      : `no boss-swatted class in ${commitments} attempts`,
+      : `no swat in ${commitments} attempts`,
   );
 
   /*
@@ -630,12 +586,11 @@ async function farTarget(page) {
    * the cat is *stalking* must do nothing but lure. Without this the counter is "click the cat",
    * and a fight with a free interrupt is not a fight.
    */
-  await page.mouse.move(640, 56);
   const stalking = await bounded(
     page,
     () => {
-      const c = document.getElementById('site-cat').classList;
-      return !c.contains('boss-recover') && !c.contains('boss-swatted') && !c.contains('boss-leap');
+      const b = document.querySelector('[data-boss]');
+      return !!b && !b.classList.contains('boss-swatted') && !['recover', 'leap'].includes(b.dataset.phase);
     },
     8000,
   );
@@ -653,24 +608,24 @@ async function farTarget(page) {
     /*
      * **Two things this needs that it used to assume.**
      *
-     * It clicked the cat's own centre — and `#site-cat` is pointer-transparent, so the click lands on
+     * It clicked the cat's own centre — and the boss is pointer-transparent, so the click lands on
      * whatever is behind it, which on this board is usually a *claim*. A click on a claim throws
-     * nothing. `throwSpot` returns the nearest point that belongs to nobody, which keeps the intent
-     * ("the same throw at the same distance") and makes the throw legal.
+     * nothing in the wrong place. `throwSpot` returns the nearest point that belongs to nobody,
+     * which keeps the intent ("the same throw at the same distance") and makes the throw legal.
      *
      * And §5.4 allows one treat on the board at a time, so a throw arriving while the counter section's
      * last treat is still out is silently refused. Waiting for the board to clear costs nothing and
      * removes the whole failure mode. Sweep 1 of 2.0's gate reported `5 in hand` and no throw; sweep 2
      * threw fine, which is the signature of a fixture rather than a bug.
      */
-    await bounded(page, () => document.getElementById('cat-treat')?.hasAttribute('hidden') !== false, 4000);
+    await bounded(page, () => document.querySelector('[data-treat]')?.hasAttribute('hidden') !== false, 4000);
     const cat = await page.evaluate(() => {
-      const r = document.getElementById('site-cat').getBoundingClientRect();
+      const r = document.querySelector('[data-boss]').getBoundingClientRect();
       return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
     });
     const at = (await throwSpot(page, cat, { avoidClaims: true })) ?? cat;
     await page.mouse.click(at.x, at.y);
-    threw = await bounded(page, () => !document.getElementById('cat-throw').hasAttribute('hidden'), 1500);
+    threw = await bounded(page, () => !document.querySelector('[data-treat]').hasAttribute('hidden'), 1500);
     await page.waitForTimeout(THROW_ARC_MS + 500);
   }
   const after = (await readRec(page)).phases.slice(beforeControl);
@@ -704,7 +659,6 @@ async function farTarget(page) {
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
   await page.waitForTimeout(1500);
-  await settlePage(page);
   await press(page);
   const isAmbushDeal = await stanceDeal(page, 'ambush');
   const isAmbush = !!isAmbushDeal.value;
@@ -717,24 +671,8 @@ async function farTarget(page) {
   let hit = null;
   const t0 = Date.now();
   while (Date.now() - t0 < 60_000 && !hit) {
-    const spot = await page.evaluate(() => {
-      const c = document.getElementById('site-cat').getBoundingClientRect();
-      const cx = c.left + c.width / 2;
-      const cy = c.top + c.height / 2;
-      let best = null;
-      for (const el of document.querySelectorAll('.cat-claimed')) {
-        const r = el.getBoundingClientRect();
-        if (r.top < 170 || r.bottom > innerHeight - 110) continue;
-        const x = Math.round(r.left + r.width / 2);
-        const y = Math.round(r.top + r.height / 2);
-        if (document.elementFromPoint(x, y)?.closest('.cat-claimed') !== el) continue;
-        const away = Math.hypot(x - cx, y - cy);
-        if (!best || away < best.away) best = { x, y, away };
-      }
-      return best;
-    });
+    const spot = await nearClaim(page);
     if (!spot) {
-      await page.evaluate(() => scrollBy({ top: 200, behavior: 'instant' }));
       await page.waitForTimeout(300);
       continue;
     }
@@ -747,24 +685,24 @@ async function farTarget(page) {
      * A run that measured a *regrow* then found the cat 388px from the "landing" spot and reported
      * the pin broken, on a build where it holds at exactly 90px.
      *
-     * So wait for the commitment first (`boss-leap` — the cat is in the air), and only then for
+     * So wait for the commitment first (`leap` — the cat is in the air), and only then for
      * ground to change hands **while it is recovering from that leap**. That pair is the hit's
      * actual signature in `land()`, and a regrow cannot forge it.
      */
-    if (!(await bounded(page, () => document.getElementById('site-cat').classList.contains('boss-leap'), 6000)))
+    if (!(await bounded(page, () => document.querySelector('[data-boss]')?.dataset.phase === 'leap', 6000)))
       continue;
     const n = await page.evaluate(CLAIMS);
     const landed = await bounded(
       page,
       (was) =>
-        document.querySelectorAll('.cat-claimed').length > was &&
-        document.getElementById('site-cat').classList.contains('boss-recover'),
+        document.querySelectorAll('.cat-tile[data-state="claimed"], .cat-tile[data-state="scrubbing"]').length > was &&
+        document.querySelector('[data-boss]')?.dataset.phase === 'recover',
       1600,
       n,
     );
     if (landed) {
       hit = await page.evaluate(() => {
-        const r = document.getElementById('site-cat').getBoundingClientRect();
+        const r = document.querySelector('[data-boss]').getBoundingClientRect();
         return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
       });
     }
@@ -772,17 +710,31 @@ async function farTarget(page) {
   ok('the cat lands one on us (the pin’s trigger)', !!hit, hit ? `landed at ${hit.x},${hit.y}` : 'never got hit in 60s');
 
   /*
-   * Now run. The cursor goes to the far corner — the strongest lure the game has, since the cat
-   * always walks toward it — and the question is whether the cat *can* follow. Sampled in the
-   * page for the same reason as everything else here: this is a 2600ms window.
+   * Now run. The cursor goes to the far corner of the *board* — the strongest lure the card's
+   * game has, since the boss stalks any pointer inside the board and never one outside it — and
+   * the question is whether the cat *can* follow. Sampled in the page for the same reason as
+   * everything else here: this is a 2600ms window.
    */
   let pinned = null;
   if (hit) {
-    const away = await page.evaluate(() => ({ x: 80, y: innerHeight - 140 }));
+    const away = await page.evaluate(
+      ([hx, hy]) => {
+        const b = document.querySelector('[data-board]').getBoundingClientRect();
+        const corners = [
+          { x: Math.round(b.left + 8), y: Math.round(b.top + 8) },
+          { x: Math.round(b.right - 8), y: Math.round(b.top + 8) },
+          { x: Math.round(b.left + 8), y: Math.round(b.bottom - 8) },
+          { x: Math.round(b.right - 8), y: Math.round(b.bottom - 8) },
+        ];
+        corners.sort((a, z) => Math.hypot(z.x - hx, z.y - hy) - Math.hypot(a.x - hx, a.y - hy));
+        return corners[0];
+      },
+      [hit.x, hit.y],
+    );
     await page.mouse.move(away.x, away.y);
     pinned = await page.evaluate(
       async ([hx, hy, windowMs]) => {
-        const cat = document.getElementById('site-cat');
+        const cat = document.querySelector('[data-boss]');
         const t0 = performance.now();
         let inside = 0;
         let outside = 0;
@@ -809,7 +761,7 @@ async function farTarget(page) {
   ok(
     'it stands over what it took, and the leash holds (§9.3’s pin)',
     !!pinned && pinned.inside > 5 && pinned.maxIn <= AMBUSH_PIN_PX + 20,
-    pinned ? `furthest ${pinned.maxIn}px against a ${AMBUSH_PIN_PX}px leash over ${pinned.inside} samples` : 'not measured',
+    pinned ? `furthest ${pinned.maxIn}px against a ${AMBUSH_PIN_PX.toFixed(0)}px leash over ${pinned.inside} samples` : 'not measured',
   );
   ok(
     'and then it lets go, so the pin is a delay rather than a wall',
