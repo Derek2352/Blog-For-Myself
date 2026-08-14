@@ -1469,8 +1469,14 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
         boss.groomUntil = t + GROOM_MS;
       }
       if (t < boss.groomUntil) {
+        // Expose the grooming beat the way phase and mood are exposed — the page game
+        // carried a `.grooming` class and §7.3's harness reads it as the bored tell; the
+        // card's boss is data-driven, so the same signal is `dataset.groom`.
+        if (bossNode.dataset.groom !== '1') bossNode.dataset.groom = '1';
         if (boss.mood !== 'bored') boss.groomUntil = 0;
         else return;
+      } else if (bossNode.dataset.groom) {
+        bossNode.dataset.groom = '';
       }
 
       if (!quarry.inside || quarry.x < 0) return;
@@ -1837,6 +1843,13 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       if (captionEl) captionEl.textContent = '';
       restoreAmmo();
       restoreCaption();
+      // The boss element persists across close (transition:persist), so a fight's
+      // *state* must not: mood and the grooming tell are fight-scoped, and leaving them
+      // on the collapsed icon would leak a tier into the next fight — and into the
+      // harness that reads them off the element (§7.3, arena7).
+      boss.mood = 'even';
+      bossNode.dataset.mood = 'even';
+      bossNode.dataset.groom = '';
     }
 
     function endQuietly(): void {
