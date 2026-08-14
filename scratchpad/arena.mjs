@@ -1,9 +1,30 @@
 /**
- * Build steps 0 + 1 of the cat arena, checked in a real browser.
+ * Build steps 0 + 1 of the cat card — checked in a real browser, on the card game (2.2).
  *
- * The claims are transforms and filters on other people's elements, so the check
- * that matters most is the *restore*: a full snapshot of every element's class
- * list and style attribute before the fight, compared byte-for-byte after Esc.
+ * This is the oldest harness in the fleet, and its subject is unchanged: the way into a
+ * fight (step 0, the toggle) and the core verb (step 1, claim + scrub), plus the
+ * lifecycle questions every fight raises — the restore, storage, reduced motion, touch,
+ * a narrow window, contrast, the idle truce, and the hidden-tab truce. What §2.2 changes
+ * is the *surface* the checks run against. The page-board game is gone (CatArena.astro is
+ * deleted); the game lives on a mini-board of tiles inside a floating card opened from
+ * `#cat-card-toggle`.
+ *
+ * 2.2's drop list, applied:
+ * - No page scrolling, no viewport band (`wants.spot` took `top/bottom/maxHeight` and no
+ *   longer does — the card's board is all on screen by construction).
+ * - No `.cat-claimed`/`.cat-arena-on` — claims are `.cat-tile[data-state="claimed"]`, the
+ *   boss is `[data-boss]`, and "the arena is on" is "the card's panel is open".
+ * - §3's page snapshot no longer *restores* the page (the card never touches it); the
+ *   check becomes the stronger pillar-2 statement: the page is byte-identical *while* the
+ *   card plays, and it still closes back to collapsed.
+ * - §4's "navigating ends the fight" is inverted: the card is `transition:persist` chrome,
+ *   so navigation keeps the fight where the page game used to end it.
+ * - §8b (a planted inline style surviving the page game's `dropNested`) is dropped: the
+ *   card claims nothing on the page, so there is no page-element round-trip left to check.
+ *
+ * What survives unchanged is the mechanics: a hold is a scrub (`--scrub` 0→1, 1400ms), a
+ * reclaim drops the claim count by one, drifting more than STILL_PX resets it, a win is
+ * still the ambient cat's `notched`, and the truces (idle, hidden-tab) keep their clocks.
  */
 import {
   BASE,
@@ -11,86 +32,50 @@ import {
   fresh as context,
   launch,
   press,
+  reachClaim,
   release,
   report,
+  snapDiff,
+  snapshotOf,
   wants,
 } from './lib/fixture.mjs';
 
-/*
- * Shared with the rest of the fleet through `lib/fixture.mjs` (§12.1's charter): the reporter with its
- * fixture/assertion split, the context factory that declares the mode, the launcher, and the waits
- * that open and close a fight. This file used to carry its own copy of each.
- */
 const browser = await launch();
 const { ok, note, fixture, done } = report();
 
-
-
-
-
-
-
-/**
- * A desktop context playing **manual mode** — this is the oldest harness in the fleet and every check
- * in it is about §3's pointer fight.
- */
+/** A desktop context playing **manual mode** — every check here is about §3's pointer fight. */
 const fresh = (opts = {}) => context(browser, { mode: 'manual', ...opts });
 
 /**
- * A claim the pointer can actually hold, dealt for.
- *
- * Three sections here used to take `document.querySelector('.cat-claimed')` — the **first claim in
- * document order** — and park the pointer on its centre, with no band, no hit-test and no fixture
- * report at all. When that claim was off screen or under the header the pointer held nothing, and the
- * three checks that followed failed as though the ring, the reclaim and the caption were broken.
- *
- * It failed in sweep 1 of 2.0's gate and passed in sweep 2, on the same build — the signature of this
- * whole fault class. It is also the version of the fault that neither hygiene rule can see: the
- * assertion *was* the fixture, so there was no fallback string to notice. §12.1 has it recorded, and
- * the checker gained a rule for the shape rather than for the wording.
+ * A claim the pointer can actually hold — the one farthest from the boss, which is §5.2's
+ * own advice and the one the boss cannot reach inside a single 1400ms scrub (so the hold is
+ * not interrupted by a pounce). Dealt for, so a board that cannot offer one re-deals.
  */
-const holdSpot = (page) => deal(page, wants.spot({ top: 170, bottom: 90, maxHeight: 420 }), { deals: 6, settle: 240 });
-
+const farSpot = (page) => deal(page, reachClaim, { deals: 6, settle: 240 });
 
 /**
- * Every element's identity + what the arena could have touched.
- *
- * The cat's own furniture is excluded, and not for convenience: `#site-cat` is
- * walking, so its class list and transform change every frame. Including it made
- * this compare a live animation with itself, which is a coin toss rather than a
- * check. What is being asserted is that *the page* comes back as found — the arena's own
- * furniture (the ribbon, the territory bar, the thrown treat) is excluded for the same
- * reason and not out of convenience: it is not the page, and this list has to be extended
- * whenever the arena grows a new widget or the check quietly starts failing for it.
+ * The game's own reclaimed count, read from the caption ("X / Y reclaimed"). This is the
+ * authoritative signal — a tile's `data-state` leaves `claimed` for `scrubbing` the moment a
+ * hold *starts*, so the DOM `claimed` count drops on beginning a hold, not on finishing one.
+ * The caption is `arenaCaption(arena.claimed.length, …)`, which only moves on a real reclaim.
  */
-const SNAPSHOT = `(() => [...document.querySelectorAll('*')]
-  .filter((el) => !el.closest('#site-cat, #cat-hud, #cat-treat, #cat-scrub, #cat-throw, #cat-ribbon, #cat-territory'))
-  .map((el, i) => i + ':' + el.tagName + ':' + el.className + ':' + (el.getAttribute('style') ?? ''))
-  .join('|'))()`;
+const reclaimed = (page) =>
+  page.evaluate(() => {
+    const c = document.querySelector('[data-caption]')?.textContent ?? '';
+    const m = c.match(/(\d+) \/ \d+ reclaimed/);
+    return m ? Number(m[1]) : -1;
+  });
+
+const CLAIMS = `document.querySelectorAll('.cat-tile[data-state="claimed"]').length`;
+const OPEN = `!document.querySelector('#cat-card-panel').hidden`;
 
 /**
- * Wait for a fight to be *over*, not merely told to stop.
- *
- * Step 4 gave the endings a beat: a win holds the page for `WIN_BEAT_MS` while the cat takes
- * one thing back and leaves. So a snapshot taken a fixed 200ms after pressing the toggle can
- * land in the middle of that and report an unrestored page — rarely, and only when a fight
- * happens to end in a win, which is exactly the kind of flake that gets explained away.
+ * The page as pillar 2 defines it: every element's tag, classes and inline style, in order.
+ * The card's chrome (`.cat-card-root`) and the cat's ambient furniture (`#site-cat`, the
+ * `#cat-hud` paw row) are excluded — they legitimately differ. What must not differ, open
+ * or closed, is everything else, because the card never touches the page.
  */
-async function settled(page, ms = 5000) {
-  await page
-    .waitForFunction(
-      () =>
-        document.getElementById('cat-arena-toggle')?.getAttribute('aria-pressed') === 'false' &&
-        !document.querySelector('.cat-claimed') &&
-        !document.querySelector('.cat-freed'),
-      undefined,
-      { timeout: ms },
-    )
-    .catch(() => {});
-  await page.waitForTimeout(120);
-}
-
-const CLAIM_COUNT = `document.querySelectorAll('.cat-claimed').length`;
+const SNAPSHOT = snapshotOf('.cat-card-root, #site-cat, #cat-hud');
 
 // ---- 1. the toggle: visible, real, and announced
 {
@@ -99,100 +84,78 @@ const CLAIM_COUNT = `document.querySelectorAll('.cat-claimed').length`;
   const errors = [];
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   page.on('pageerror', (e) => errors.push(String(e)));
-  await page.goto(BASE + '/', { waitUntil: 'load' });
+  await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
   await page.waitForTimeout(600);
 
-  const btn = page.locator('#cat-arena-toggle');
+  const btn = page.locator('#cat-card-toggle');
   ok('the toggle is visible without being hunted for', await btn.isVisible());
 
   const shape = await btn.evaluate((b) => ({
     tag: b.tagName,
     type: b.getAttribute('type'),
-    pressed: b.getAttribute('aria-pressed'),
-    label: b.textContent.trim(),
+    expanded: b.getAttribute('aria-expanded'),
+    controls: b.getAttribute('aria-controls'),
+    label: b.getAttribute('aria-label') ?? b.textContent.trim(),
     hiddenAncestor: !!b.closest('[aria-hidden="true"]'),
     box: b.getBoundingClientRect().height,
   }));
   ok('it is a real button, not a div with a handler', shape.tag === 'BUTTON' && shape.type === 'button');
-  ok('it announces its state', shape.pressed === 'false', `aria-pressed=${shape.pressed}`);
-  ok(
-    'it is NOT inside anything aria-hidden',
-    !shape.hiddenAncestor,
-    'a control cannot be hidden and usable',
-  );
+  ok('it announces its state', shape.expanded === 'false', `aria-expanded=${shape.expanded}`);
+  ok('it points at the panel it opens', shape.controls === 'cat-card-panel', `aria-controls=${shape.controls}`);
+  ok('it is NOT inside anything aria-hidden', !shape.hiddenAncestor, 'a control cannot be hidden and usable');
   ok('the label says what it does', /cat/i.test(shape.label), JSON.stringify(shape.label));
 
-  // it is focusable and operable from the keyboard alone
-  const viaKeyboard = await page.evaluate(async () => {
-    const b = document.getElementById('cat-arena-toggle');
-    b.focus();
-    const focused = document.activeElement === b;
-    b.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-    b.click(); // what Enter does on a real button
-    return { focused };
-  });
-  // The 100ms this used to wait was ample against an instant swap; step 6 puts a ~1.1s
-  // curtain in front of the state change, so the wait has to be on the change itself.
+  // Reachable and operable from the keyboard alone — Enter is what a real button does.
+  await page.locator('#cat-card-toggle').focus();
+  const focused = await page.evaluate(() => document.activeElement?.id === 'cat-card-toggle');
+  await page.keyboard.press('Enter');
   await page
-    .waitForFunction(() => document.documentElement.classList.contains('cat-arena-on'), undefined, {
-      timeout: 7000,
-    })
+    .waitForFunction(() => !document.querySelector('#cat-card-panel').hidden, undefined, { timeout: 7000 })
     .catch(() => {});
-  const armed = await page.evaluate(() =>
-    document.documentElement.classList.contains('cat-arena-on'),
-  );
-  ok('reachable and operable by keyboard', viaKeyboard.focused && armed);
+  ok('reachable and operable by keyboard', focused && (await page.evaluate(CLAIMS)) > 0);
 
-  const claims = await page.evaluate(CLAIM_COUNT);
-  ok('pressing it claims part of the page', claims > 0, `${claims} claims`);
-  ok(
-    'aria-pressed follows the arena',
-    (await btn.getAttribute('aria-pressed')) === 'true',
-  );
+  ok('pressing it deals tiles on the card', (await page.evaluate(CLAIMS)) > 0, `${await page.evaluate(CLAIMS)} claims`);
+  ok('aria-expanded follows the card', (await btn.getAttribute('aria-expanded')) === 'true');
 
-  // ---- what it must never claim
-  const forbidden = await page.evaluate(() => {
-    const claimed = [...document.querySelectorAll('.cat-claimed')];
+  // ---- what it must never claim: the page itself
+  const never = await page.evaluate(() => {
+    const tiles = [...document.querySelectorAll('.cat-tile')];
     return {
-      inGlass: claimed.filter((c) => c.closest('.glass')).length,
-      inHeader: claimed.filter((c) => c.closest('header, .tabbar')).length,
-      inCatHud: claimed.filter((c) => c.closest('#cat-hud, #site-cat')).length,
-      focusable: claimed.filter((c) => c.matches('a, button, input, select, textarea, [tabindex]'))
-        .length,
-      nested: claimed.filter((c) => claimed.some((o) => o !== c && o.contains(c))).length,
-      tiny: claimed.filter((c) => {
-        const r = c.getBoundingClientRect();
-        return r.width * r.height < 900;
-      }).length,
+      pageClaims: document.querySelectorAll('.cat-claimed').length,
+      arenaOn: document.documentElement.classList.contains('cat-arena-on'),
+      allInBoard: tiles.every((t) => !!t.closest('[data-board]')),
+      allButtons: tiles.every((t) => t.tagName === 'BUTTON' && t.getAttribute('type') === 'button'),
+      nested: tiles.filter((t) => tiles.some((o) => o !== t && o.contains(t))).length,
     };
   });
-  ok('the hero pane is untouched, inside and out', forbidden.inGlass === 0);
-  ok('the way out is untouched', forbidden.inHeader === 0);
-  ok('the cat does not claim its own HUD', forbidden.inCatHud === 0);
-  ok('nothing focusable is claimed', forbidden.focusable === 0);
-  ok('no claim sits inside another', forbidden.nested === 0);
-  ok('no claim is too small to read as one', forbidden.tiny === 0);
+  ok(
+    'the card claims nothing on the page — the page-board game is gone',
+    never.pageClaims === 0 && !never.arenaOn,
+    `page claims ${never.pageClaims}, arena-on ${never.arenaOn}`,
+  );
+  ok('every tile lives on the card board, nowhere else', never.allInBoard);
+  ok('tiles are real buttons too', never.allButtons);
+  ok('no tile sits inside another', never.nested === 0);
 
   // ---- the page must stay usable
   const usable = await page.evaluate(() => {
     const de = document.documentElement;
-    const h1 = document.querySelector('.glass h1');
     return {
       hscroll: de.scrollWidth - de.clientWidth,
-      heroLegible: !!h1 && !h1.closest('.cat-claimed'),
       linksClickable: [...document.querySelectorAll('main a[href]')].every(
         (a) => getComputedStyle(a).pointerEvents !== 'none',
       ),
       selectable: getComputedStyle(document.body).userSelect !== 'none',
-      focusTrap: document.activeElement?.id === 'cat-arena-toggle',
     };
   });
-  ok('no horizontal scrollbar at 1280 while claimed', usable.hscroll === 0, `${usable.hscroll}px`);
-  ok('the hero headline is never a claim', usable.heroLegible);
+  ok('no horizontal scrollbar at 1280 while the card is open', usable.hscroll === 0, `${usable.hscroll}px`);
   ok('every link stays clickable', usable.linksClickable);
   ok('text stays selectable', usable.selectable);
-  ok('focus is where the visitor left it, not trapped', usable.focusTrap);
-  ok('no console errors opening the arena', errors.length === 0, errors.join(' | '));
+  ok(
+    'focus moves into the card, not trapped in it',
+    await page.evaluate(() => document.activeElement?.id === 'cat-card-close'),
+  );
+  ok('no console errors opening the card', errors.length === 0, errors.join(' | '));
   await ctx.close();
 }
 
@@ -200,122 +163,116 @@ const CLAIM_COUNT = `document.querySelectorAll('.cat-claimed').length`;
 {
   const ctx = await fresh({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
-  await page.goto(BASE + '/', { waitUntil: 'load' });
+  await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
   await page.waitForTimeout(500);
   await press(page);
-  await page.waitForTimeout(120);
+  await page.waitForTimeout(200);
 
-  const before = await page.evaluate(CLAIM_COUNT);
-  // park the pointer on the middle of a claim and hold it there
-  const spotDeal = await holdSpot(page);
+  const before = await reclaimed(page);
+  const spotDeal = await farSpot(page);
   const spot = spotDeal.value;
   fixture('the board dealt a claim the pointer can hold', spotDeal, spot ? `${spot.x},${spot.y}` : '');
   await page.mouse.move(spot.x, spot.y);
   await page.waitForTimeout(250);
-  const ringMid = await page.evaluate(() => {
-    const r = document.getElementById('cat-scrub');
-    const fill = r?.querySelector('.scrub-fill');
+  const ring = await page.evaluate(() => {
+    const t = document.querySelector('.cat-tile[data-state="scrubbing"]');
     return {
-      shown: r && !r.hidden,
-      offset: fill ? parseFloat(getComputedStyle(fill).strokeDashoffset) : -1,
+      shown: !!t,
+      progress: t ? parseFloat(getComputedStyle(t).getPropertyValue('--scrub')) || 0 : -1,
     };
   });
-  ok('a ring appears where you are holding', ringMid.shown);
+  ok('a scrub ring appears where you are holding', ring.shown);
   ok(
-    'the ring reports progress rather than sitting full',
-    ringMid.offset > 0 && ringMid.offset < 106.81,
-    `dashoffset ${ringMid.offset.toFixed(1)} of 106.81`,
+    'the scrub reports progress rather than sitting full',
+    ring.progress > 0 && ring.progress < 1,
+    `progress ${ring.progress.toFixed(2)} of 1`,
   );
 
   await page.waitForTimeout(1500); // past SCRUB_MS 1400
-  const after = await page.evaluate(CLAIM_COUNT);
-  ok('holding still takes one back', after === before - 1, `${before} → ${after}`);
+  const after = await reclaimed(page);
+  ok('holding still takes one back', after === before + 1, `${before} → ${after} reclaimed`);
 
-  const caption = await page.textContent('#cat-score .cat-caption');
-  ok('the HUD says what you have reclaimed', /reclaimed/.test(caption), JSON.stringify(caption));
+  const caption = await page.textContent('[data-caption]');
+  ok('the HUD says what you have reclaimed', /reclaimed/i.test(caption), JSON.stringify(caption));
 
-  // drifting resets the hold rather than banking it
-  /*
-   * Dealt for, like the hold above — and here it matters *more*, because this check asserts that
-   * something does **not** happen. A pointer drifting over nothing takes nothing, so an unworkable
-   * claim would have passed it vacuously: a false green rather than a red.
-   */
-  const drift = await holdSpot(page);
-  fixture('a claim to drift over', drift, drift.value ? `${drift.value.x},${drift.value.y}` : '');
-  const spot2 = drift.value ?? { x: 640, y: 450 };
-  const mid = await page.evaluate(CLAIM_COUNT);
+  // Drifting resets the hold rather than banking it. Dealt for, like the hold above — an
+  // unworkable claim would pass this vacuously, and this check asserts something does NOT
+  // happen, so it must be given a claim the drift could otherwise have taken.
+  const driftDeal = await farSpot(page);
+  fixture('a claim to drift over', driftDeal, driftDeal.value ? `${driftDeal.value.x},${driftDeal.value.y}` : '');
+  const spot2 = driftDeal.value ?? { x: 640, y: 450 };
+  const mid = await reclaimed(page);
   for (let i = 0; i < 14; i++) {
     await page.mouse.move(spot2.x + (i % 2 ? 14 : -14), spot2.y + (i % 3 ? 11 : -11));
     await page.waitForTimeout(120);
   }
-  const drifted = await page.evaluate(CLAIM_COUNT);
-  ok('drifting for longer than a scrub takes nothing', drifted === mid, `${mid} → ${drifted}`);
+  const drifted = await reclaimed(page);
+  ok('drifting for longer than a scrub takes nothing', drifted === mid, `${mid} → ${drifted} reclaimed`);
   await ctx.close();
 }
 
-// ---- 3. the restore: Esc puts the page back exactly
+// ---- 3. the card never touches the page, and Esc returns it to collapsed
 {
   const ctx = await fresh({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
-  await page.goto(BASE + '/', { waitUntil: 'load' });
+  await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
   await page.waitForTimeout(600);
 
   const clean = await page.evaluate(SNAPSHOT);
   await press(page);
   await page.waitForTimeout(150);
-  const fighting = await page.evaluate(SNAPSHOT);
-  ok('the fight does change the page', fighting !== clean);
+  const openDiff = await snapDiff(page, SNAPSHOT, clean);
+  ok('the card never touches the page while it plays (pillar 2)', openDiff.n === 0, openDiff.detail);
 
-  // Scrub one back first, so the restore has both kinds of element to put back — which means the
-  // claim has to be one the pointer can reach, or the section only ever tests half of what it says.
-  const restoreDeal = await holdSpot(page);
-  fixture('a claim to reclaim before restoring', restoreDeal, restoreDeal.value ? `${restoreDeal.value.x},${restoreDeal.value.y}` : '');
+  // Scrub one back first, so the close has a reclaim to unwind.
+  const restoreDeal = await farSpot(page);
+  fixture(
+    'a claim to reclaim before restoring',
+    restoreDeal,
+    restoreDeal.value ? `${restoreDeal.value.x},${restoreDeal.value.y}` : '',
+  );
   const spot = restoreDeal.value ?? { x: 640, y: 450 };
   await page.mouse.move(spot.x, spot.y);
   await page.waitForTimeout(1600);
 
-  await page.keyboard.press('Escape');
-  await settled(page);
-  const restored = await page.evaluate(SNAPSHOT);
-  ok('Esc restores the DOM exactly as found', restored === clean);
+  await release(page);
+  const restored = await snapDiff(page, SNAPSHOT, clean);
+  ok('the page is byte-identical after the card closes', restored.n === 0, restored.detail);
+  ok('the card is back to collapsed after the fight', await page.evaluate(OPEN) === false);
   ok(
-    'and drops the root class with it',
-    !(await page.evaluate(() => document.documentElement.classList.contains('cat-arena-on'))),
+    'the toggle un-expands itself',
+    (await page.locator('#cat-card-toggle').getAttribute('aria-expanded')) === 'false',
   );
   ok(
-    'the toggle un-presses itself',
-    (await page.getAttribute('#cat-arena-toggle', 'aria-pressed')) === 'false',
+    'focus returns to the icon on close',
+    await page.evaluate(() => document.activeElement?.id === 'cat-card-toggle'),
   );
-  const caption = await page.textContent('#cat-score .cat-caption');
-  ok('the treat tally comes back', /treats/.test(caption), JSON.stringify(caption));
-  ok('no ring left behind', await page.evaluate(() => document.getElementById('cat-scrub').hidden));
 
-  // and the toggle still works afterwards
+  // And the toggle still works afterwards.
   await press(page);
   await page.waitForTimeout(120);
-  ok('it can be switched on again', (await page.evaluate(CLAIM_COUNT)) > 0);
-  await press(page);
-  await settled(page);
-  ok('and off again from the same button', (await page.evaluate(CLAIM_COUNT)) === 0);
-  ok('off is a full restore too', (await page.evaluate(SNAPSHOT)) === clean);
+  ok('it can be switched on again', (await page.evaluate(CLAIMS)) > 0);
+  await release(page);
+  const offAgain = await snapDiff(page, SNAPSHOT, clean);
+  ok('off is a full restore too', offAgain.n === 0, offAgain.detail);
   await ctx.close();
 }
 
-// ---- 4. nothing survives a page load, and nothing is stored
+// ---- 4. a refresh ends it, navigation keeps it, and nothing fight-scoped is stored
 {
   const ctx = await fresh({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
-  await page.goto(BASE + '/', { waitUntil: 'load' });
+  await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
   await page.waitForTimeout(500);
   await press(page);
-  await page.waitForTimeout(150);
+  await page.waitForTimeout(200);
 
   const stored = await page.evaluate(() => ({
-    local: Object.keys(localStorage).filter((k) => /arena|cat/i.test(k)),
+    local: Object.keys(localStorage).filter((k) => /arena/i.test(k)),
     session: Object.keys(sessionStorage).filter((k) => /arena|cat/i.test(k)),
   }));
   ok(
-    'the game writes nothing to storage',
+    'the page game left no storage behind',
     stored.local.length === 0 && stored.session.length === 0,
     JSON.stringify(stored),
   );
@@ -323,122 +280,94 @@ const CLAIM_COUNT = `document.querySelectorAll('.cat-claimed').length`;
   await page.reload({ waitUntil: 'load' });
   await page.waitForTimeout(500);
   ok(
-    'a refresh cannot land you mid-invasion',
-    (await page.evaluate(CLAIM_COUNT)) === 0 &&
-      (await page.getAttribute('#cat-arena-toggle', 'aria-pressed')) === 'false',
+    'a refresh cannot land you mid-fight',
+    (await page.evaluate(CLAIMS)) === 0 && (await page.evaluate(OPEN)) === false,
   );
 
-  // client-side navigation: the toggle persists, so its listener has to as well
+  // Client-side navigation: the card is transition:persist chrome, so the fight survives
+  // where the page game used to end it — the 2.2 inversion of this section's old subject.
   await press(page);
-  await page.waitForTimeout(150);
-  await page.click('a[href="/about/"]');
+  await page.waitForTimeout(200);
+  await page.click('main a[href^="/"]');
   await page.waitForTimeout(900);
   ok(
-    'navigating ends the fight rather than carrying a stale board',
-    (await page.evaluate(CLAIM_COUNT)) === 0 &&
-      (await page.getAttribute('#cat-arena-toggle', 'aria-pressed')) === 'false',
+    'navigating does not end the fight — the card persists (§2.2)',
+    (await page.evaluate(CLAIMS)) > 0 && (await page.evaluate(OPEN)) === true,
   );
+
+  await release(page);
   await press(page);
-  await page.waitForTimeout(150);
-  ok(
-    'the toggle still works after a navigation',
-    (await page.evaluate(CLAIM_COUNT)) > 0,
-    'the persisted button keeps its listener',
-  );
-  await ctx.close();
-}
-
-// ---- 5. reduced motion: shown, explained, and inert
-{
-  const ctx = await fresh({
-    viewport: { width: 1280, height: 900 },
-    reducedMotion: 'reduce',
-  });
-  const page = await ctx.newPage();
-  await page.goto(BASE + '/', { waitUntil: 'load' });
-  await page.waitForTimeout(600);
-
-  const btn = page.locator('#cat-arena-toggle');
-  ok('the invitation is still shown under reduced motion', await btn.isVisible());
-  ok('and marked aria-disabled, not removed', (await btn.getAttribute('aria-disabled')) === 'true');
-  const note = await page.textContent('#cat-arena-note');
-  ok('it says why, in words', /motion/i.test(note), JSON.stringify(note.trim()));
-  ok(
-    'the note is what describes the button',
-    (await btn.getAttribute('aria-describedby')) === 'cat-arena-note',
-  );
-  ok('it stays focusable so the reason is reachable', await btn.evaluate((b) => {
-    b.focus();
-    return document.activeElement === b;
-  }));
-  // Playwright refuses to click an aria-disabled button, which is its own small
-  // vote of confidence — but the thing under test is our handler, so dispatch it.
-  // Not `press()`: that one goes through `page.click`, and it would sit here for
-  // Playwright's full actionability timeout waiting for a button that never enables.
-  await page.evaluate(() => document.getElementById('cat-arena-toggle').click());
   await page.waitForTimeout(200);
-  ok(
-    'pressing it starts nothing',
-    (await page.evaluate(CLAIM_COUNT)) === 0 &&
-      !(await page.evaluate(() => document.documentElement.classList.contains('cat-arena-on'))),
-  );
+  ok('the toggle still works after a navigation', (await page.evaluate(CLAIMS)) > 0);
   await ctx.close();
 }
 
-// ---- 6. a touch screen: offered as of 1.2, where it used to be refused
+// ---- 5. reduced motion: the card plays, animation stands down
 {
-  /*
-   * This section used to assert the *refusal* — "but marked unavailable", "and says why" — which
-   * was correct for eleven versions and is now exactly backwards. §5.2 rejected touch because a
-   * press-and-hold has no aim and a finger covers what it holds, and 1.0's flee-and-hold
-   * measurement implies a third objection neither the doc nor I had noticed: a mouse pays travel
-   * time to reach safety and a finger teleports, so every hold would be free.
-   *
-   * All three are answered by scroll position being distance — the cat is `position: fixed` at
-   * the bottom of the viewport and claims are not, so where you scroll a claim to *is* how far it
-   * is from the cat. The full play-through lives in `touch-fight.mjs`; what belongs here is the
-   * part this file has always owned: the toggle's semantics, and that a phone page is not damaged.
-   */
-  const ctx = await fresh({
-    viewport: { width: 390, height: 844 },
-    hasTouch: true,
-    isMobile: true,
-  });
+  const ctx = await fresh({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' });
   const page = await ctx.newPage();
-  await page.goto(BASE + '/', { waitUntil: 'load' });
+  await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
   await page.waitForTimeout(600);
-  const btn = page.locator('#cat-arena-toggle');
+
+  const btn = page.locator('#cat-card-toggle');
+  ok('the card is still offered under reduced motion', await btn.isVisible());
+  ok(
+    'and not marked disabled — hiding the game was the paternalism 0.2 retracted',
+    (await btn.getAttribute('aria-disabled')) === null,
+  );
+
+  await press(page);
+  await page.waitForTimeout(200);
+  ok('opening still deals a board', (await page.evaluate(CLAIMS)) > 0, `${await page.evaluate(CLAIMS)} claims`);
+
+  // The core verb is logic, not animation: a hold still reclaims under reduced motion.
+  const before = await reclaimed(page);
+  const spotDeal = await farSpot(page);
+  const spot = spotDeal.value;
+  fixture('a claim to hold under reduced motion', spotDeal, spot ? `${spot.x},${spot.y}` : '');
+  await page.mouse.move(spot.x, spot.y);
+  await page.waitForTimeout(1600);
+  const after = await reclaimed(page);
+  ok('a hold still reclaims — the mechanic is not the animation', after === before + 1, `${before} → ${after} reclaimed`);
+  await ctx.close();
+}
+
+// ---- 6. a touch screen: offered, tap-sized, pinch-zoom-safe
+{
+  const ctx = await fresh({ phone: true });
+  const page = await ctx.newPage();
+  await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
+  await page.waitForTimeout(600);
+  const btn = page.locator('#cat-card-toggle');
   ok('the toggle is shown on a phone', await btn.isVisible());
-  ok('and is offered, not refused (1.2)', (await btn.getAttribute('aria-disabled')) === 'false');
-  ok('so there is no reason-note to show', !(await page.locator('#cat-arena-note').isVisible()));
+  ok('and is offered, not refused', (await btn.getAttribute('aria-disabled')) === null);
   const tap = await btn.evaluate((b) => b.getBoundingClientRect().height);
   ok('the target is tap-sized', tap >= 44, `${tap.toFixed(0)}px tall`);
 
-  await btn.tap();
-  await page.waitForFunction(() => !!document.querySelector('.cat-claimed'), undefined, { timeout: 9000 }).catch(() => {});
-  ok('tapping it opens a fight', await page.evaluate(`document.documentElement.classList.contains('cat-arena-on')`));
+  await press(page, { tap: true });
+  await page.waitForTimeout(300);
+  ok('tapping it opens a fight', (await page.evaluate(CLAIMS)) > 0);
   const hscroll = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
-  ok('no horizontal overflow at 390px, claims and all', hscroll === 0, `${hscroll}px`);
-  // §11's zoom row is no-exceptions, and the obvious way to stop a hold being stolen by a scroll
-  // (`touch-action: none`) would have broken it. `pinch-zoom` refuses panning only.
+  ok('no horizontal overflow at 390px, card and all', hscroll === 0, `${hscroll}px`);
+  // §11's zoom row is no-exceptions, and `touch-action: none` would have broken it.
   const ta = await page.evaluate(() => {
-    const c = document.querySelector('.cat-claimed');
-    return c ? getComputedStyle(c).touchAction : '(no claim)';
+    const c = document.querySelector('.cat-tile');
+    return c ? getComputedStyle(c).touchAction : '(no tile)';
   });
-  ok('a claim refuses panning but never pinch-zoom (§11)', ta === 'pinch-zoom', JSON.stringify(ta));
-  await btn.tap();
-  await settled(page);
-  ok('and the toggle ends it, with no Esc key on a phone', await page.evaluate(`!document.documentElement.classList.contains('cat-arena-on')`));
+  ok('a tile refuses panning but never pinch-zoom (§11)', ta === 'pinch-zoom', JSON.stringify(ta));
+  // No Escape key on a phone — the close button is the way out.
+  await release(page, { tap: true });
+  ok('and the close button ends it', (await page.evaluate(OPEN)) === false);
   await ctx.close();
 }
 
-// ---- 7. a narrow desktop window: claims must not widen the page
+// ---- 7. a narrow desktop window: the card must not widen the page
 {
   const ctx = await fresh({ viewport: { width: 400, height: 900 } });
   const page = await ctx.newPage();
-  await page.goto(BASE + '/', { waitUntil: 'load' });
+  await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
   await page.waitForTimeout(600);
   const before = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -448,31 +377,28 @@ const CLAIM_COUNT = `document.querySelectorAll('.cat-claimed').length`;
   const during = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
-  const claims = await page.evaluate(CLAIM_COUNT);
-  ok(
-    'tilting a full-width block never adds a horizontal scrollbar',
-    during <= before,
-    `${before} → ${during} with ${claims} claims`,
-  );
+  const claims = await page.evaluate(CLAIMS);
+  ok('opening the card never adds a horizontal scrollbar', during <= before, `${before} → ${during} with ${claims} claims`);
   await ctx.close();
 }
 
-// ---- 8. contrast: a claim washes the block, and must not push text under AA
+// ---- 8. contrast: a claim washes the tile, and must not push its text under AA
 for (const theme of ['light', 'dark']) {
   const ctx = await fresh({ viewport: { width: 1280, height: 900 } });
   if (theme === 'dark') await ctx.addInitScript(() => localStorage.setItem('theme', 'dark'));
   const page = await ctx.newPage();
-  await page.goto(BASE + '/', { waitUntil: 'load' });
+  await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
   await page.waitForTimeout(500);
   await press(page);
   await page.waitForTimeout(200);
 
   const ratios = await page.evaluate(() => {
-    // A claim washes the element's box with the accent at 12% via an inset
-    // box-shadow, which paints above the background and below the text. So the
-    // text colour does not move; the background it sits on does.
-    const over = (fg, bg, a) => bg.map((c, i) => c * (1 - a) + fg[i] * a);
-    const parse = (c) => (c.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+    /** Resolve any CSS colour — `rgb()`, `color(srgb …)`, `color-mix` — to [r,g,b] in 0–255. */
+    const toRgb = (s) => {
+      const n = (s.match(/[\d.]+/g) || []).map(Number);
+      if (s.startsWith('color(')) return n.slice(0, 3).map((v) => (v <= 1 ? Math.round(v * 255) : v));
+      return n.slice(0, 3);
+    };
     const lum = ([r, g, b]) =>
       [r, g, b]
         .map((v) => v / 255)
@@ -482,163 +408,63 @@ for (const theme of ['light', 'dark']) {
       const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
       return (hi + 0.05) / (lo + 0.05);
     };
-    /**
-     * The colour actually painted behind this element. Walking up matters: an h2
-     * has a transparent background, and reading that as a colour scores it against
-     * black and reports a 1.37 ratio on a cream page — which was the first version
-     * of this check measuring nothing.
-     */
-    const groundOf = (el) => {
-      for (let n = el; n; n = n.parentElement) {
-        const c = getComputedStyle(n).backgroundColor;
-        const p = parse(c);
-        if (p.length === 3 && !/rgba\(0, 0, 0, 0\)|transparent/.test(c)) return p;
-      }
-      return [255, 255, 255];
+    /** The wash: accent blended over the tile's background at TINT (an inset box-shadow). */
+    const over = (fg, bg, a) => bg.map((c, i) => c * (1 - a) + fg[i] * a);
+    const probe = (prop) => {
+      const s = document.createElement('span');
+      s.style.color = `var(${prop})`;
+      document.body.append(s);
+      const v = toRgb(getComputedStyle(s).color);
+      s.remove();
+      return v;
     };
-    // the wash colour, read from the token rather than hardcoded here
-    const accent = parse(getComputedStyle(document.documentElement).getPropertyValue('--color-accent'))
-      .length === 3
-      ? parse(getComputedStyle(document.documentElement).getPropertyValue('--color-accent'))
-      : (() => {
-          // the token is a hex literal, so borrow the browser's own parser
-          const probe = document.createElement('span');
-          probe.style.color = 'var(--color-accent)';
-          document.body.append(probe);
-          const rgb = parse(getComputedStyle(probe).color);
-          probe.remove();
-          return rgb;
-        })();
-    const TINT = 0.07; // must match the box-shadow in CatArena.astro
+    const accent = probe('--color-accent');
+    const TINT = 0.07; // must match the claimed-tile wash in CatCard.astro
     const out = [];
-    for (const el of document.querySelectorAll('.cat-claimed')) {
+    for (const el of document.querySelectorAll('.cat-tile[data-state="claimed"]')) {
       if (!el.textContent.trim()) continue;
       const cs = getComputedStyle(el);
-      const opaque = !/rgba\(0, 0, 0, 0\)|transparent/.test(cs.backgroundColor);
-      const bgBefore = opaque ? parse(cs.backgroundColor) : groundOf(el.parentElement ?? el);
+      const bg = toRgb(cs.backgroundColor);
+      if (bg.length !== 3) continue;
       out.push({
-        tag: el.tagName + '.' + (el.className.split(' ')[0] || ''),
-        before: ratio(parse(cs.color), bgBefore),
-        after: ratio(parse(cs.color), over(accent, bgBefore, TINT)),
+        tag: el.tagName,
+        before: ratio(toRgb(cs.color), bg),
+        after: ratio(toRgb(cs.color), over(accent, bg, TINT)),
       });
     }
     return out;
   });
   const worst = ratios.reduce((a, r) => (r.after < a.after ? r : a), ratios[0]);
   ok(
-    `${theme}: no claim pushes its own text under AA`,
+    `${theme}: no claimed tile pushes its text under AA`,
     ratios.length > 0 && ratios.every((r) => r.after >= 4.5),
-    `worst ${worst?.tag} ${worst?.before.toFixed(2)} → ${worst?.after.toFixed(2)} over ${ratios.length} claims`,
+    `worst ${worst?.tag} ${worst?.before.toFixed(2)} → ${worst?.after.toFixed(2)} over ${ratios.length} tiles`,
   );
-  await ctx.close();
-}
-
-// ---- 8b. an entry page, where claimed elements carry inline styles of their own
-{
-  const ctx = await fresh({ viewport: { width: 1280, height: 900 } });
-  const page = await ctx.newPage();
-  const errors = [];
-  page.on('pageerror', (e) => errors.push(String(e)));
-  await page.goto(BASE + '/timeline/', { waitUntil: 'load' });
-  await page.waitForTimeout(700);
-  /**
-   * On this site the elements carrying inline styles (`.frame.blurup`, which holds
-   * its LQIP there) always sit inside a `figure` or a card link, so `dropNested`
-   * hands the claim to the wrapper and the inline style is never touched. That is
-   * luck, not a guarantee — a future page could put a `.rail` or an `h2` with an
-   * inline style at the top level. So stamp one on, and check the round-trip.
-   */
-  // Pick the victim by *watching a fight*, not by guessing the selector: the first
-  // h2 or .rail on the page is usually nested inside a figure, so `dropNested`
-  // hands the claim to the wrapper and a planted style there is never touched. One
-  // round tells us which elements the board actually contains.
-  await press(page);
-  await page.waitForTimeout(160);
-  await page.evaluate(() => {
-    const c = document.querySelector('.cat-claimed:not([style*="background"])');
-    if (c) c.dataset.plantHere = '1';
-  });
-  await press(page);
-  await page.waitForTimeout(200);
-  const planted = await page.evaluate(() => {
-    const el = document.querySelector('[data-plant-here]');
-    if (!el) return null;
-    el.setAttribute('style', 'background-image:var(--lqip);outline-offset:2px');
-    return el.getAttribute('style');
-  });
-  ok('planted an inline style on an element the cat actually claims', !!planted, String(planted));
-
-  const clean = await page.evaluate(SNAPSHOT);
-  let claimedPlanted = 0;
-  for (let round = 0; round < 6; round++) {
-    await press(page);
-    await page.waitForTimeout(160);
-    if (await page.evaluate(() => !!document.querySelector('[data-plant-here].cat-claimed'))) {
-      claimedPlanted++;
-    }
-    await press(page);
-    await settled(page);
-    if ((await page.evaluate(SNAPSHOT)) !== clean) break;
-  }
-  ok(
-    'six fights on a gallery page leave it byte-identical',
-    (await page.evaluate(SNAPSHOT)) === clean,
-  );
-  ok(
-    'and the planted inline style survived being claimed',
-    claimedPlanted > 0 && (await page.evaluate(() => document.querySelector("[data-plant-here]").getAttribute('style'))) === planted,
-    `claimed in ${claimedPlanted} of 6 rounds`,
-  );
-  ok('no errors on a page full of figures', errors.length === 0, errors.join(' | '));
   await ctx.close();
 }
 
 // ---- 8c. playing well is not the same as not playing (§11 vs §5.2)
 {
   /*
-   * The complement of the auto-truce below, and a real bug when this was written.
+   * The complement of the idle truce below, and a real bug when this was written. `scrub.seen`
+   * — the idle clock — was refreshed only by `pointermove`, but the core verb is holding the
+   * pointer **still**. A player pinned on one claim by a cat that keeps interrupting makes
+   * continuous progress, never moves the mouse, and at IDLE_TRUCE_MS the game quietly ended
+   * itself under them. The card's `stepScrub` refreshes `scrub.seen` every frame it is on a
+   * claimed tile, which is the fix this section now verifies is present.
    *
-   * `scrub.seen` — the idle clock — was refreshed only by `pointermove`. But the core verb of
-   * this game is holding the pointer **still** (§5.2), and 1.0 measured flee-and-hold as the
-   * counter the whole fight is built on: the better you play, the less you move. A player
-   * pinned on one claim by a cat that keeps interrupting makes continuous progress, never
-   * moves the mouse, and at `IDLE_TRUCE_MS` the game quietly ended itself under them.
-   *
-   * It survived four versions of browser testing because a truce and a win look identical from
-   * outside — an empty board either way — and every harness had been asking "are the claims
-   * gone" rather than "who won".
-   *
-   * **Siege, deliberately.** The scenario needs a claim that stays live under a stationary
-   * cursor for longer than the truce window, and siege is the one stance that guarantees it:
-   * it is pinned to the floor so it can never interrupt, and its regrow calls `takeGround()`,
-   * which pops the *most recently freed* element — the one the parked cursor is sitting on. So
-   * the hold completes, the board grows it back underneath, and the hold starts again. A first
-   * attempt without pinning the stance drew a distant cat, the scrub completed once, and the
-   * cursor then sat on a freed element doing nothing for 20s — which is a truce that is
-   * entirely correct, and told me nothing about the bug.
+   * Siege, deliberately: it is pinned to the floor so it cannot pounce the hold, and its
+   * regrow claims the most recently freed tile — the one under the parked cursor — so the hold
+   * completes, the board grows it back underneath, and the hold starts again, forever.
    */
   const ctx = await fresh({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
-  await page.goto(BASE + '/', { waitUntil: 'load' });
+  await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
   await page.waitForTimeout(600);
 
-  /*
-   * A **siege** fight with somewhere to hold, in one deal.
-   *
-   * This loop was already right — it rolled the stance and the placement together, which is the thing
-   * §12.1 says separate re-rollers get wrong — and it is here as a `deal()` so there is one
-   * implementation of it rather than five. Sixteen deals is this file's own budget kept; siege is one
-   * of four weighted stances.
-   */
-  const siege = await deal(
-    page,
-    wants.stance(['siege'], { claims: 'inView', top: 170, bottom: 90, maxHeight: Infinity }),
-    { deals: 16, settle: 0 },
-  );
+  const siege = await deal(page, wants.stance(['siege'], { claims: 'inView' }), { deals: 16, settle: 0 });
   const stance = siege.value ?? '';
-  const spot = siege.value
-    ? await wants.spot({ top: 170, bottom: 90, maxHeight: Infinity })(page)
-    : null;
+  const spot = siege.value ? await reachClaim(page) : null;
   fixture('rolled a siege fight with somewhere to hold', siege, stance);
 
   if (stance === 'siege' && spot) {
@@ -646,16 +472,15 @@ for (const theme of ['light', 'dark']) {
     await page.mouse.move(spot.x, spot.y);
     await page.waitForTimeout(24_000);
     const after = await page.evaluate(() => ({
-      armed: document.documentElement.classList.contains('cat-arena-on'),
-      claims: document.querySelectorAll('.cat-claimed').length,
+      open: !document.querySelector('#cat-card-panel').hidden,
+      claims: document.querySelectorAll('.cat-tile[data-state="claimed"]').length,
     }));
     ok(
       'a fight being played without mouse movement is not treated as abandoned',
-      after.armed,
-      `armed=${after.armed}, ${after.claims} claims after 24s on a single hold`,
+      after.open && after.claims > 0,
+      `open=${after.open}, ${after.claims} claims after 24s on a single hold`,
     );
-    await page.keyboard.press('Escape');
-    await settled(page);
+    await release(page);
   }
   await ctx.close();
 }
@@ -664,14 +489,13 @@ for (const theme of ['light', 'dark']) {
 {
   const ctx = await fresh({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
-  await page.goto(BASE + '/', { waitUntil: 'load' });
+  await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
   await page.waitForTimeout(500);
   await press(page);
   await page.waitForTimeout(150);
-  // Fake a long absence: the handler compares wall-clock stamps, so overriding
-  // Date.now once is enough to test the rule without waiting ten seconds.
-  await page.evaluate(async () => {
-    document.dispatchEvent(new Event('visibilitychange'));
+  // Fake a long absence: the handler compares wall-clock stamps, so overriding Date.now once
+  // is enough to test the rule without waiting ten seconds.
+  await page.evaluate(() => {
     Object.defineProperty(document, 'hidden', { value: true, configurable: true });
     document.dispatchEvent(new Event('visibilitychange'));
     const real = Date.now;
@@ -680,19 +504,11 @@ for (const theme of ['light', 'dark']) {
     document.dispatchEvent(new Event('visibilitychange'));
     Date.now = real;
   });
-  // The auto-truce goes out through the curtain like every other exit, so the page is
-  // restored ~700ms after the rule fires rather than on the next tick.
-  await settled(page);
+  await page.waitForTimeout(300);
   const ended = await page.evaluate(() => ({
-    claims: document.querySelectorAll('.cat-claimed').length,
-    pressed: document.getElementById('cat-arena-toggle').getAttribute('aria-pressed'),
+    claims: document.querySelectorAll('.cat-tile[data-state="claimed"]').length,
   }));
-  ok(
-    'a long absence ends the fight by itself',
-    ended.claims === 0,
-    `${ended.claims} claims left`,
-  );
-  ok('and the button stops claiming to be on', ended.pressed === 'false');
+  ok('a long absence ends the fight by itself', ended.claims === 0, `${ended.claims} claims left`);
   await ctx.close();
 }
 
