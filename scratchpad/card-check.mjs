@@ -2,37 +2,13 @@
 // Chrome from two Windows paths of its own, which meant it exited 2 — before a single check —
 // on every Linux run of the gate. An unrun harness in a sweep of green ones is the quietest
 // possible failure, which is the whole reason `launch()` is shared.
-import { launch, BASE } from './lib/fixture.mjs';
+import { launch, BASE, waitOpen } from './lib/fixture.mjs';
 const browser = await launch();
 const results = [];
 const ok = (name, pass, detail = '') => {
   results.push({ name, pass, detail });
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
 };
-
-/**
- * Wait for the card's open animation to finish before measuring it.
- *
- * `panel.waitFor({ state: 'visible' })` fires the moment `hidden` drops, but the panel then
- * runs `cat-card-open` (0.18s, `scale(0.86) → scale(1)`) — a `boundingBox()` read inside that
- * window reports the *scaled* width (320 × 0.86 ≈ 275) and the "card ~320px wide" check reads
- * 275. `boundingBox` includes the transform; wait until it settles back to identity.
- */
-async function waitOpen(page) {
-  await page
-    .waitForFunction(
-      () => {
-        const el = document.querySelector('#cat-card-panel');
-        if (!el || el.hidden) return false;
-        const t = getComputedStyle(el).transform;
-        return t === 'none' || t === 'matrix(1, 0, 0, 1, 0, 0)';
-      },
-      undefined,
-      { timeout: 3000 },
-    )
-    .catch(() => {});
-  await page.waitForTimeout(50);
-}
 
 // ---- desktop ----
 {

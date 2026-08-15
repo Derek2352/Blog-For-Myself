@@ -94,6 +94,24 @@ export const CARD_POUNCE_RANGE = POUNCE_RANGE * CARD_SCALE; // 18
 export const CARD_HIT_RADIUS = 46 * CARD_SCALE; // ~9
 export const CARD_SAFE_FLEE_PX = SAFE_FLEE_PX * CARD_SCALE; // ~85
 
+/*
+ * A `CARD_MERCY_BUDGET_MS` lived here briefly — the bored cat's walk across the board diagonal,
+ * derived from stalk speed, `AGGRO_BORED` and the grooming it stops for, so `arena7` §1's mercy
+ * timeout would move with `CARD_SCALE` instead of sitting frozen at `26000`.
+ *
+ * It is gone because the better fix was not a better budget. `d6b89a5` found that the check was
+ * waiting on the wrong things twice over: its "claims changed" signal nets out on the card (a
+ * hold flips its tile claimed→scrubbing while the last one clears back, so the count never
+ * moves), and `parkableSpot` handed it the claim *furthest* from the boss — so the harness was
+ * timing a board-length walk that its subject, "does a bored cat still answer a hold", never
+ * needed. Holding the *nearest* claim and reading the telegraph alone bounds it by the regrow
+ * clock (~12s measured) instead.
+ *
+ * Kept as a note because the lesson is not about cats: **deriving a number correctly is not the
+ * same as needing the number.** The derivation was sound and measured within 1s of the literal
+ * it replaced, and it was still modelling a wait the check should not have been doing.
+ */
+
 /** The same walk-and-hold arithmetic `squad.ts` proves, for a kitten rather than a hand. */
 export const SAFE_WORK_PX = POUNCE_RANGE + STALK_SPEED * AGGRO_DESPERATE * (SCRUB_MS / 1000);
 
@@ -293,6 +311,35 @@ export async function fresh(browser, { mode = 'commander', storage = true, phone
   if (mode === 'manual') await ctx.addInitScript(PICK_MANUAL);
   if (!storage) await ctx.addInitScript(DENY_STORAGE);
   return ctx;
+}
+
+/**
+ * Wait for the card's open animation to settle before measuring anything about it.
+ *
+ * `panel.waitFor({ state: 'visible' })` fires the moment `hidden` drops, but the panel then runs
+ * `cat-card-open` (0.18s, `scale(0.86) → scale(1)`), and `boundingBox()` includes the transform —
+ * so a read inside that window reports 320 × 0.86 ≈ 275 and "the card is ~320px wide" fails on a
+ * card that is exactly 320px wide.
+ *
+ * Shared rather than kept where it was found. `card-check` had it; `card-mechanics` cleared the
+ * same race with a bare `waitForTimeout(500)`, which works only for as long as nobody makes the
+ * animation slower — a magic sleep is this fault waiting to come back. §12.1: one strategy, one
+ * copy. A `waitForFunction` also returns the instant it settles instead of always paying 500ms.
+ */
+export async function waitOpen(page, { timeout = 3000, settle = 50 } = {}) {
+  await page
+    .waitForFunction(
+      () => {
+        const el = document.querySelector('#cat-card-panel');
+        if (!el || el.hidden) return false;
+        const t = getComputedStyle(el).transform;
+        return t === 'none' || t === 'matrix(1, 0, 0, 1, 0, 0)';
+      },
+      undefined,
+      { timeout },
+    )
+    .catch(() => {});
+  await page.waitForTimeout(settle);
 }
 
 /**

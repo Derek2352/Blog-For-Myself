@@ -177,6 +177,14 @@ const FIXTURE_WORDS = /none\b|nowhere|never rolled|no deal|not (?:on|in) this|co
  * Four suppressions to catch one is the trade this work refuses to make, and the one real site gets
  * converted by hand instead. A checker's job is to stop the next fault, not to be the only reason a
  * known one gets fixed.
+ *
+ * 2.2.2 is what that decision costs, and it is worth writing down rather than reversing. `arena2`
+ * grew `Number(...dataset.openedAt) || performance.now()` — a fallback whose default is *the exact
+ * measurement the line was added to stop using*, so a missing tell would have resumed the flake it
+ * fixed instead of going red. Nothing here flagged it, by design. **A rule this file declines to
+ * enforce is a rule the call site has to hold**, which is why §12.1 states the fixture/assertion
+ * split in prose and not only in code: the checker catches two shapes of one fault, and a reviewer
+ * is still the thing that catches the third.
  */
 const fixtureShaped = (arg: string) =>
   [...arg.matchAll(/(?::|\?\?)\s*(['"`])((?:\\.|(?!\1)[\s\S])*)\1/g)].some((m) => FIXTURE_WORDS.test(m[2]));

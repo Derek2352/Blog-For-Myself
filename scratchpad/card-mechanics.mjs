@@ -9,26 +9,28 @@
 // Chromium and the base URL come from the shared strategy (§12.1) — see card-check.mjs for
 // why resolving Chrome privately made this harness exit 2 on every Linux run. This file
 // already borrowed `report()`; it should have borrowed `launch()` in the same import.
-import { launch, BASE, report } from './lib/fixture.mjs';
+import { launch, BASE, fresh, armAmmo, waitOpen, report } from './lib/fixture.mjs';
 const { ok, fixture, done } = report();
 const browser = await launch();
 
-// Treat economy: give the visitor paws, so throws have ammo (the page HUD owns it).
-const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-await ctx.addInitScript(() => {
-  localStorage.setItem('welcomed', '1');
-  const mark = () =>
-    document.querySelectorAll('#cat-score .cat-paw[data-slug]').forEach((p) => p.classList.add('got'));
-  mark();
-  window.setInterval(mark, 150);
-});
+// Treat economy: the throws below need ammo, and ammo is *earned* — by browsing the tabs,
+// through the fleet's `armAmmo()`. This file used to stamp `.got` onto the paws from an init
+// script on a 150ms interval, the same losing race `card-ambient` ran: `SiteCat`'s own render
+// pass does `paw.classList.toggle('got', game.found.has(slug))` every frame and takes the class
+// straight back off. Fixed in one copy and left in the other is the §12.1 fault exactly.
+const ctx = await fresh(browser);
 const page = await ctx.newPage();
 await page.goto(BASE, { waitUntil: 'networkidle' });
-await page.waitForTimeout(400);
+const found = await armAmmo(page, { hops: 3, pool: 6, dwell: 650, settle: 750, home: '/' });
+fixture('treats: ammo earned by browsing', found > 0, `${found} found`);
 
 await page.locator('#cat-card-toggle').click();
 await page.locator('#cat-card-panel').waitFor({ state: 'visible' });
-await page.waitForTimeout(500);
+// Two waits, because the 500ms sleep that used to sit here was doing two jobs: clearing the
+// open animation before any `boundingBox()` read, and letting the fight settle. The first is a
+// condition and belongs to `waitOpen()`; only the second is a duration.
+await waitOpen(page);
+await page.waitForTimeout(400); // the fight's first beat — stances rolled, squad placed
 
 // Commander mode: click on a claimed tile = order a kitten (free — treats are the throw's).
 const claimedTile = page.locator('.cat-tile[data-state="claimed"]').first();
@@ -69,8 +71,13 @@ await page.keyboard.press('Escape');
 await page.waitForFunction(() => document.querySelector('#cat-card-panel').hidden);
 await page.locator('#cat-card-toggle').click();
 await page.locator('#cat-card-panel').waitFor({ state: 'visible' });
-await page.waitForTimeout(500);
-ok('manual: mode chip mirrors page chip', cardMode === 'true', cardMode ?? '');
+await waitOpen(page);
+await page.waitForTimeout(400); // the reopened fight's first beat
+// Named for what it measures. It read "mode chip mirrors page chip" until now — 2.2 deleted the
+// page chip, and `55e9b6a` corrected that wording in `card-check` and `card-fight` but not here.
+// The assertion was already card-only and correct; a green check that misdescribes itself is
+// worse than a red one, because nobody goes back and re-reads it.
+ok('manual: mode chip flips commander→manual', cardMode === 'true', cardMode ?? '');
 
 const manClaimed = page.locator('.cat-tile[data-state="claimed"]').first();
 const mbox = await manClaimed.boundingBox();

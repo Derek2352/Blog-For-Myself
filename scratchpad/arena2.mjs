@@ -220,8 +220,21 @@ const pickTarget = () =>
   // after the click (the waitForTimeout below + the deal), which under-measures the opening
   // grace by that offset and flakes the check. `dataset.openedAt` is the game's clock at the
   // moment `startFight` ran, so `tele.t - openedAt` is the true elapsed time.
-  const openedAt = await page.evaluate(
-    () => Number(document.querySelector('[data-boss]')?.dataset.openedAt) || performance.now(),
+  //
+  // Read with no fallback, deliberately. `... || performance.now()` was the first shape here,
+  // and a fallback to `performance.now()` is a fallback to *the exact measurement this line
+  // exists to replace* — so a renamed or dropped tell would not go red, it would quietly go
+  // back to flaking. The hygiene test cannot catch this one: `tests/harness-hygiene.test.ts`
+  // records that the `x || fallback` shape was tried and dropped for flagging four correct
+  // sites, so the call site has to hold the rule itself. A missing tell is a missing fixture.
+  const openedAt = await page.evaluate(() => {
+    const raw = document.querySelector('[data-boss]')?.dataset.openedAt;
+    return raw === undefined ? null : Number(raw);
+  });
+  fixture(
+    "the boss carries the game's open time",
+    Number.isFinite(openedAt),
+    openedAt === null ? 'no data-openedAt on [data-boss]' : `openedAt=${openedAt.toFixed(0)}`,
   );
 
   fixture('the board offers a claimed tile and a cat that fights', await fighter(page));

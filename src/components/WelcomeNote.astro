@@ -33,12 +33,11 @@ import { site } from '@/data/site';
       Take the timeline
     </a>
   </div>
-  {/* Two cats, so the note names both: the one that wanders is the site's, the one in the
-      corner is the game (2.2 moved the game into the card — this line used to point only at
-      the wanderer, which left the card undiscovered). */}
-  <p class="rail mt-5">
-    ps · the cat along the bottom edge chases cursors; the one in the corner wants a game
-  </p>
+  {/* Points at the card, not at both cats. The wandering cat has always been found on its own
+      and needs no announcing; the card is the part nobody finds by accident. Naming both made
+      a first-time reader hold two cats apart before meeting either — a disambiguation where
+      the rest of this note keeps to single clean clauses. */}
+  <p class="rail mt-5">ps · there's a cat in the bottom corner — tap it for a game</p>
   <p class="sr-only">{site.tagline}</p>
 </dialog>
 
