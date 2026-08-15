@@ -263,24 +263,32 @@ async function playByFleeing(page, budgetMs = 150_000) {
   const bar = await page.evaluate(() => {
     const panel = document.getElementById('cat-card-panel');
     const b = document.querySelector('.cat-card-territory');
+    const head = document.querySelector('.cat-card-header');
+    const board = document.querySelector('.cat-card-board');
     const r = b.getBoundingClientRect();
-    const pr = panel.getBoundingClientRect();
     return {
       h: r.height,
       top: r.top,
-      // The panel carries a 1px border, so "full width" means the card's *content* box
-      // (`clientWidth`/`clientTop` exclude the border), not the border-box.
-      panelTop: pr.top,
-      borderTop: panel.clientTop,
+      belowHeader: r.top >= head.getBoundingClientRect().bottom - 1,
+      aboveBoard: r.bottom <= board.getBoundingClientRect().top + 1,
       wide: r.width,
       contentWide: panel.clientWidth,
       text: b.textContent.trim(),
       aria: b.getAttribute('aria-hidden'),
     };
   });
+  // 2.3 moved this. It used to be a 3px full-bleed strip along the very top of the card, where
+  // the panel's own border-radius clipped its left end and it ran out in mid-air with no track
+  // behind it — it read as a rendering artefact rather than a measure of anything. It is now a
+  // 2px inset gauge sitting between the header and the board, directly above what it measures.
+  // The check follows the design rather than the other way round: thin, inset, and in place.
   ok(
-    'the bar is 3px across the top of the card, full width',
-    bar.h === 3 && Math.abs(bar.wide - bar.contentWide) < 1 && Math.abs(bar.top - (bar.panelTop + bar.borderTop)) < 1,
+    'the gauge is a thin inset bar between the header and the board',
+    bar.h <= 3 &&
+      bar.belowHeader &&
+      bar.aboveBoard &&
+      bar.wide < bar.contentWide &&
+      bar.wide > bar.contentWide * 0.8,
     JSON.stringify(bar),
   );
   ok('and carries no numbers (§6)', bar.text === '', JSON.stringify(bar.text));

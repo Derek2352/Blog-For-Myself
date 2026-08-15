@@ -53,15 +53,26 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       <g class="cat-card-tail">
         <path d="M11 23 C4 21 1.5 13 7 7" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"></path>
       </g>
+      {/* Byte-for-byte `#site-cat`'s silhouette: legs, body, ears, head, one knocked-out eye.
+          §0 says nothing new is drawn, and the card's copy had quietly broken that — it dropped
+          the legs and the head circle, so the cat was a floating loaf. An attempt to patch it
+          with a bigger dome and a two-eyed smile made it worse: that is a cartoon, and this site
+          draws ink silhouettes. The fix is not a better invention, it is the drawing that
+          already exists. */}
+      <g class="cat-card-legs">
+        <rect x="16" y="27" width="3.6" height="11" rx="1.8"></rect>
+        <rect x="23" y="27" width="3.6" height="11" rx="1.8"></rect>
+        <rect x="38" y="27" width="3.6" height="11" rx="1.8"></rect>
+        <rect x="45" y="27" width="3.6" height="11" rx="1.8"></rect>
+      </g>
       <path class="cat-card-body" d="M14 29.5 C10 28.5 9.5 20 16 16.4 C18.5 15.3 21 15 24 15 L45 15 C52 15.5 55 19 55 23.5 L55 26.5 C55 28.5 53.5 29.5 51.5 29.5 Z"></path>
       <g class="cat-card-head">
         <path class="cat-card-ear cat-card-ear-far" d="M48 9 L49.5 1.5 L54 6.5 Z"></path>
         <g class="cat-card-ear cat-card-ear-near">
           <path d="M56.5 6.5 L61 1.5 L62.5 9 Z"></path>
         </g>
-        <circle class="cat-card-eye" cx="50" cy="18" r="1.3"></circle>
-        <circle class="cat-card-eye" cx="56" cy="18" r="1.3"></circle>
-        <path class="cat-card-muzzle" d="M52 22.5 Q54 24.5 56 22.5" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"></path>
+        <circle cx="55" cy="13" r="7.6"></circle>
+        <circle class="cat-card-eye" cx="57.5" cy="11.5" r="1.15"></circle>
       </g>
     </svg>
     <!-- Treats collected from browsing, shown on the collapsed icon: the ammo display
@@ -79,11 +90,6 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     aria-label="Cat card game"
     hidden
   >
-    <!-- Territory: thin strip at the top of the card. Player's share, so it grows as you win. -->
-    <div class="cat-card-territory" aria-hidden="true">
-      <div class="cat-card-territory-fill" data-territory></div>
-    </div>
-
     <!-- Header: controls live inside the card (the HUD chips move here in the migration). -->
     <header class="cat-card-header">
       <span class="cat-card-title rail">cat card</span>
@@ -117,6 +123,12 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       </div>
     </header>
 
+    <!-- Territory: the player's share of the board, so it grows as you win. Sits between the
+         header and the board — directly above the thing it measures. -->
+    <div class="cat-card-territory" aria-hidden="true">
+      <div class="cat-card-territory-fill" data-territory></div>
+    </div>
+
     <!-- The board: a mini-grid of tiles, plus the game layer (boss, kittens, treat, ribbon).
          The board element is the coordinate space — see the script's `boardCoords`. -->
     <div class="cat-card-board" data-board role="group" aria-label="Tile board">
@@ -124,12 +136,17 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       <div class="cat-card-boss" data-boss aria-hidden="true">
         <svg viewBox="0 0 64 40" class="cat-card-boss-svg">
           <path class="cat-card-boss-tail" d="M11 23 C4 21 1.5 13 7 7" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"></path>
+          <g class="cat-card-legs">
+            <rect x="16" y="27" width="3.6" height="11" rx="1.8"></rect>
+            <rect x="23" y="27" width="3.6" height="11" rx="1.8"></rect>
+            <rect x="38" y="27" width="3.6" height="11" rx="1.8"></rect>
+            <rect x="45" y="27" width="3.6" height="11" rx="1.8"></rect>
+          </g>
           <path class="cat-card-boss-body" d="M14 29.5 C10 28.5 9.5 20 16 16.4 C18.5 15.3 21 15 24 15 L45 15 C52 15.5 55 19 55 23.5 L55 26.5 C55 28.5 53.5 29.5 51.5 29.5 Z"></path>
           <path class="cat-card-boss-ear cat-card-boss-ear-far" d="M48 9 L49.5 1.5 L54 6.5 Z"></path>
           <path class="cat-card-boss-ear cat-card-boss-ear-near" d="M56.5 6.5 L61 1.5 L62.5 9 Z"></path>
-          <circle class="cat-card-boss-eye" cx="50" cy="18" r="1.3"></circle>
-          <circle class="cat-card-boss-eye" cx="56" cy="18" r="1.3"></circle>
-          <path class="cat-card-boss-muzzle" d="M52 22.5 Q54 24.5 56 22.5" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"></path>
+          <circle cx="55" cy="13" r="7.6"></circle>
+          <circle class="cat-card-eye" cx="57.5" cy="11.5" r="1.15"></circle>
         </svg>
       </div>
       <!-- Kittens appear here (cloned from the boss drawing, §0). -->
@@ -166,11 +183,14 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
   }
 
   /* ---- collapsed icon ---- */
+  /* 3px of padding, not 6px. The silhouette was being drawn at 32px inside a 44px button, and
+     at that size the ears stop reading as ears and start reading as sparkles — the icon did not
+     say "cat". Nothing is redrawn (§0); it simply stops being shrunk. */
   .cat-card-icon {
     display: block;
     width: 44px;
     height: 44px;
-    padding: 6px;
+    padding: 3px;
     border: 1px solid color-mix(in srgb, var(--color-ink) 25%, transparent);
     border-radius: 50%;
     background: var(--color-ground);
@@ -195,6 +215,14 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     width: 100%;
     height: 100%;
     fill: currentColor;
+  }
+
+  /* The eye is *knocked out* of the silhouette in the ground colour, exactly as `#site-cat`'s
+     `.cat-eye` is. The card's copy left it at `currentColor`, painting ink on ink, which is why
+     the cat looked eyeless and invited the cartoon face that had to be undone. One eye, because
+     the cat is drawn in profile. */
+  :global(.cat-card-eye) {
+    fill: var(--color-ground);
   }
 
   /* Treats found from browsing, on the collapsed icon — the ammo display (§2.2). */
@@ -303,67 +331,81 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     to { opacity: 0; transform: scale(0.86); }
   }
 
-  /* Territory strip — the fight's axis, drawn on the card instead of the page edge. */
+  /* Territory — a gauge, sitting directly above the board it describes.
+     It used to be a 3px bar *above the header*, where the card's own border-radius clipped its
+     left end and it stopped in mid-air with no track behind it: it read as a rendering glitch
+     rather than a measure of anything. Inset to the header's padding, with a visible track and
+     rounded caps, it reads as what it is. */
   .cat-card-territory {
-    height: 3px;
-    background: color-mix(in srgb, var(--color-ink) 14%, transparent);
+    height: 2px;
+    margin: 0 0.6rem 0.45rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-ink) 10%, transparent);
+    overflow: hidden;
   }
   .cat-card-territory-fill {
     height: 100%;
     width: calc(100% * var(--territory, 0.55));
-    background: var(--color-accent);
+    border-radius: inherit;
+    background: color-mix(in srgb, var(--color-accent) 70%, transparent);
     transition: width 0.18s ease-out;
   }
 
-  /* Header */
+  /* Header — a caption, not a toolbar.
+     The chrome used to outshout the game: `sound` rendered as a filled wine lozenge, which made
+     the *mute button* the highest-contrast object on the card, above the board it sits on. The
+     rule now is that the chip is always neutral and **the pip carries the state** — a filled dot
+     for on, a hollow ring for off. The markup already had the pip; it was doing nothing. */
   .cat-card-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
-    padding: 0.5rem 0.6rem;
-    border-bottom: 1px solid color-mix(in srgb, var(--color-ink) 12%, transparent);
+    padding: 0.42rem 0.6rem 0.36rem;
   }
   .cat-card-title {
-    font-size: 0.72rem;
+    font-size: 0.62rem;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--color-muted);
+    letter-spacing: 0.08em;
+    color: color-mix(in srgb, var(--color-muted) 80%, transparent);
   }
   .cat-card-controls {
     display: flex;
-    gap: 0.3rem;
+    gap: 0.26rem;
   }
   .cat-card-btn {
     display: inline-flex;
     align-items: center;
-    gap: 0.3rem;
-    padding: 0.22rem 0.5rem;
-    font-size: 0.72rem;
-    border: 1px solid color-mix(in srgb, var(--color-ink) 25%, transparent);
+    gap: 0.28rem;
+    padding: 0.16rem 0.42rem;
+    font-size: 0.6rem;
+    border: 1px solid color-mix(in srgb, var(--color-ink) 18%, transparent);
     border-radius: 999px;
     background: transparent;
-    color: var(--color-ink);
+    color: var(--color-muted);
     cursor: pointer;
+    transition: border-color 0.12s ease, color 0.12s ease;
   }
   .cat-card-btn:hover {
     border-color: var(--color-accent);
     color: var(--color-accent);
   }
+  /* Pressed moves the *text* to ink and the pip to accent — deliberately not a fill. A chip that
+     is on should read as settled, not as an alarm. */
   .cat-card-btn[aria-pressed='true'] {
-    background: var(--color-accent);
-    border-color: var(--color-accent);
-    color: var(--color-accent-ink);
+    color: var(--color-ink);
+    border-color: color-mix(in srgb, var(--color-ink) 28%, transparent);
   }
   .cat-card-pip {
-    width: 7px;
-    height: 7px;
+    width: 6px;
+    height: 6px;
     flex: none;
-    border: 1px solid currentColor;
+    border: 1px solid color-mix(in srgb, var(--color-muted) 70%, transparent);
     border-radius: 50%;
   }
   .cat-card-btn[aria-pressed='true'] .cat-card-pip {
-    background: currentColor;
+    background: var(--color-accent);
+    border-color: var(--color-accent);
   }
 
   /* ---- the board (the coordinate space) ---- */
@@ -389,15 +431,20 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     align-items: center;
     justify-content: center;
     min-height: 44px;
-    padding: 0.3rem 0.4rem;
-    border: 1px solid color-mix(in srgb, var(--color-ink) 22%, transparent);
+    padding: 0.3rem 0.35rem;
+    border: 1px solid color-mix(in srgb, var(--color-ink) 16%, transparent);
     border-radius: 8px;
-    background: color-mix(in srgb, var(--color-ground) 92%, var(--color-ink) 8%);
-    font-size: 0.72rem;
+    background: color-mix(in srgb, var(--color-ground) 94%, var(--color-ink) 6%);
+    /* 0.62rem, not 0.72. Four of eleven labels wrapped to two lines and nearly touched their
+       edges — the type was fighting the box. The box may not shrink (44px is the touch target),
+       so the type gives way, and the board gets its air back. */
+    font-size: 0.62rem;
+    line-height: 1.2;
     text-align: center;
+    text-wrap: balance;
     color: var(--color-ink);
     /* §5.1's claim language: painted only, never laid out. */
-    transition: transform 0.12s ease, box-shadow 0.12s ease;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
     cursor: crosshair;
   }
   @media (hover: none), (pointer: coarse) {
@@ -410,20 +457,25 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     }
   }
 
-  /* unclaimed → neutral. claimed → wash + dashed edge + tilt, same as the page game. */
+  /* unclaimed → neutral. claimed → wash + a tinted edge + tilt.
+     The edge was `2px dashed` at 62% accent. Six of those at once made the board read as an
+     error state or a cut-here template, and they were the busiest thing on a card whose busiest
+     thing should be the cat. A claim should feel *occupied*, not outlined: the tile's own border
+     goes accent-tinted and the wash does the rest.
+     The wash itself is untouchable — `touch-fight` parses this box-shadow's alpha and requires
+     `0.07 + 0.19 × --scrub`, and `arena` recomputes text contrast against exactly 7%. */
   :global(.cat-tile[data-state='claimed']) {
     box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--color-accent) 7%, transparent);
-    outline: 2px dashed color-mix(in srgb, var(--color-accent) 62%, transparent);
-    outline-offset: -3px;
+    border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
     transform: rotate(var(--tile-tilt, 0deg)) scale(0.99);
   }
 
-  /* being-scrubbed → the wash deepens toward the freed tint (§5.2's in-claim progress). */
+  /* being-scrubbed → the wash deepens toward the freed tint (§5.2's in-claim progress), and the
+     edge firms up with it, so a tile being taken is legible at a glance and not only by tint. */
   :global(.cat-tile[data-state='scrubbing']) {
     box-shadow: inset 0 0 0 100vmax
       color-mix(in srgb, var(--color-accent) calc(7% + 19% * var(--scrub, 0)), transparent);
-    outline: 2px dashed color-mix(in srgb, var(--color-accent) 62%, transparent);
-    outline-offset: -3px;
+    border-color: color-mix(in srgb, var(--color-accent) 72%, transparent);
   }
 
   /* freed → the flash, then back to neutral. Same 0.42s ease as the page game. */
@@ -438,22 +490,34 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
   }
 
   /* ---- the game layer (boss, kittens, treat, ribbon) ---- */
+  /* 28×18, up from 24×15. On a 318×217 board carrying eleven labelled tiles, a 24px cat was the
+     least visible thing on screen — in a game about a cat. The sprite is presentation only; the
+     fight's geometry comes from `card.ts`'s constants, not from how big the drawing is. */
   .cat-card-boss {
     position: absolute;
     left: 0;
     top: 0;
-    width: 24px;
-    height: 15px;
+    width: 28px;
+    height: 18px;
     pointer-events: none;
     color: var(--color-ink);
     z-index: 3;
-    filter: drop-shadow(0 0 1.5px var(--color-ground));
+    filter: drop-shadow(0 0 2px var(--color-ground));
   }
   .cat-card-boss-svg {
     display: block;
     width: 100%;
     height: 100%;
     fill: currentColor; /* same reason as the icon above — no `fill` attribute on the paths */
+    /* The cat swells with the ground it holds (§7.3's characterisation, and the page game's own
+       `--boss-scale`). `paintTerritory` has been *setting* this custom property since 2.2 and
+       nothing ever read it — the boss never actually grew. Applied with the `scale` property
+       rather than `transform`, so it composes with the facing flip below and, more importantly,
+       leaves `[data-boss]`'s layout box at 28×18: the fleet measures the boss's rect for every
+       distance check, and a cosmetic swell must not move a measurement. */
+    scale: var(--boss-scale, 1);
+    transform-origin: 50% 60%;
+    transition: scale 0.4s ease-out;
   }
   .cat-card-boss[data-facing='-1'] .cat-card-boss-svg {
     transform: scaleX(-1);
@@ -496,11 +560,14 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     position: absolute;
     left: 0;
     top: 0;
-    width: 12px;
-    height: 8px;
+    width: 16px;
+    height: 10px;
     color: var(--color-ink);
     fill: currentColor;
     opacity: 0.92;
+    /* The same ground-coloured halo the boss has. A kitten standing on a tinted claimed tile had
+       nothing separating it from the tile. */
+    filter: drop-shadow(0 0 1.5px var(--color-ground));
   }
   :global(.cat-card-kit svg) {
     display: block;
@@ -540,32 +607,56 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     to { opacity: 0; transform: scale(0.3); }
   }
 
+  /* A speech bubble, not a slab. It was solid `--color-ink` with inverted text — a black bar
+     across two tiles, and the second-loudest thing on the card after the old sound chip. A small
+     cat should not speak in the largest voice available. Ground with an accent hairline keeps it
+     legible over tiles while reading as *paper*, like the rest of the site. */
   .cat-card-ribbon {
     position: absolute;
     z-index: 5;
     max-width: calc(100% - 1rem);
-    padding: 0.22rem 0.5rem;
-    border-radius: 999px;
-    background: var(--color-ink);
-    color: var(--color-ground);
-    font-size: 0.68rem;
+    padding: 0.2rem 0.45rem;
+    border-radius: 7px;
+    background: var(--color-ground);
+    border: 1px solid color-mix(in srgb, var(--color-accent) 40%, transparent);
+    box-shadow: 0 1px 5px color-mix(in srgb, var(--color-ink) 16%, transparent);
+    color: var(--color-ink);
+    font-size: 0.6rem;
     line-height: 1.3;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.22s ease;
   }
+  /* The tail — so the line is attached to whoever is saying it. `--tail-x` is set per line from
+     the boss's position, because the bubble is only centred on the cat until a board edge
+     clamps it. */
+  .cat-card-ribbon::after {
+    content: '';
+    position: absolute;
+    left: var(--tail-x, 12px);
+    bottom: -4px;
+    width: 6px;
+    height: 6px;
+    background: inherit;
+    border-right: inherit;
+    border-bottom: inherit;
+    transform: rotate(45deg);
+  }
   .cat-card-ribbon.show {
     opacity: 1;
   }
 
+  /* Status text recedes. At 0.72rem in letterspaced uppercase it was competing with the tile
+     labels for attention while saying much less. */
   .cat-card-footer {
     display: flex;
     flex-direction: column;
-    gap: 0.15rem;
-    padding: 0.4rem 0.6rem;
-    border-top: 1px solid color-mix(in srgb, var(--color-ink) 12%, transparent);
-    font-size: 0.72rem;
-    color: var(--color-muted);
+    gap: 0.1rem;
+    padding: 0.36rem 0.6rem 0.42rem;
+    border-top: 1px solid color-mix(in srgb, var(--color-ink) 10%, transparent);
+    font-size: 0.58rem;
+    letter-spacing: 0.04em;
+    color: color-mix(in srgb, var(--color-muted) 85%, transparent);
   }
   /* The caption is the game's voice; it gets the width and stays on one line. Empty between
      beats, so it reserves its height to keep the card from resizing under the player. */
@@ -839,6 +930,25 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       bossNode.style.transform = `translate(${cx - w / 2}px, ${cy - h / 2}px)`;
     }
 
+    /**
+     * Keep the whole sprite on the board, not just its centre.
+     *
+     * The stalk step used to clamp with the literals `12` and `8` — the *old* 24×15 sprite's
+     * half-width and half-height. 2.3 drew the cat at 28×18 and the numbers stayed behind, so
+     * the box overhung the board by 2px at the left and right edges and `arena2`'s "the boss
+     * never leaves the board" (which allows 1px) went red at every corner. Derived from the
+     * sprite's own size, it cannot drift again the next time the drawing changes.
+     */
+    function onBoard(nx: number, ny: number): { x: number; y: number } {
+      const { w, h } = boardBounds();
+      const halfW = bossNode.offsetWidth / 2;
+      const halfH = bossNode.offsetHeight / 2;
+      return {
+        x: Math.max(halfW, Math.min(w - halfW, nx)),
+        y: Math.max(halfH, Math.min(h - halfH, ny)),
+      };
+    }
+
     function bossPhase(phase: Phase, now: number): void {
       boss.phase = phase;
       boss.since = now;
@@ -950,9 +1060,15 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     function paintTerritory(): void {
       const mine = 1 - territory(arena.claimed.length, arena.order.length);
       if (territoryFill) territoryFill.style.setProperty('--territory', String(mine));
-      // The boss grows with its share, like the page game's --boss-scale.
+      // The boss grows with its share, like the page game's `--boss-scale`.
+      //
+      // `1 + share * 0.35`, not 2.2's `1.2 + share * 0.6`. That range was never seen by anyone:
+      // the property was set here every frame and **no CSS rule read it**, so the cat has never
+      // once grown. Wiring it up meant choosing the range for the first time rather than
+      // preserving a behaviour, and 1.2–1.8 on the card's 28×18 sprite is a 34–50px cat on a
+      // 318px board — a caricature. 1.0–1.35 reads as "it is winning" without taking the board.
       const share = territory(arena.claimed.length, arena.order.length);
-      bossNode.style.setProperty('--boss-scale', String(1.2 + share * 0.6));
+      bossNode.style.setProperty('--boss-scale', String(1 + share * 0.35));
     }
 
     function hideTerritory(): void {
@@ -970,10 +1086,23 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       ribbonNode.textContent = lineText(id);
       ribbonNode.hidden = false;
       const w = ribbonNode.offsetWidth;
+      const h = ribbonNode.offsetHeight;
       const x = boss.x - w / 2;
-      const y = boss.y - bossNode.offsetHeight - 8;
+      // `boss.y` is the cat's **centre** (see `place`, which translates by `cy - h / 2`), and
+      // this used to subtract the boss's full height from it as if it were the top — so the
+      // bubble was placed *on* the cat rather than above it (measured: ribbon bottom 11px inside
+      // the sprite). Clearing the cat's own half-height puts it above, measured at an 11px gap.
+      const y = boss.y - bossNode.offsetHeight / 2 - h - 6;
       const bw = boardEl.offsetWidth;
-      ribbonNode.style.transform = `translate(${Math.max(4, Math.min(bw - w - 4, x))}px, ${Math.max(4, y)}px)`;
+      const left = Math.max(4, Math.min(bw - w - 4, x));
+      ribbonNode.style.transform = `translate(${left}px, ${Math.max(4, y)}px)`;
+      // The tail points at whoever is speaking. It sits at a fixed 12px in CSS, which is only
+      // right when the bubble happens to be centred on the cat — and it is not, whenever the
+      // clamp above pushes it off a board edge.
+      ribbonNode.style.setProperty(
+        '--tail-x',
+        `${Math.max(9, Math.min(w - 15, boss.x - left - 3))}px`,
+      );
       requestAnimationFrame(() => {
         ribbonNode.hidden = false;
         ribbonNode.classList.add('show');
@@ -1124,14 +1253,19 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       node.className = 'cat-card-kit';
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.setAttribute('viewBox', '0 0 64 40');
+      // `#site-cat`'s silhouette again (§0), legs and head included. The eye is dropped here
+      // and only here: a kitten renders at 16×10, where a 1.15r knockout is sub-pixel and just
+      // muddies the shape.
       svg.innerHTML = `
         <path d="M11 23 C4 21 1.5 13 7 7" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/>
+        <rect x="16" y="27" width="3.6" height="11" rx="1.8"/>
+        <rect x="23" y="27" width="3.6" height="11" rx="1.8"/>
+        <rect x="38" y="27" width="3.6" height="11" rx="1.8"/>
+        <rect x="45" y="27" width="3.6" height="11" rx="1.8"/>
         <path d="M14 29.5 C10 28.5 9.5 20 16 16.4 C18.5 15.3 21 15 24 15 L45 15 C52 15.5 55 19 55 23.5 L55 26.5 C55 28.5 53.5 29.5 51.5 29.5 Z"/>
         <path d="M48 9 L49.5 1.5 L54 6.5 Z"/>
         <path d="M56.5 6.5 L61 1.5 L62.5 9 Z"/>
-        <circle cx="50" cy="18" r="1.3"/>
-        <circle cx="56" cy="18" r="1.3"/>
-        <path d="M52 22.5 Q54 24.5 56 22.5" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+        <circle cx="55" cy="13" r="7.6"/>
       `;
       node.appendChild(svg);
       squadNode.appendChild(node);
@@ -1466,6 +1600,11 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
           bossPhase('eat', t);
           return;
         }
+        // Deliberately *not* `onBoard()`. A treat can land in the board's padding, closer to an
+        // edge than the sprite's half-width; clamping the walk there stops the cat a few pixels
+        // short of the treat, `away` never closes, and it never reaches `eat` — measured as
+        // arena5 timing out for 20s waiting on a phase that could no longer arrive. Fetching to
+        // the very edge, sprite overhanging slightly, is the correct behaviour.
         const step = Math.min(away, FETCH_SPEED * CARD_SCALE * dt);
         placeBoss(boss.x + (tx / away) * step, boss.y + (ty / away) * step);
         faceToward(tx);
@@ -1589,10 +1728,8 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
           }
         }
         if (spec.pin) ny = boss.y;
-        const { w, h } = boardBounds();
-        nx = Math.max(12, Math.min(w - 12, nx));
-        ny = Math.max(8, Math.min(h - 8, ny));
-        placeBoss(nx, ny);
+        const on = onBoard(nx, ny);
+        placeBoss(on.x, on.y);
         faceToward(dx);
       }
     }
@@ -1817,8 +1954,10 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       const paws = [...document.querySelectorAll<HTMLElement>('#cat-score .cat-paw[data-slug]')];
       arena.ammoWas = paws.map((p) => p.classList.contains('got'));
       withholdForRung(paws);
+      // Spawn on the floor, centre — `h - 8` hard-coded the old sprite's half-height here too.
       const { w, h } = boardBounds();
-      placeBoss(w / 2, h - 8);
+      const spawn = onBoard(w / 2, h);
+      placeBoss(spawn.x, spawn.y);
       boss.facing = 1;
       boss.last = t;
       rollStance(arena.seed);
