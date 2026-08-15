@@ -17,6 +17,30 @@ const ok = (name, pass, detail = '') => {
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
 };
 
+/**
+ * Wait for the card's open animation to finish before measuring it.
+ *
+ * `panel.waitFor({ state: 'visible' })` fires the moment `hidden` drops, but the panel then
+ * runs `cat-card-open` (0.18s, `scale(0.86) → scale(1)`) — a `boundingBox()` read inside that
+ * window reports the *scaled* width (320 × 0.86 ≈ 275) and the "card ~320px wide" check reads
+ * 275. `boundingBox` includes the transform; wait until it settles back to identity.
+ */
+async function waitOpen(page) {
+  await page
+    .waitForFunction(
+      () => {
+        const el = document.querySelector('#cat-card-panel');
+        if (!el || el.hidden) return false;
+        const t = getComputedStyle(el).transform;
+        return t === 'none' || t === 'matrix(1, 0, 0, 1, 0, 0)';
+      },
+      undefined,
+      { timeout: 3000 },
+    )
+    .catch(() => {});
+  await page.waitForTimeout(50);
+}
+
 // ---- desktop ----
 {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -29,6 +53,7 @@ const ok = (name, pass, detail = '') => {
   await icon.click();
   const panel = page.locator('#cat-card-panel');
   await panel.waitFor({ state: 'visible' });
+  await waitOpen(page);
   const box = await panel.boundingBox();
   ok('desktop: card ~320px wide', Math.abs(box.width - 320) < 30, `w=${Math.round(box.width)}`);
   ok('desktop: card above the icon', box.y + box.height < (await icon.boundingBox()).y);
@@ -73,6 +98,7 @@ const ok = (name, pass, detail = '') => {
   await icon.tap();
   const panel = page.locator('#cat-card-panel');
   await panel.waitFor({ state: 'visible' });
+  await waitOpen(page);
   const box = await panel.boundingBox();
   ok('phone: near-full-width card', box.width > 320 && box.width <= 390, `w=${Math.round(box.width)}`);
   ok('phone: no horizontal overflow', await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth));

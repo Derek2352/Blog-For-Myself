@@ -486,13 +486,22 @@ const leaper = (page, want = 'ambush') =>
     let answered = false;
     if (still) {
       await page.mouse.move(still.x, still.y);
+      /*
+       * `parkableSpot` hands over the claim *furthest* from the boss, and a bored cat has to
+       * walk the whole board to answer it: `CARD_STALK_SPEED` (34) × `AGGRO_BORED` (0.6) is
+       * ~20px/s, and it grooms 1.5s of every 5.2s — so a ~346px board diagonal is ~24s of
+       * stalking. The page game's 9s measured a 170px/s cat on a board the harness could
+       * scroll into view; on the card the answer is genuinely slower, not absent (§2.2 scales
+       * distance, not the cat's willingness). Give the walk its real ceiling — the wait still
+       * returns the instant the boss telegraphs or takes the tile.
+       */
       answered = await page
         .waitForFunction(
           (n) =>
             document.querySelector('[data-boss]')?.dataset.phase === 'telegraph' ||
             document.querySelectorAll('.cat-tile[data-state="claimed"]').length !== n,
           before,
-          { timeout: 9000 },
+          { timeout: 26000 },
         )
         .then(() => true)
         .catch(() => false);
@@ -500,7 +509,7 @@ const leaper = (page, want = 'ambush') =>
     ok(
       'mercy, not surrender — a real hold still gets answered',
       answered,
-      answered ? 'the cat committed or lost ground' : 'nothing happened in 9s of holding still',
+      answered ? 'the cat committed or lost ground' : 'nothing happened in 26s of holding still',
     );
   }
 
