@@ -143,10 +143,15 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
             <rect x="45" y="27" width="3.6" height="11" rx="1.8"></rect>
           </g>
           <path class="cat-card-boss-body" d="M14 29.5 C10 28.5 9.5 20 16 16.4 C18.5 15.3 21 15 24 15 L45 15 C52 15.5 55 19 55 23.5 L55 26.5 C55 28.5 53.5 29.5 51.5 29.5 Z"></path>
-          <path class="cat-card-boss-ear cat-card-boss-ear-far" d="M48 9 L49.5 1.5 L54 6.5 Z"></path>
-          <path class="cat-card-boss-ear cat-card-boss-ear-near" d="M56.5 6.5 L61 1.5 L62.5 9 Z"></path>
-          <circle cx="55" cy="13" r="7.6"></circle>
-          <circle class="cat-card-eye" cx="57.5" cy="11.5" r="1.15"></circle>
+          {/* The head is a group so it can move as one. It was not, and `[data-phase='eat']
+              .cat-card-boss-head` had been styling a class no element carried — the cat's dip
+              to its treat has never once played. */}
+          <g class="cat-card-boss-head">
+            <path class="cat-card-boss-ear cat-card-boss-ear-far" d="M48 9 L49.5 1.5 L54 6.5 Z"></path>
+            <path class="cat-card-boss-ear cat-card-boss-ear-near" d="M56.5 6.5 L61 1.5 L62.5 9 Z"></path>
+            <circle cx="55" cy="13" r="7.6"></circle>
+            <circle class="cat-card-eye" cx="57.5" cy="11.5" r="1.15"></circle>
+          </g>
         </svg>
       </div>
       <!-- Kittens appear here (cloned from the boss drawing, §0). -->
@@ -522,6 +527,73 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
   .cat-card-boss[data-facing='-1'] .cat-card-boss-svg {
     transform: scaleX(-1);
   }
+
+  /* ---- posture: the states the model already knows, made visible ----
+     The boss has carried `data-stance`, `data-mood` and `data-groom` since 2.2 and **nothing
+     read any of them** — four stances and three moods rendered the same picture, and the only
+     consumers were harness assertions. §7.3's claim is that difficulty scales *as behaviour you
+     can read*; movement alone was carrying that, so a sleepy cat and an ambush cat differed
+     only in speed, which reads as lag rather than character.
+
+     Drawn with the parts already in the silhouette — a tail angle, an ear rotation, a head dip.
+     No new art, and SVG children need an explicit `transform-origin` because theirs is `0 0`
+     rather than the box centre. Mood and stance come *before* the phase rules below on purpose:
+     a telegraph or a landing is momentary and must override the standing posture. */
+  .cat-card-boss-tail {
+    transform-origin: 11px 23px;
+  }
+  .cat-card-boss-head {
+    transform-origin: 52px 13px;
+  }
+  .cat-card-boss-ear {
+    transform-origin: 55px 9px;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .cat-card-boss-tail,
+    .cat-card-boss-head,
+    .cat-card-boss-ear {
+      transition: transform 0.45s ease;
+    }
+  }
+
+  /* Mood — the rubber band, on the tail. A bored cat lets it fall; a desperate one carries it
+     up and stiff. `even` is deliberately unstyled: the neutral state should look like nothing.
+
+     Signs matter and were wrong on the first pass. The tail is drawn curving *up and back* from
+     its base at (11,23), so a positive (clockwise) rotation **raises** it and a negative one
+     drops it — rendering all seven postures side by side showed "bored" standing to attention
+     and "desperate" slouching, the exact opposite of the intent. Angles are generous because
+     this is read at 28px, not at the size it was authored. */
+  .cat-card-boss[data-mood='bored'] .cat-card-boss-tail {
+    transform: rotate(-32deg);
+  }
+  .cat-card-boss[data-mood='desperate'] .cat-card-boss-tail {
+    transform: rotate(20deg);
+  }
+  /* …and on the ears, which pin back when it means it. */
+  .cat-card-boss[data-mood='desperate'] .cat-card-boss-ear {
+    transform: rotate(-22deg);
+  }
+
+  /* Stance — only `sleepy` gets a tell, and it needs one most: its 0.55× stalk otherwise looks
+     like the game has stalled rather than like a cat that cannot be bothered. Ears droop
+     forward, tail hangs. */
+  .cat-card-boss[data-stance='sleepy'] .cat-card-boss-ear {
+    transform: rotate(17deg);
+  }
+  .cat-card-boss[data-stance='sleepy'] .cat-card-boss-tail {
+    transform: rotate(-38deg);
+  }
+
+  /* Grooming — §7.3's tell, which the harness has been asserting on an attribute the player
+     could not see. The cat stops and washes: head down, tail tucked in along the body. */
+  .cat-card-boss[data-groom='1'] .cat-card-boss-head {
+    transform: translate(-2px, 4px) rotate(-16deg);
+  }
+  .cat-card-boss[data-groom='1'] .cat-card-boss-tail {
+    transform: rotate(-42deg);
+  }
+
   .cat-card-boss[data-phase='telegraph'] .cat-card-boss-ear-near {
     transform-origin: 60px 6px;
     animation: cat-card-ear-charge 0.42s ease-in-out infinite alternate;
