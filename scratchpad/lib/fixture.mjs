@@ -635,27 +635,39 @@ export const wants = {
  * ------------------------------------------------------------------ */
 
 /**
- * A point inside the card's board that belongs to nobody — no tile, optionally no claim —
- * so a click there is unambiguously a throw. 2.2: the board is the game surface, and there
- * is no page to scroll, so this is asked once and stays valid.
+ * A point inside the card's board that belongs to nobody — no tile — so a pointer parked
+ * there cannot scrub anything, and a click there is unambiguously a throw. 2.2: the board
+ * is the whole game surface and there is no page to scroll, so this is asked once and stays
+ * valid.
+ *
+ * The hit-test is load-bearing. The game's own `tileUnder` tests tiles by *inclusive*
+ * board-relative `getBoundingClientRect` bounds, while `elementFromPoint` snap-hits the
+ * painted box — the two disagree by a pixel at the padding/tile boundary, so a point
+ * `elementFromPoint` calls open ground is, to the game, the top-left tile, and a cursor
+ * parked there scrubs the claim straight back off (arena5 §2's regrow-watch flake). So this
+ * scans the way the game does, and starts inside the 0.6rem padding (the tiles start after
+ * it), so the point it returns is tile-free for both.
  */
 export async function idlePoint(page, { avoidClaims = true } = {}) {
   return page.evaluate(
-    ([avoid]) => {
+    () => {
       const board = document.querySelector('[data-board]');
       if (!board) return null;
       const b = board.getBoundingClientRect();
-      for (let y = b.top + 10; y < b.bottom - 10; y += 12)
-        for (let x = b.left + 10; x < b.right - 10; x += 12) {
-          const el = document.elementFromPoint(x, y);
-          if (!el) continue;
-          if (el.closest('.cat-tile')) continue;
-          if (avoid && el.closest('.cat-tile[data-state="claimed"]')) continue;
-          return { x, y };
+      const tiles = [...document.querySelectorAll('.cat-tile')].map((n) => {
+        const r = n.getBoundingClientRect();
+        return { x: r.left - b.left, y: r.top - b.top, w: r.width, h: r.height };
+      });
+      const under = (x, y) => tiles.some((t) => x >= t.x && x <= t.x + t.w && y >= t.y && y <= t.y + t.h);
+      for (let y = 5; y < b.height - 5; y += 12)
+        for (let x = 5; x < b.width - 5; x += 12) {
+          if (under(x, y)) continue;
+          const el = document.elementFromPoint(b.left + x, b.top + y);
+          if (el && el.closest('.cat-tile')) continue;
+          return { x: Math.round(b.left + x), y: Math.round(b.top + y) };
         }
       return null;
     },
-    [avoidClaims],
   );
 }
 
