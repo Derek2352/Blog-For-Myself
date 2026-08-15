@@ -107,7 +107,7 @@ const ok = (name, pass, detail = '') => {
   await ctx.close();
 }
 
-// ---- sound / mode controls mirror the page chips ----
+// ---- sound / mode controls live in the card (the page chips are gone — §2.2) ----
 {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   await ctx.addInitScript(() => localStorage.setItem('welcomed', '1'));
@@ -118,14 +118,12 @@ const ok = (name, pass, detail = '') => {
   const soundBefore = await page.locator('#cat-card-sound').getAttribute('aria-pressed');
   await page.locator('#cat-card-sound').click();
   const soundAfter = await page.locator('#cat-card-sound').getAttribute('aria-pressed');
-  const pageSoundAfter = await page.locator('#cat-sound-toggle').getAttribute('aria-pressed');
-  ok('sound: card chip toggles and mirrors page chip', soundBefore === 'true' && soundAfter === 'false' && pageSoundAfter === 'false', `${soundBefore}→${soundAfter}, page=${pageSoundAfter}`);
-  // mode mirrors the page manual toggle
+  ok('sound: card chip toggles (on by default, tap mutes)', soundBefore === 'true' && soundAfter === 'false', `${soundBefore}→${soundAfter}`);
+  // mode flips commander→manual in place
   const modeBefore = await page.locator('#cat-card-mode').getAttribute('aria-pressed');
   await page.locator('#cat-card-mode').click();
   const modeAfter = await page.locator('#cat-card-mode').getAttribute('aria-pressed');
-  const pageModeAfter = await page.locator('#cat-manual-toggle').getAttribute('aria-pressed');
-  ok('mode: card chip mirrors page chip', modeBefore === 'false' && modeAfter === 'true' && pageModeAfter === 'true', `${modeBefore}→${modeAfter}, page=${pageModeAfter}`);
+  ok('mode: card chip flips commander→manual', modeBefore === 'false' && modeAfter === 'true', `${modeBefore}→${modeAfter}`);
   // a11y: role/aria on the dialog
   const role = await page.locator('#cat-card-panel').getAttribute('role');
   const labelled = await page.locator('#cat-card-panel').getAttribute('aria-label');

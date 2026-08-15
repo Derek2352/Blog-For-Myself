@@ -94,11 +94,10 @@ for (let i = 0; i < 90 && !roundUp; i++) {
 }
 ok('fight: rounds escalate (commander)', roundUp, `round ${roundStart} → later`);
 
-// Manual mode switch should be reflected and the mode chip mirrors the page chip.
+// Manual mode switch flips the card's mode chip (the page chip is gone — §2.2).
 await page.locator('#cat-card-mode').click();
 const cardMode = await page.locator('#cat-card-mode').getAttribute('aria-pressed');
-const pageMode = await page.locator('#cat-manual-toggle').getAttribute('aria-pressed');
-ok('mode: card chip mirrors page chip', cardMode === 'true' && pageMode === 'true', `${cardMode}/${pageMode}`);
+ok('mode: card chip flips commander→manual', cardMode === 'true', cardMode);
 
 // Escape closes the card; the page game is untouched throughout.
 await page.keyboard.press('Escape');
