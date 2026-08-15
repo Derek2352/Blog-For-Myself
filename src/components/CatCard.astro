@@ -609,7 +609,6 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     scrubProgress,
     stillEnough,
     isTap,
-    isWorking,
     arenaCaption,
     territory,
     isWon,
@@ -1786,6 +1785,10 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       if (!dealBoard(t)) return;
       arena.on = true;
       arena.openedAt = t;
+      // Expose the open time so the fleet can measure the opening grace against the game's
+      // own clock, not against a `performance.now()` it reads a beat after the click (§2.2:
+      // arena2's grace check under-measured by the harness's own ~200ms of setup and flaked).
+      bossNode.dataset.openedAt = String(t);
       arena.spokeAt = t;
       arena.spent = 0;
       arena.lastLine = '';

@@ -216,7 +216,13 @@ const pickTarget = () =>
   await page.waitForTimeout(200);
   const foe = (await fighter(page)).value;
   await page.evaluate(RECORDER);
-  const openedAt = await page.evaluate(() => performance.now());
+  // The game's own open time, not a `performance.now()` read here — a read here sits ~200ms
+  // after the click (the waitForTimeout below + the deal), which under-measures the opening
+  // grace by that offset and flakes the check. `dataset.openedAt` is the game's clock at the
+  // moment `startFight` ran, so `tele.t - openedAt` is the true elapsed time.
+  const openedAt = await page.evaluate(
+    () => Number(document.querySelector('[data-boss]')?.dataset.openedAt) || performance.now(),
+  );
 
   fixture('the board offers a claimed tile and a cat that fights', await fighter(page));
   const targetDeal = await deal(page, (p) => p.evaluate(pickTarget), { deals: 6, settle: 180 });
