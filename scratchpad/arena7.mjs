@@ -458,7 +458,7 @@ const leaper = (page, want = 'ambush') =>
 
   await press(page);
   const stance = await leaper(page);
-  ok('dealt a cat that actually leaves the floor', !!stance, stance ?? 'no ambush in 14 rolls');
+  fixture('dealt a cat that actually leaves the floor', stance, stance.value ?? 'no ambush in 14 rolls');
   note(`section 1 stance: ${await page.evaluate(`document.querySelector('[data-boss]')?.dataset.stance ?? ''`)}`);
   await page.evaluate(RECORDER);
   const opened = await page.evaluate(() => performance.now());
