@@ -29,6 +29,7 @@ import {
   fresh as context,
   launch,
   report,
+  waitOpen,
   wants,
 } from './lib/fixture.mjs';
 
@@ -150,6 +151,11 @@ async function findLink(page) {
     .catch(() => false);
   ok('tapping it opens the card', opened && (await page.evaluate(ARMED)));
   ok('and it says it is open', (await btn.getAttribute('aria-expanded')) === 'true');
+  // Settle the open animation before measuring any tile: `btn.tap()` above waits only for the
+  // first claimed tile to *exist*, but the panel still runs its 0.18s scale-up. A rect read
+  // mid-animation is stale by the time the finger lands, so the hold starts on empty board and
+  // "0 reclaims" (§2/§4 already clear this race via `openCard`'s settle; §1 was missing it).
+  await waitOpen(page);
 
   // The core verb, on a finger: hold a claimed tile until it comes back.
   const holdDeal = await deal(page, wants.spot(), { deals: 6, tap: true });
