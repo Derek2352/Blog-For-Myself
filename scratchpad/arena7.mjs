@@ -212,6 +212,40 @@ async function parkableSpot(page) {
   return spot;
 }
 
+/**
+ * A claimed tile on the board, preferring the one **nearest** the boss, hit-tested the same
+ * way `parkableSpot` is. Used by the mercy check, whose subject is whether a bored cat still
+ * answers a real hold — not how far it will walk to one. Nearest keeps the walk a couple of
+ * seconds instead of the whole board diagonal.
+ */
+async function nearSpot(page) {
+  const spot = await page.evaluate(() => {
+    const b = document.querySelector('[data-board]')?.getBoundingClientRect();
+    if (!b) return null;
+    const boss = document.querySelector('[data-boss]')?.getBoundingClientRect();
+    const cx = boss ? boss.left + boss.width / 2 : b.left;
+    const cy = boss ? boss.top + boss.height / 2 : b.top;
+    const claims = [...document.querySelectorAll('.cat-tile[data-state="claimed"]')]
+      .map((el) => {
+        const r = el.getBoundingClientRect();
+        return {
+          el,
+          x: Math.round(r.left + r.width / 2),
+          y: Math.round(r.top + r.height / 2),
+          d: Math.hypot(r.left + r.width / 2 - cx, r.top + r.height / 2 - cy),
+        };
+      })
+      .sort((a, z) => a.d - z.d);
+    for (const c of claims) {
+      if (document.elementFromPoint(c.x, c.y)?.closest('.cat-tile[data-state="claimed"]') === c.el)
+        return { x: c.x, y: c.y };
+    }
+    return null;
+  });
+  if (spot) await page.waitForTimeout(120);
+  return spot;
+}
+
 /** Somewhere that is not a claim — leave the card entirely (a hold must not survive). */
 async function parkNeutral(page) {
   await page.mouse.move(30, 30);
@@ -480,28 +514,26 @@ const leaper = (page, want = 'ambush') =>
     /*
      * Mercy, not surrender: a real hold still gets answered. §10's floor is that below
      * about 0.4 aggression the cat stops being a threat — this is that floor, measured.
+     *
+     * The answer is read from the boss's telegraph, the only signal that survives the card
+     * port. The page game's second signal — "the claimed count changed" — is dead on the
+     * card: a hold flips its tile `claimed → scrubbing`, and the wash (the tile just left
+     * clears back to `claimed` as the new one starts scrubbing) nets the DOM count out, so
+     * it never moves through a hold-and-reclaim. Hold the claim *nearest* the boss so the
+     * walk is a couple of seconds, not the whole board diagonal; a real hold reclaims in
+     * 1400ms, the boss's regrow (15s for a leaper) then re-claims the tile under the still
+     * parked pointer, and the in-range boss telegraphs that re-hold. The regrow clock, not
+     * the walk, is the ceiling.
      */
-    const before = await page.evaluate(CLAIMS);
-    const still = await parkableSpot(page);
+    const still = await nearSpot(page);
     let answered = false;
     if (still) {
       await page.mouse.move(still.x, still.y);
-      /*
-       * `parkableSpot` hands over the claim *furthest* from the boss, and a bored cat has to
-       * walk the whole board to answer it: `CARD_STALK_SPEED` (34) × `AGGRO_BORED` (0.6) is
-       * ~20px/s, and it grooms 1.5s of every 5.2s — so a ~346px board diagonal is ~24s of
-       * stalking. The page game's 9s measured a 170px/s cat on a board the harness could
-       * scroll into view; on the card the answer is genuinely slower, not absent (§2.2 scales
-       * distance, not the cat's willingness). Give the walk its real ceiling — the wait still
-       * returns the instant the boss telegraphs or takes the tile.
-       */
       answered = await page
         .waitForFunction(
-          (n) =>
-            document.querySelector('[data-boss]')?.dataset.phase === 'telegraph' ||
-            document.querySelectorAll('.cat-tile[data-state="claimed"]').length !== n,
-          before,
-          { timeout: 26000 },
+          () => document.querySelector('[data-boss]')?.dataset.phase === 'telegraph',
+          undefined,
+          { timeout: 20000 },
         )
         .then(() => true)
         .catch(() => false);
@@ -509,7 +541,7 @@ const leaper = (page, want = 'ambush') =>
     ok(
       'mercy, not surrender — a real hold still gets answered',
       answered,
-      answered ? 'the cat committed or lost ground' : 'nothing happened in 26s of holding still',
+      answered ? 'the cat committed' : 'no telegraph in 20s of holding a claim',
     );
   }
 
