@@ -55,6 +55,15 @@
     --color-line: color-mix(in srgb, var(--color-ink) 45%, transparent);
   }
   html.a11y-contrast.dark { --color-line: color-mix(in srgb, var(--color-ink) 55%, transparent); }
+  /* The blanket stand-down. It fires for the site's own motion switch **and** for the system
+     preference — those were not the same thing until now, and the asymmetry ran the wrong way:
+     a visitor who clicked the toggle here got every animation cut, while a visitor whose OS
+     asks for reduced motion got only whatever each rule had remembered to wrap in
+     `@media (prefers-reduced-motion: no-preference)`. Most rules had remembered; the colophon
+     promises "all of it", and a promise kept by audit is a promise waiting to break the next
+     time someone adds a keyframe.
+     `motionReduced()` in src/lib/a11y-prefs.ts has always treated the two as equivalent for the
+     JS-driven animations (the cat, the ink wash, the card). This is the CSS half saying so. */
   html.a11y-motion *,
   html.a11y-motion *::before,
   html.a11y-motion *::after {
@@ -62,6 +71,16 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 
   :root {
