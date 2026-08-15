@@ -261,6 +261,16 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
   #cat-score:not([data-empty]) {
     opacity: 1;
   }
+  /* On a phone the open card physically covers this corner, so the row stands down while the
+     card is open. Matched with `:has()` on the card's own `data-open` — nothing is written to
+     the page, which is what pillar 2 requires (a class on `<html>` was tried and `arena.mjs`
+     failed it). Desktop keeps both readouts: they sit in opposite corners and say different
+     things — this row is the site-wide tally, the card's footer is that fight's ammo. */
+  @media (max-width: 480px) {
+    :global(body:has(.cat-card-root[data-open])) #cat-hud {
+      visibility: hidden;
+    }
+  }
   .cat-paws {
     display: flex;
     gap: 0.3rem;

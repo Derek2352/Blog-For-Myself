@@ -6,20 +6,12 @@
  * misbehaving — and the hygiene test in tests/harness-hygiene.test.ts refuses to let a
  * harness hard-code a failing check to report one.
  */
-import { chromium } from 'playwright-core';
-import { existsSync } from 'node:fs';
-import { report } from './lib/fixture.mjs';
-const BASE = 'http://localhost:4416';
-const CHROME_CANDIDATES = [
-  'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-].filter(existsSync);
-if (!CHROME_CANDIDATES[0]) {
-  console.error('no chrome');
-  process.exit(2);
-}
+// Chromium and the base URL come from the shared strategy (§12.1) — see card-check.mjs for
+// why resolving Chrome privately made this harness exit 2 on every Linux run. This file
+// already borrowed `report()`; it should have borrowed `launch()` in the same import.
+import { launch, BASE, report } from './lib/fixture.mjs';
 const { ok, fixture, done } = report();
-const browser = await chromium.launch({ executablePath: CHROME_CANDIDATES[0], headless: true });
+const browser = await launch();
 
 // Treat economy: give the visitor paws, so throws have ammo (the page HUD owns it).
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });

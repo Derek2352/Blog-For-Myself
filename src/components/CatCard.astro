@@ -142,11 +142,15 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       <div class="cat-card-ribbon" data-ribbon role="status" hidden></div>
     </div>
 
-    <!-- Footer: round/score compact, and the treat ammo the visitor collected from browsing. -->
+    <!-- Footer: the game's voice on its own line, then round and the treat ammo the visitor
+         collected from browsing. Two rows because one row at 320px truncated the caption to
+         an ellipsis — the caption is the only thing that says what just happened. -->
     <footer class="cat-card-footer rail">
-      <span data-round>round 1</span>
       <span class="cat-card-caption" data-caption></span>
-      <span class="cat-card-ammo" data-ammo title="Treats collected from browsing"></span>
+      <span class="cat-card-stats">
+        <span data-round>round 1</span>
+        <span class="cat-card-ammo" data-ammo title="Treats collected from browsing"></span>
+      </span>
     </footer>
   </section>
 </div>
@@ -183,10 +187,14 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     color: var(--color-accent);
     background: color-mix(in srgb, var(--color-accent) 10%, var(--color-ground));
   }
+  /* `fill: currentColor` is load-bearing, not decoration: the sprite paths carry no `fill`
+     attribute, so without it they take SVG's initial value — pure black — and the cat
+     disappears into a dark-theme card instead of following `--color-ink`. */
   .cat-card-icon-svg {
     display: block;
     width: 100%;
     height: 100%;
+    fill: currentColor;
   }
 
   /* Treats found from browsing, on the collapsed icon — the ammo display (§2.2). */
@@ -445,6 +453,7 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     display: block;
     width: 100%;
     height: 100%;
+    fill: currentColor; /* same reason as the icon above — no `fill` attribute on the paths */
   }
   .cat-card-boss[data-facing='-1'] .cat-card-boss-svg {
     transform: scaleX(-1);
@@ -479,24 +488,29 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     pointer-events: none;
     z-index: 2;
   }
-  .cat-card-kit {
+  /* Kittens are created by the script, so — like the tiles above — they never carry Astro's
+     scoping attribute and every rule must be `:global()`. Unscoped, the kitten filled the whole
+     board in pure black: no width, no height, `position: static`, and `fill` falling back to the
+     SVG initial value instead of `currentColor`. */
+  :global(.cat-card-kit) {
     position: absolute;
     left: 0;
     top: 0;
     width: 12px;
     height: 8px;
     color: var(--color-ink);
+    fill: currentColor;
     opacity: 0.92;
   }
-  .cat-card-kit svg {
+  :global(.cat-card-kit svg) {
     display: block;
     width: 100%;
     height: 100%;
   }
-  .cat-card-kit[data-facing='-1'] svg {
+  :global(.cat-card-kit[data-facing='-1'] svg) {
     transform: scaleX(-1);
   }
-  .cat-card-kit[data-hit='1'] {
+  :global(.cat-card-kit[data-hit='1']) {
     animation: cat-card-kit-flinch 0.22s ease-in-out;
   }
   @keyframes cat-card-kit-flinch {
@@ -546,24 +560,26 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
 
   .cat-card-footer {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
+    flex-direction: column;
+    gap: 0.15rem;
     padding: 0.4rem 0.6rem;
     border-top: 1px solid color-mix(in srgb, var(--color-ink) 12%, transparent);
     font-size: 0.72rem;
     color: var(--color-muted);
   }
+  /* The caption is the game's voice; it gets the width and stays on one line. Empty between
+     beats, so it reserves its height to keep the card from resizing under the player. */
   .cat-card-caption {
-    flex: 1;
-    text-align: center;
+    min-height: 1.3em;
     color: var(--color-ink);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .cat-card-ammo::before {
-    content: 'treats: ';
+  .cat-card-stats {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
   }
 </style>
 
@@ -907,7 +923,11 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     function syncAmmo(): void {
       const paws = [...document.querySelectorAll<HTMLElement>('#cat-score .cat-paw[data-slug]')];
       const found = paws.filter((p) => p.classList.contains('got')).length;
-      if (ammoEl) ammoEl.textContent = tallyFor(found, paws.length || 7);
+      // Deliberately *not* `tallyFor()`, which the page's paw row already uses. On desktop both
+      // are on screen at once, and two corners reading "0 / 7 treats" look like one number
+      // drawn twice. Same count, different sentence: the row is what you have collected, this
+      // is what you can throw in this fight.
+      if (ammoEl) ammoEl.textContent = `${found} / ${paws.length || 7} to throw`;
       // The collapsed icon's badge and "come play" cue follow the same number: a visitor
       // with treats found has something to spend, which is the tap-to-play invitation (§2.2).
       // The cue fires only while the card is closed — an open card is already the game.
@@ -1811,6 +1831,21 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     // The collapsed badge/cue needs the count on load, before any fight opens.
     syncAmmo();
 
+    // ...and again whenever the paw row changes. This call alone was not enough: the paws are
+    // SiteCat's, marked `got` by its own script, and nothing orders the two components'
+    // `astro:page-load` handlers. A returning visitor with treats got badge=0 and no cue —
+    // the cue being the one thing that says the card is worth opening. Watching the row costs
+    // one observer and removes the ordering question entirely. `syncAmmo` only reads paws and
+    // writes the badge and footer, so this cannot feed itself.
+    const scoreRow = document.querySelector('#cat-score');
+    if (scoreRow) {
+      new MutationObserver(syncAmmo).observe(scoreRow, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class'],
+      });
+    }
+
     function withholdForRung(paws: HTMLElement[]): void {
       const filled = paws.filter((p) => p.classList.contains('got'));
       const keep = ammoCap(filled.length, arena.rung);
@@ -1917,19 +1952,27 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
 
     function setOpen(next: boolean): void {
       open = next;
+      // `data-open` is the card's only open-state marker, and it stays on the card's own
+      // root. A `cat-card-open` class on `<html>` was tried here and `arena.mjs` rejected it
+      // on the spot: pillar 2 says the card never writes to the page, and `<html>` is the
+      // page. SiteCat reads this attribute through `:has()` instead — CSS matching, no DOM.
       rootEl.dataset.open = next ? '1' : '';
       toggleEl.setAttribute('aria-expanded', next ? 'true' : 'false');
+      // `preventScroll` on both. The card is fixed, so focus should never scroll the page —
+      // this is the guard that keeps it true if that ever changes. (A `card-check` failure
+      // looked like exactly this bug and turned out to be the harness reading a baseline
+      // mid-smooth-scroll; the flag is kept on its own merits, not on that measurement.)
       if (next) {
         // The cue's invitation is answered; the game is where treats are spent now.
         delete toggleEl.dataset.cue;
         panelEl.hidden = false;
         const t = performance.now();
         startFight(t);
-        closeBtn?.focus();
+        closeBtn?.focus({ preventScroll: true });
       } else {
         if (arena.on) endFight();
         panelEl.hidden = true;
-        toggleEl.focus();
+        toggleEl.focus({ preventScroll: true });
         syncAmmo();
       }
     }

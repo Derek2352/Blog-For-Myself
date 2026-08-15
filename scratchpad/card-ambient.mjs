@@ -1,25 +1,12 @@
-import { chromium } from 'playwright-core';
-import { existsSync } from 'node:fs';
-const BASE = 'http://localhost:4416';
-const CHROME_CANDIDATES = [
-  'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-].filter(existsSync);
-if (!CHROME_CANDIDATES[0]) {
-  console.error('no chrome');
-  process.exit(2);
-}
-const browser = await chromium.launch({ executablePath: CHROME_CANDIDATES[0], headless: true });
-const results = [];
-const ok = (name, pass, detail = '') => {
-  results.push({ name, pass, detail });
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
-};
+// Chromium and the base URL come from the shared strategy (§12.1) — see card-check.mjs for
+// why resolving Chrome privately made this harness exit 2 on every Linux run.
+import { launch, BASE, fresh, armAmmo, report } from './lib/fixture.mjs';
+const browser = await launch();
+const { ok, fixture, done } = report();
 
 // Visitor with NO treats: badge hidden, no cue.
 {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  await ctx.addInitScript(() => localStorage.setItem('welcomed', '1'));
+  const ctx = await fresh(browser);
   const page = await ctx.newPage();
   await page.goto(BASE, { waitUntil: 'networkidle' });
   await page.waitForTimeout(400);
@@ -30,18 +17,22 @@ const ok = (name, pass, detail = '') => {
 }
 
 // Visitor WITH treats: badge shows the count, cue fires, and both are on the collapsed icon.
+//
+// Treats are *earned* here, by walking the tabs through the fleet's `armAmmo()`. The previous
+// version stamped `.got` onto the paws from an init script on a 150ms interval, which lost a
+// race it could not win: `SiteCat.astro`'s own render pass does
+// `paw.classList.toggle('got', game.found.has(slug))` every frame and took the class straight
+// back off. It measured badge=0 against a build whose badge works.
 {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  await ctx.addInitScript(() => {
-    localStorage.setItem('welcomed', '1');
-    const mark = () =>
-      document.querySelectorAll('#cat-score .cat-paw[data-slug]').forEach((p) => p.classList.add('got'));
-    mark();
-    window.setInterval(mark, 150);
-  });
+  const ctx = await fresh(browser);
   const page = await ctx.newPage();
   await page.goto(BASE, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(400);
+  const found = await armAmmo(page, { hops: 3, pool: 6, dwell: 650, settle: 750, home: '/' });
+  if (!fixture('ammo: treats earned by browsing', found > 0, `${found} found`)) {
+    await ctx.close();
+    await browser.close();
+    process.exit(1);
+  }
   const badgeVisible = await page.locator('[data-badge]').isVisible();
   const badgeText = await page.locator('[data-badge]').textContent();
   const cue = await page.locator('#cat-card-toggle').getAttribute('data-cue');
@@ -56,6 +47,6 @@ const ok = (name, pass, detail = '') => {
   await ctx.close();
 }
 
-console.log(`\n${results.filter((r) => r.pass).length}/${results.length} checks passed`);
+const pass = done();
 await browser.close();
-process.exit(results.every((r) => r.pass) ? 0 : 1);
+process.exit(pass ? 0 : 1);

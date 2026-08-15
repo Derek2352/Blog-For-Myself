@@ -1,16 +1,9 @@
-import { chromium } from 'playwright-core';
-import { existsSync } from 'node:fs';
-const BASE = 'http://localhost:4416';
-const CHROME_CANDIDATES = [
-  'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-].filter(existsSync);
-const executablePath = CHROME_CANDIDATES[0];
-if (!executablePath) {
-  console.error('no chrome');
-  process.exit(2);
-}
-const browser = await chromium.launch({ executablePath, headless: true });
+// Chromium and the base URL come from the shared strategy (§12.1). This file used to resolve
+// Chrome from two Windows paths of its own, which meant it exited 2 — before a single check —
+// on every Linux run of the gate. An unrun harness in a sweep of green ones is the quietest
+// possible failure, which is the whole reason `launch()` is shared.
+import { launch, BASE } from './lib/fixture.mjs';
+const browser = await launch();
 const results = [];
 const ok = (name, pass, detail = '') => {
   results.push({ name, pass, detail });
@@ -116,7 +109,11 @@ async function waitOpen(page) {
   await ctx.addInitScript(() => localStorage.setItem('welcomed', '1'));
   const page = await ctx.newPage();
   await page.goto(BASE, { waitUntil: 'networkidle' });
-  await page.evaluate(() => window.scrollTo(0, 600));
+  // `behavior: 'instant'`, because the site sets `html { scroll-behavior: smooth }` and a
+  // plain `scrollTo(0, 600)` is still animating 300ms later: this read its baseline mid-flight
+  // (133) and the settled value afterwards (600), then blamed the card for the difference.
+  // `armAmmo()` in lib/fixture.mjs already scrolls this way for the same reason.
+  await page.evaluate(() => window.scrollTo({ top: 600, behavior: 'instant' }));
   await page.waitForTimeout(300);
   const before = await page.evaluate(() => window.scrollY);
   await page.locator('#cat-card-toggle').click();
@@ -134,6 +131,10 @@ async function waitOpen(page) {
 }
 
 // ---- sound / mode controls live in the card (the page chips are gone — §2.2) ----
+// These two used to also read `#cat-sound-toggle` / `#cat-manual-toggle` and assert the card
+// chip "mirrors the page chip". 2.2 moved those chips *into* the card and deleted the page
+// pair, so there is nothing left to mirror — the mirror half was measuring 2.1. The chips'
+// own behaviour is still worth a check, and that is what is left here.
 {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   await ctx.addInitScript(() => localStorage.setItem('welcomed', '1'));
@@ -141,15 +142,19 @@ async function waitOpen(page) {
   await page.goto(BASE, { waitUntil: 'networkidle' });
   await page.locator('#cat-card-toggle').click();
   await page.locator('#cat-card-panel').waitFor({ state: 'visible' });
+  // Sound is on by default since 2.1, so this chip is a mute.
   const soundBefore = await page.locator('#cat-card-sound').getAttribute('aria-pressed');
   await page.locator('#cat-card-sound').click();
   const soundAfter = await page.locator('#cat-card-sound').getAttribute('aria-pressed');
   ok('sound: card chip toggles (on by default, tap mutes)', soundBefore === 'true' && soundAfter === 'false', `${soundBefore}→${soundAfter}`);
-  // mode flips commander→manual in place
+  // Commander is the default, so this chip starts unpressed and opts into manual.
   const modeBefore = await page.locator('#cat-card-mode').getAttribute('aria-pressed');
   await page.locator('#cat-card-mode').click();
   const modeAfter = await page.locator('#cat-card-mode').getAttribute('aria-pressed');
   ok('mode: card chip flips commander→manual', modeBefore === 'false' && modeAfter === 'true', `${modeBefore}→${modeAfter}`);
+  // The page pair is gone, not hidden — a leftover chip would be a second way to set this.
+  const strays = await page.locator('#cat-sound-toggle, #cat-manual-toggle, #cat-arena-toggle').count();
+  ok('mode: no 2.1 page chips left behind', strays === 0, `${strays} found`);
   // a11y: role/aria on the dialog
   const role = await page.locator('#cat-card-panel').getAttribute('role');
   const labelled = await page.locator('#cat-card-panel').getAttribute('aria-label');

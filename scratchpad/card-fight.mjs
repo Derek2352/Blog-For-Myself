@@ -1,15 +1,7 @@
-import { chromium } from 'playwright-core';
-import { existsSync } from 'node:fs';
-const BASE = 'http://localhost:4416';
-const CHROME_CANDIDATES = [
-  'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-].filter(existsSync);
-if (!CHROME_CANDIDATES[0]) {
-  console.error('no chrome');
-  process.exit(2);
-}
-const browser = await chromium.launch({ executablePath: CHROME_CANDIDATES[0], headless: true });
+// Chromium and the base URL come from the shared strategy (§12.1) — see card-check.mjs for
+// why resolving Chrome privately made this harness exit 2 on every Linux run.
+import { launch, BASE } from './lib/fixture.mjs';
+const browser = await launch();
 const results = [];
 const ok = (name, pass, detail = '') => {
   results.push({ name, pass, detail });
@@ -94,7 +86,9 @@ for (let i = 0; i < 90 && !roundUp; i++) {
 }
 ok('fight: rounds escalate (commander)', roundUp, `round ${roundStart} → later`);
 
-// Manual mode switch flips the card's mode chip (the page chip is gone — §2.2).
+// Manual mode switch flips the card's mode chip. This used to also read `#cat-manual-toggle`
+// and assert the two agreed; 2.2 moved that chip into the card and deleted the page one, so
+// the mirror half was measuring 2.1 behaviour that no longer exists.
 await page.locator('#cat-card-mode').click();
 const cardMode = await page.locator('#cat-card-mode').getAttribute('aria-pressed');
 ok('mode: card chip flips commander→manual', cardMode === 'true', cardMode);

@@ -33,7 +33,12 @@ import { site } from '@/data/site';
       Take the timeline
     </a>
   </div>
-  <p class="rail mt-5">ps · mind the cat along the bottom edge — it chases cursors</p>
+  {/* Two cats, so the note names both: the one that wanders is the site's, the one in the
+      corner is the game (2.2 moved the game into the card — this line used to point only at
+      the wanderer, which left the card undiscovered). */}
+  <p class="rail mt-5">
+    ps · the cat along the bottom edge chases cursors; the one in the corner wants a game
+  </p>
   <p class="sr-only">{site.tagline}</p>
 </dialog>
 
