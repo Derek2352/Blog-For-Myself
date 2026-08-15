@@ -1,6 +1,6 @@
 # GDD — "Whose Screen Is It" (cat boss fight)
 
-**Version** 2.1 · **the kittens fight, you can just read, and it makes a noise without being asked twice.** Five versions of
+**Version** 2.2 · **the card is the only game — the fight leaves the page, and the page is left alone.** Five versions of
 playtesting returned one sentence — *"she doesn't know what she's doing"* — and 1.3
 answered it with legibility, 1.4 with depth, and both missed the point. The fight was
 never unclear; it was **a game with three verbs on a CV site**. §5.2's core verb is
@@ -23,6 +23,16 @@ could never finish a hold, a policy inherited from 1.0 marched it across the doc
 "take the soonest" left it restarting the same doomed hold forever, and a landed pounce
 that took ground made the whole thing unwinnable. Every one of those is a `[PH]` with the
 arithmetic that corrected it in §15.5. Next: the tester.
+
+2.2 changed the *surface* rather than the verbs. The 2.0→2.1 fight plays across the whole
+page — a claim is a piece of real furniture, so every move means scrolling to it — and the
+finding is the sentence that has closed every version, wearing its 2.0 hat: *"the visitor has
+to go up and down just to make a click."* The game now lives in a card: a collapsed cat icon in
+the bottom-right expands into a floating mini-board of tiles, and the boss, squad, stances,
+moods, territory, treats, dialogue and endings all run unchanged on the card's own coordinates
+(`CatCard.astro`, `card.ts`; `CatArena.astro` is deleted). The page is never touched — pillar 2
+inverts and gets stronger. §2.2 is the spec; the changelog's 2.2 row is the list of bugs the
+port turned up, every one of them caught by a browser rather than by reading.
 
 **Status** hypothesis. Every number below is `[PH]` until playtested —
 including the ones now running in a browser. Built is not playtested.
@@ -47,6 +57,7 @@ including the ones now running in a browser. Built is not playtested.
 | 1.4 | **More fight: the last stand, a signature move per stance, and a counter.** Asked for after 1.3 ("even more battle with the cat mechanics/elements") and built as three additions on machinery that already existed. **§7.3's desperate tier is finally the whole tier, and a 0.9 decision is retracted to get there.** 0.9 delivered "faster telegraph" exactly as the table says, but 1.0 then measured that the fight's counter is *fleeing* — so the tier escalated the one threat a good player has opted out of, while the regrow clock, the only pressure that reaches a distant player, stayed fixed. The fight was calmest precisely where it should tighten, which is where the tester's "the pace is slow" is loudest. A cornered cat now keeps `LAST_STAND_REGROW` of its clock (**measured: 4975ms against siege's 9000ms**), the tier's entry raises a line and a two-note rising sting, and 0.9's objection is answered rather than ignored — the mood and the stance stay separate factors, so the last stand cannot quietly retune §9.3. **§9.3 gets one identity move each** ("same verbs, different counter-play", which was still four sets of coefficients): siege sweeps **two adjacent** claims on a beat, a landed ambush pounce **pins** the cat over what it took for 2600ms within 90px (reusing the treat leash), and the trickster's feint can now be followed straight away by a real telegraph. **§5.4 gains a second target rather than a fourth verb** — a treat landing within 64px of a cat in `recover` stuns it, which is the trade §3 demands of any addition: spend the treat to make your next window safe, or spend it to punish a whiff you read. The window is a *consequence*, not a constant: `RECOVER_MS − THROW_ARC_MS` = **380ms**, and nothing teaches it (§7.4 now has a *second* mechanic found by exploration, and it is the same knowledge §5.3 already gave the player, used the other way round).<br><br>**One balance finding, caught by measurement and fixed by arithmetic.** The sweep first took two claims for free, which raised siege's rate to 1.5 claims per 9000ms — and flee-and-scrub then **plateaued at six claims for ten straight exchanges**, 0.167 claims/s of regrow against 0.164 of reclaiming: a fight that could be neither won nor lost, which is worse than either. `regrowInterval` now charges **one interval per claim taken**, so a sweep of two waits twice and the long-run rate is identical to 1.3's whatever the cadence (**9000ms vs 9001ms per claim, measured**). §9.4's floor is therefore safe by construction, and `SIEGE_SWEEP_EVERY` tunes feel only. **And a finding about siege that nine versions of harness had hidden: it has to be played as siege.** `arena8` forces an ambush, so every browser measurement had fought a cat that *leaps*, and flee-and-hold is the leaper's counter; against a floor-bound cat it is four of every six seconds spent luring something that cannot come. Played as its own table describes, the same fight is **7 reclaims and a win in 21–23s**.<br><br>**Four harness faults, and the first had been true since 0.4:** every `waitForFunction` bound in the fleet was fiction — 22 call sites passed `{ timeout: N }` in Playwright's *arg* position, so a wait asking for 4000ms took **30104ms**, and 20 of those seconds belong to §11's idle truce. A siege roll therefore ended `arena8` section 1 with "0 reclaimed, 0 left", which reads exactly like a broken game: **a truce, a loss and a win look identical from outside**, the same blind spot that hid 1.1's truce bug. A watched fight with empty paws *loses itself* (§2 working correctly: a loss is a full board **and** no ammo). A regrow rate averaged across the harness's own play reported 18333ms for a 9000ms clock, because the gaps that spanned the holding included it. And "claims went up" is a proxy for "the cat hit me" that **1.3's own feature invalidated** — every stance has a clock now, so a regrow forged the pin's trigger and a working 90px leash was reported as 388px. <br><br>**Then a review pass over 1.4's own code, which found three bugs no harness had caught — all three about *when* rather than *what*.** (1) A trickster feint that re-commits was not gated on the ending, so a bluff could turn into a fresh telegraph inside the beat that says the cat takes one thing and leaves; 1.1 fixed exactly this for the pounce and the distinction is that a feint is the cat *declining* to jump, so re-committing is starting something new rather than finishing something started. (2) The last stand's event was cleared by whichever code read the fight state first — and the mood pass reads it every frame while the dialogue returns early during §8's talk gap, so the mood ate the event and threw it away: the climax line could only ever be said if the tier was entered inside a ~16ms window. Only the dialogue spends it now, and the event is dropped if the cat stops being cornered before it is said. (3) The swat's stun was written as a new *length* for the recovery, but the FSM scales `RECOVER_MS` by the stance's `recover` — so it silently restarted the stance clock and one treat bought 580ms against siege and 895ms against ambush. It is additive now, which is what `SWAT_STUN_MS`'s own derivation had said all along; **the bug was found by reading the code against its own constant's documentation**, which is a review technique worth naming. **Ship gate:** 435 unit tests, a new 22-check `scratchpad/battle.mjs` measuring each addition on machine state, every earlier harness, `astro check` clean, warning-free build. Still not playtested by a person — the tester who could not read 1.2 is the gate that matters. |
 | 2.0 | **Commander mode — the input model changes hands, and §3 is retracted to do it.** Asked for after 1.4: an idle/auto game, "more hassle free like the T-Rex endless runner". The finding it answers is five versions old and always the same sentence — *"she doesn't know what she's doing"* — and 1.3's legibility pass and 1.4's depth pass were both answers to the wrong question. The fight is not unclear; it is a game with three verbs on a CV site, where the right amount of homework is none. **So the verb changes hands rather than shape:** a *kitten* performs §5.2's hold, the boss hunts **kittens** and never the cursor, and the visitor gets two optional clicks — point at a claim to send somebody, click open page to throw (§5.4, unchanged). Touch nothing and the round still resolves; that sentence is `commander.mjs` check 1. Rounds are endless and **there is no losing** — a board the cat fills starts the same round again, no penalty and no record touched (§15.2) — while clearing one adds a kitten and tightens the clock (`ROUND_REGROW_STEP`, plus a capped nudge to §7.3's aggression). One integer persists, `cat-best-round`, which **amends §7.2/§13.4's "nothing is stored"** on a boundary that is the whole argument: not fight state, unspendable, monotonic, and the one thing an endless mode needs to mean anything past one afternoon. 1.4's fight ships intact behind a HUD chip (§13.8's precedent, a third control), and §9.4's ladder is scoped to it.<br><br>**The design was wrong four times and each one was measured.** (1) A kitten at 190px/s — capped *below* the cat's desperate speed so "a cornered cat can run one down" — can never complete a hold in contact: the cat's cycle with no walk to make is 1380ms against a 1400ms hold, and a frame trace showed 0.75 progress, landed on, 0.38, landed on, indefinitely. It is 250px/s now, and the cat's threat is ground it guards rather than an animal it deletes. (2) 1.0's flee-and-hold policy, applied literally, sent it to `y: 1303` on a 900px viewport — a cursor teleports and legs do not — so the policy is now two clocks compared (`workTimeMs` vs `threatTimeMs`), which *generalises* 1.0's 423px rather than replacing it. (3) Its fallback "take the soonest" priced an interruptible hold as though it would complete, so it stood under the cat restarting the same hold; it takes the best ratio now, which means walking away. (4) A landed pounce that took ground made the mode unwinnable — one kitten, seventy-two seconds, three claims to five and back — because ground taken by pounces is a second source of board growth that the floor cannot price; a hit costs tempo only. Plus two smaller ones: a kitten's arrival had to be made *sticky* (a tilted element's bounding box drifting a pixel flipped walk/hold on alternate frames and restarted the hold forever), and a kitten works in `KITTEN_WORK_MS` 1000ms rather than `SCRUB_MS`, because 0.7's "the player wins every subsequent exchange" quietly depends on the player *fleeing* and a kitten on the last claim has nowhere to go.<br><br>**One unit test caught what no browser could:** `MIN_REGROW_MS` was charged per *interval* rather than per *claim*, so §9.3's sweep could take two claims on one floor — half the promised bound, failing only at deep rounds where nobody would have looked. **And one fix was made at the wrong layer and retracted:** shrinking commander mode's board to four claims cured the marching and bought a worse bug (trivially fillable, and rounds over in three seconds — a run reached round 14 in 72s), so the board is §4.1's again and the cause was fixed instead. **Ship gate:** 467 unit tests, a new 23-check `scratchpad/commander.mjs` (zero-input clear, the cat landing 11px from a kitten and 687px from the parked cursor, a hit taking 0 claims of 3 landings, the squad capped, the record surviving a reload while nothing else does, and a round played with storage denied), `astro check` clean, warning-free build, and the fourteen manual-mode harnesses green after each learned to declare its mode in one line. Still not playtested by a person — which, five versions in, is the only gate that has ever mattered.<br><br>**Three things the new gate found *after* the 2.0 commit, all recorded in §12.** (1) A real pillar-2 violation in shipped code: `dealBoard` replaced `arena.claimed` without handing the old board back, so a claim taken during the 1500ms round beat kept a half-full `--scrub` that `claim()` would later snapshot as its original style — the hazard `open()` has guarded since 0.3, arriving at a new boundary of the same shape. (2) `Kitten.ordered`, deleted as dead state when nothing could overrule an errand, restored once §15.4's re-pick rule could: §15.3 promises a bad order is honoured. (3) A harness fault masquerading as a product one — the order check picked the usable claim furthest from the squad, which on some boards is a claim inside a link, so the click navigated and the fight ended exactly as §11 promises. It aims where an order can land now, and §15.3 says out loud that part of the board is unorderable.<br><br>**Then the rule was made a mechanism, because writing it down had demonstrably not been enough** (§12.1, the harness charter). All fourteen harnesses moved into `scratchpad/` — twelve had existed only in a session's `/tmp`, importing Playwright by absolute path into a container that gets reclaimed, while this document cited them as committed — and onto one shared strategy in `scratchpad/lib/fixture.mjs` (`deal()`, the `wants.*` predicates, one context factory instead of eleven, one re-roller instead of four with three different budgets). `tests/harness-hygiene.test.ts` now fails the build on the four shapes that cost 2.0 an afternoon each. The audit it forced found the fault in **twenty-seven places**, two of them in already-committed harnesses; the consolidation then broke three things by assuming the copies agreed, which is the honest headline — **the differences between copies of a helper are usually load-bearing**. Gate: 474 unit tests including the seven hygiene rules, and 430 browser checks across fifteen harnesses green on one build — with `arena`, `battle` and `first-run` re-run two and three times each after their own fixes, because every fault here presented as a red that came and went. |
 | 2.1 | **Sound without asking, and a HUD that stops standing on the page.** Two requests, both about the same thing — the game asking for permission it has already been given. **Sound is on by default and the chip is a mute** (§13.8 amended, §0's audio note with it). 1.3's opt-in argument was about a *page* making noise at a reader, which this is not: sound can only happen inside a fight, a fight only starts by pressing "cat takes the screen", and asking a second time is asking a visitor to opt into their own decision. Consent consolidated rather than moved — the site is still silent on every page until somebody plays, which is the property §11's row protects — and the chip stays because §11 also needs a way *out*. The autoplay gate lines up: `primeSfx()` runs inside the toggle's own click, so the context is `running` rather than `suspended`, and `commander.mjs` asserts on the context state and oscillator counts rather than on the chip's label — 6 cues in 12s with nothing pressed but the arena toggle, 0 before it, and one tap silencing it mid-fight.<br><br>**And the mobile aspect ratio, which nothing had ever accounted for.** The HUD is fixed above the cat and grows upward, and it grew sideways too: one control in 1.3, three by 2.0. At 390px the labels stopped fitting on one line, so the chips wrapped into a ~130px stack and stood on the page — measured at **375×667**, `elementFromPoint` on the hero's "See the work" button returned the chip, so the site's primary call to action could not be tapped. §11 promises links keep working *during* a fight; this was the page not working **before** one, and no harness had ever looked. Two rules, both `max-width: 767px`: one control at rest (sound and mode are settings for a fight that does not exist yet, and all three return when it starts, because on a phone the chip is the only way out), and the widget steps aside while the hero's buttons are in its band — paw row folded, chip dropped to the cat's walkway, decided by an `IntersectionObserver` whose root is shrunk to that band.<br><br>**Both fixes were wrong once first, in the same way.** The observer's `rootMargin` was inverted, shrinking the root to the *top* 170px where the hero never is, so the dodge silently never fired — `dodging: false` at every size, which is what "it looks implemented" looks like. And hiding the chip both hid the only way into the game on the landing page (the fleet taps that button on that screen) *and* did not work: `pointer-events: none` on the container loses to `.cat-arena-btn`'s own `pointer-events: auto`, so the chip was invisible and still swallowed the tap. It moves now. Gate: `touch-fight` gains five checks for exactly this and runs 51/51 twice, `commander.mjs` gains eight for sound at 31/31, 474 unit tests, `astro check` clean, and **444 browser checks across fifteen harnesses green on one build**. |
+| 2.2 | **The game leaves the page — the card is the only game.** The 2.0→2.1 fight plays across the whole page, so a claim is a piece of real furniture and every move means scrolling to it; 2.2's finding is the sentence that has closed every version, wearing its 2.0 hat — *"the visitor has to go up and down just to make a click."* A collapsed cat icon bottom-right (`#cat-card-toggle`) now expands a floating card (`#cat-card-panel`) with a mini-board of tiles, and the whole fight — boss, squad, stances, moods, territory, treats, dialogue, endings — runs unchanged on the card's own coordinates (`CatCard.astro`, `card.ts`; `CatArena.astro` deleted). **The surface is the change, and the drop list is it:** no page scrolling or viewport band; no `.cat-claimed`/`.cat-arena-on` (a claim is `.cat-tile[data-state="claimed"]`, the boss is `[data-boss]`); pillar 2 inverts and strengthens — the card never touches the page, so the check becomes "byte-identical *while* the card plays" rather than "restored after"; "navigating ends the fight" inverts (the card is `transition:persist`, so browsing keeps it); and §14's ink curtain is dropped for the card's own 0.18s open. **Distances scale, durations don't:** every distance constant is divided by `CARD_SCALE = 1/5` (stalk 170→34, pounce range 90→18, hit radius 46→9, safe flee 423→85, kitten 250→50) while scrub/telegraph/leap/recover/work keep their measured milliseconds — the board is ~296×180 against a ~1280×900 page, and time does not shrink with the board (§2.2). **The port found eight bugs, every one caught by a browser, not by reading:** the regrow clock froze when the pointer left the board (it sat after `quarry.inside`'s early-return — harmless on the page, fatal on a ~296×180 board, and the root of arena7 §2's renderer crash); a hold kept scrubbing a tile it had just freed; a dropped hold left a tile stuck in `scrubbing`; a pointer leaving for the page kept a hold the player could no longer see; every reopen reset the ladder rung to 0 (it is module state, reset only by refresh); tiles rendered unstyled (`document.createElement` skips Astro's scoping, so tile rules must be `:global()`); a win forgot to notch `#site-cat`; and the grooming tell and mood leaked across closes on the persisted boss. The fourteen-harness fleet was converted to the card model — `arena`, `arena4` and `battle` last, against `arena8`/`arena3` as templates — and the fleet is green on the card, with the same timing flakes the page game had (the treat A/B, the regrow watch and the desperate-tier mercy still flake across runs; the rest are stable). |
 
 ---
 
@@ -166,6 +177,106 @@ amount of systems on top will save it.
   a friend the cat fights back", not a daily streak. Explicitly **no** login,
   leaderboard, or daily reward: a résumé site with retention mechanics is a
   category error.
+
+### 2.2 The card model — the game leaves the page
+
+The 2.0→2.1 fight plays across the whole page: a claim is a piece of real page furniture, so
+every move means scrolling to it. 2.2's finding is the sentence that has closed every version,
+wearing its 2.0 hat — **"the visitor has to go up and down just to make a click."** The concept
+is right (a cat takes your page, you take it back); *playing* it should not mean scrolling. So
+the game leaves the page.
+
+**The game lives in a card now.** A collapsed cat icon sits bottom-right (`#cat-card-toggle`);
+pressing it expands a floating card (`#cat-card-panel`, `role="dialog"`, `aria-modal="false"`)
+with a mini-board of tiles. Every mechanic that made the fight a fight — the boss, the squad,
+the stances, the moods, the territory bar, the treats, the dialogue, the endings — runs
+unchanged on the card's own coordinates. The pure logic is untouched (`arena.ts`, `squad.ts`);
+what changed is the *surface* (`CatCard.astro`, `card.ts`), and the drop list is the change:
+
+- **No page scrolling, no viewport band.** The board is all on screen by construction, so
+  §5.2's flee-and-hold no longer needs 1.2's scroll trick — on the card, distance is *board*
+  distance, and it is short.
+- **No `.cat-claimed` / `.cat-arena-on`.** A claim is `.cat-tile[data-state="claimed"]`, the boss
+  is `[data-boss]`, and "the arena is on" is "the card's panel is open".
+- **Pillar 2 inverts and gets stronger.** The card is `position: fixed` chrome that never adds
+  `html.cat-arena-on`, never scrolls, never captures window events, and never touches the page's
+  DOM. The pillar-2 check becomes "the page is byte-identical **while** the card plays, and it
+  still closes back to collapsed" instead of "the page is restored after the fight".
+- **"Navigating ends the fight" inverts too.** The card is `transition:persist` chrome, so
+  client-side navigation keeps the fight where the page game used to end it.
+- **§14's ink curtain is dropped.** §14.6 already made it optional; the card's own 0.18s open is
+  the simpler thing.
+
+**Distances scale, durations do not.** The page game is written in page pixels (a boss stalking
+170px/s across a ~1280×900 viewport); the card's board is ~296×180, so every *distance* constant
+is divided by `CARD_SCALE = 1/5` while every *duration* (scrub, telegraph, leap, recover, work)
+keeps its measured milliseconds. Time does not shrink with the board.
+
+| constant | page | card (×`CARD_SCALE`) |
+|---|---|---|
+| `STALK_SPEED` | 170 px/s | 34 px/s |
+| `KITTEN_SPEED` | 250 px/s | 50 px/s |
+| `POUNCE_RANGE` | 90 px | 18 px |
+| `HIT_RADIUS` | 46 px | ~9 px |
+| `PREDICT_CAP` | 120 px | 24 px |
+| `LEAP_HEIGHT` | 42 px | ~8 px |
+| safe flee distance (§5.2) | 423 px | ~85 px |
+| desperate top speed (§7.3) | 238 px/s | ~48 px/s |
+
+`card.ts` composes the scaled numbers in one place. A handful of predicates baked a constant in
+(`provoked`'s `POUNCE_RANGE`, `pounceHit`'s `HIT_RADIUS`, `predict`'s `PREDICT_CAP`, the squad's
+clock comparisons); those now take an optional override that defaults to the page value, so every
+existing caller and unit test still measures what it measured before 2.2.
+
+**Tiles, not page furniture.** §4.1's "queried, never authored" board is replaced by a tile pool
+generated from the site's navigation categories plus the fixed routes (`About`, `Timeline`,
+`Search`, `Colophon`) — stable, meaningful, and never the furniture the old game claimed. A tile's
+life is `data-state` ∈ `unclaimed → claimed → scrubbing → freed`; the scrub reports progress
+through a `--scrub` custom property (0→1) exactly as §5.2 always said. (The card's `scrubbing` is
+a `data-state`, unlike the page game's `--scrub` style which left `.cat-claimed` on the element
+while it was worked — which is why a "claimed" count that ignores `scrubbing` reads a hold as
+finished the moment it starts. The card harnesses count `claimed + scrubbing`.)
+
+**The port found eight bugs, and a browser found every one.** Moving a game from the page to a
+card is a port, and a port has the bugs a fresh build does not:
+
+1. **The regrow clock froze when the pointer left the board.** `stepBoss` kept the regrow block
+   after the `quarry.inside` early-return, where the page game's copy had it too — but the page
+   game's arena *was* the page, so the pointer was effectively always inside. On the card the
+   board is ~296×180 and the pointer is off it as often as on, so a watched fight never grew back
+   and a player who stepped away got a free pause on the one pressure that reaches a distant hand.
+   Stalking still needs the pointer on the board; the regrow clock does not. *(This is also the
+   root of arena7 §2's renderer crash — the sustained oscillation finally completed once the clock
+   ran.)*
+2. **A hold kept scrubbing a tile it had just freed.** The card's first `tileUnder` returned any
+   tile under the pointer; the page game's `claimUnder` required `claimed` membership, and the port
+   dropped that. A scrub target must be a *claimed* tile, or the hold keeps "progressing" on ground
+   it already won — progress that changes nothing and reads to the fleet as "held but not taken".
+3. **A dropped hold left the tile stuck in `scrubbing`.** The wash cleared but the state did not,
+   so a pounced hold wedged the tile forever and a second hold on the same claim found no `claimed`
+   tile at that point. A dropped hold returns the tile to `claimed`, not `unclaimed`.
+4. **A pointer that left for the page kept its hold.** `pointerout` only cleared the hold on a
+   null `relatedTarget`; leaving the board for the page behind the card is a non-null leave, and
+   the hold the player could no longer see kept running. Any leave of the board ends and drops the
+   hold.
+5. **Every reopen reset the ladder rung to 0.** `startFight` set `arena.rung = 0`, but the rung is
+   *module* state — moved only by `finish` via `nextRung`, reset only by a refresh (§7.2). A
+   reset-on-open is not a ladder. (The withheld paw's hollow HUD state came back with it.)
+6. **The tiles rendered unstyled.** Tiles are `document.createElement`'d, so they never carry
+   Astro's scoping attribute — every rule that targets them must be `:global()`, or the board
+   renders with no wash, no `touch-action`, no box-shadow while the `data-state` attributes are all
+   correct.
+7. **A win forgot to notch the ambient cat.** The card's boss is its own sprite; §7.1's notch
+   belongs to `#site-cat`, the animal the visitor meets in the corner.
+8. **The grooming tell and mood leaked across closes.** The boss element persists
+   (`transition:persist`), so a fight's `mood` and `dataset.groom` had to be reset on close or the
+   next fight opened in the previous one's tier.
+
+**Nothing else moved.** §7.2's "nothing is stored" holds (one integer, the deepest round). §9.4's
+ladder, §9.5's loadout, §15's commander mode and §5.4's counter all run on the card. The browser
+fleet now asserts the card's tiles and `[data-boss]` instead of page furniture — `arena.mjs`,
+`arena4.mjs` and `battle.mjs` were converted last, against `arena8.mjs` and `arena3.mjs` as the
+proven templates.
 
 ---
 
