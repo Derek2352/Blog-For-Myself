@@ -22,6 +22,23 @@ import Base from '@/layouts/Base.astro';
     </header>
 
     <div id="search" class="mt-8"></div>
+
+    {/* Without JavaScript, none of the below can run — including the very script that
+        unhides the fallback underneath. Measured: this page rendered a heading, the promise
+        "every entry and log, searchable", and then an empty void, because the only route to
+        the apology was the route that was broken. A `<noscript>` is the one message that
+        cannot depend on the thing that failed. Both destinations here are static pages that
+        work perfectly well without scripting. */}
+    <noscript>
+      <p class="mt-8 text-muted">
+        Search needs JavaScript — it reads an index in your browser rather than on a server.
+        Everything is still reachable without it: the{' '}
+        <a href="/timeline/" class="text-accent underline">timeline</a> lists every entry and log
+        in one line, and <a href="/tags/" class="text-accent underline">tags</a> group them by
+        subject.
+      </p>
+    </noscript>
+
     {/* This fallback unhides whenever the index fails to load — in dev that
         means "not built yet", but on the deployed site it means something
         actually broke, and a visitor shouldn't be handed shell commands. */}
