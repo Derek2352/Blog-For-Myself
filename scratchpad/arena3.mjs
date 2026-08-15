@@ -71,41 +71,25 @@ const fighter = (page) => deal(page, wants.stance(['ambush'], { claims: 'ignore'
 async function lureCat(page, target, within = 18, budgetMs = 20000) {
   const started = Date.now();
   let flip = 1;
-  let heldStill = false;
   while (Date.now() - started < budgetMs) {
     await page.mouse.move(target.x + flip * 9, target.y);
     flip = -flip;
     await page.waitForTimeout(60);
+    // Both at once, in the page's clock: the boss inside pounce range, *and* the opening
+    // grace over. A boss that converges fast is still inside OPENING_GRACE_MS, where it
+    // provably cannot pounce — arm A's hold would then reclaim the tile silently. The
+    // ±9px nudge exceeds STILL_PX each step, so no scrub is in flight while we wait.
     const d = await page.evaluate(
-      ([tx, ty]) => {
+      ([tx, ty, w]) => {
         const r = document.querySelector('[data-boss]')?.getBoundingClientRect();
-        if (!r) return Infinity;
-        return Math.hypot(r.left + r.width / 2 - tx, r.top + r.height / 2 - ty);
+        if (!r) return -1;
+        const d = Math.hypot(r.left + r.width / 2 - tx, r.top + r.height / 2 - ty);
+        const openedAt = Number(document.querySelector('[data-boss]')?.dataset.openedAt) || performance.now();
+        return d <= w && performance.now() - openedAt > 2500 ? d : -1;
       },
-      [target.x, target.y],
+      [target.x, target.y, within],
     );
-    if (d <= within) return d;
-    // The last stretch: hold the cursor ON the target — the boss walking to the pointer
-    // is what actually closes it. The oscillation keeps the boss *near*; only stillness
-    // lets it arrive, and at 34px/s the final ~20px takes ~600ms (120ms was too short —
-    // arena3's arm A flaked with "5 → 5 claims, pounced: false").
-    if (d < 40 && !heldStill) {
-      await page.mouse.move(target.x, target.y);
-      const till = Date.now() + 700;
-      while (Date.now() < till) {
-        const d2 = await page.evaluate(
-          ([tx, ty]) => {
-            const r = document.querySelector('[data-boss]')?.getBoundingClientRect();
-            if (!r) return Infinity;
-            return Math.hypot(r.left + r.width / 2 - tx, r.top + r.height / 2 - ty);
-          },
-          [target.x, target.y],
-        );
-        if (d2 <= within) return d2;
-        await page.waitForTimeout(80);
-      }
-      heldStill = true;
-    }
+    if (d > 0) return d;
   }
   return -1;
 }
@@ -282,6 +266,13 @@ async function lureCat(page, target, within = 18, budgetMs = 20000) {
   const lureResult = await lureCat(page, target, 18);
   note(`lure result: ${lureResult}`);
   const aSetUp = lureResult > 0;
+  // Arm A's hold must start from a clean scrub: the lure ends with the cursor parked on the
+  // claim, and any progress it banked would let the hold run long enough to reclaim the tile
+  // (ambush's recovery window outlasts a scrub), leaving arm B nothing to win. Nudge past
+  // STILL_PX and settle, so the hold's clock starts at zero — the boss, already inside pounce
+  // range, re-closes the ~9px before progress reaches 0.35.
+  await page.mouse.move(target.x + 9, target.y);
+  await page.waitForTimeout(80);
   const beforeA = await page.evaluate(CLAIMS);
   await page.mouse.move(target.x, target.y);
   await page.waitForTimeout(SCRUB_MS + 700);
