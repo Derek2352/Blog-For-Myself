@@ -523,7 +523,12 @@ const leaper = (page, want = 'ambush') =>
      * walk is a couple of seconds, not the whole board diagonal; a real hold reclaims in
      * 1400ms, the boss's regrow (15s for a leaper) then re-claims the tile under the still
      * parked pointer, and the in-range boss telegraphs that re-hold. The regrow clock, not
-     * the walk, is the ceiling.
+     * the walk, is the ceiling — but it is a *loose* ceiling: the regrow block and the
+     * telegraph decision both sit behind the bored tier's grooming early-return, so a
+     * grooming beat (up to `GROOM_MS` 1500ms) can defer each by a beat, and the re-hold has
+     * to re-reach `POUNCE_THRESHOLD` (~490ms) before the wind-up starts. The wait is 25s —
+     * regrow (15s) + a grooming beat (1.5s) + the re-hold's climb to threshold, with margin
+     * — rather than the 20s that read the regrow clock as if it could never be groomed over.
      */
     const still = await nearSpot(page);
     let answered = false;
@@ -533,7 +538,7 @@ const leaper = (page, want = 'ambush') =>
         .waitForFunction(
           () => document.querySelector('[data-boss]')?.dataset.phase === 'telegraph',
           undefined,
-          { timeout: 20000 },
+          { timeout: 25000 },
         )
         .then(() => true)
         .catch(() => false);
