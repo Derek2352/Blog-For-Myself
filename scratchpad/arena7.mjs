@@ -522,13 +522,17 @@ const leaper = (page, want = 'ambush') =>
      * it never moves through a hold-and-reclaim. Hold the claim *nearest* the boss so the
      * walk is a couple of seconds, not the whole board diagonal; a real hold reclaims in
      * 1400ms, the boss's regrow (15s for a leaper) then re-claims the tile under the still
-     * parked pointer, and the in-range boss telegraphs that re-hold. The regrow clock, not
-     * the walk, is the ceiling — but it is a *loose* ceiling: the regrow block and the
-     * telegraph decision both sit behind the bored tier's grooming early-return, so a
-     * grooming beat (up to `GROOM_MS` 1500ms) can defer each by a beat, and the re-hold has
-     * to re-reach `POUNCE_THRESHOLD` (~490ms) before the wind-up starts. The wait is 25s —
-     * regrow (15s) + a grooming beat (1.5s) + the re-hold's climb to threshold, with margin
-     * — rather than the 20s that read the regrow clock as if it could never be groomed over.
+     * parked pointer, and the in-range boss telegraphs that re-hold.
+     *
+     * The telegraph's arrival is dominated by where the 15s regrow cadence happens to fall
+     * relative to the hold — the tile must be *re-claimed* before a re-hold can provoke, so
+     * the wait from hold-start measures the regrow's phase, not the boss's answer. The clock
+     * is loose on top of that: the regrow block and the telegraph decision both sit behind
+     * the bored tier's grooming early-return (a `GROOM_MS` 1500ms beat defers each), and a
+     * landed pounce can interrupt and restart the re-hold. Measured across runs the first
+     * telegraph lands between ~7s and ~22s, so a 25s wait had no margin and flaked. 35s
+     * covers the tail with room without softening the assertion — the cat still has to
+     * commit, or the check fails.
      */
     const still = await nearSpot(page);
     let answered = false;
@@ -538,7 +542,7 @@ const leaper = (page, want = 'ambush') =>
         .waitForFunction(
           () => document.querySelector('[data-boss]')?.dataset.phase === 'telegraph',
           undefined,
-          { timeout: 25000 },
+          { timeout: 35000 },
         )
         .then(() => true)
         .catch(() => false);
@@ -546,7 +550,7 @@ const leaper = (page, want = 'ambush') =>
     ok(
       'mercy, not surrender — a real hold still gets answered',
       answered,
-      answered ? 'the cat committed' : 'no telegraph in 20s of holding a claim',
+      answered ? 'the cat committed' : 'no telegraph in 35s of holding a claim',
     );
   }
 
