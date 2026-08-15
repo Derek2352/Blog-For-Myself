@@ -77,11 +77,17 @@ const bossCentre = () =>
   });
 
 /**
- * Walk the boss to the cursor without letting a scrub finish.
+ * Walk the boss to the cursor without letting a scrub finish, and only report it arrived
+ * once it can actually pounce.
  *
  * Nudging by more than the still-tolerance resets the hold every step, so progress never
  * reaches 1 while the boss crosses the board — which is how the cursor can be parked on a
- * claim *and* have the boss arrive, the state a pounce needs.
+ * claim *and* have the boss arrive, the state a pounce needs. Two conditions land together,
+ * in the page's clock: the boss inside pounce range **and** the opening grace over. A boss
+ * that converges fast is still inside OPENING_GRACE_MS, where it provably cannot pounce —
+ * the hold would reclaim the tile silently (a scrub is 1400ms against a 2500ms grace) and
+ * the telegraph this file waits on never comes (§4's timeout flake). A missing
+ * `data-openedAt` tell is a reported fixture, not a flake.
  */
 async function lureCat(page, target, within = 18, budgetMs = 12000) {
   const started = Date.now();
@@ -91,14 +97,18 @@ async function lureCat(page, target, within = 18, budgetMs = 12000) {
     flip = -flip;
     await page.waitForTimeout(60);
     const d = await page.evaluate(
-      ([tx, ty]) => {
+      ([tx, ty, w, grace]) => {
         const r = document.querySelector('[data-boss]')?.getBoundingClientRect();
-        if (!r) return Infinity;
-        return Math.hypot(r.left + r.width / 2 - tx, r.top + r.height / 2 - ty);
+        if (!r) return -1;
+        const dist = Math.hypot(r.left + r.width / 2 - tx, r.top + r.height / 2 - ty);
+        const raw = document.querySelector('[data-boss]')?.dataset.openedAt;
+        if (raw === undefined) return -1;
+        const openedAt = Number(raw);
+        return dist <= w && performance.now() - openedAt > grace ? dist : -1;
       },
-      [target.x, target.y],
+      [target.x, target.y, within, OPENING_GRACE_MS],
     );
-    if (d <= within) return d;
+    if (d > 0) return d;
   }
   return -1;
 }
