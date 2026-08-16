@@ -25,6 +25,7 @@
  * `aria-hidden` when it runs (the arena already is) — the game is decoration, not content.
  */
 import { getNavTree } from '@/lib/content';
+import { resolveWash } from '@/lib/wash';
 
 const nav = await getNavTree();
 
@@ -33,8 +34,26 @@ const nav = await getNavTree();
 // structure; they are stable, meaningful, and never the page furniture the old game claimed.
 // Fixed routes the site always has are appended so the pool clears the 10–12 tile floor on
 // every page, including ones where the nav is short.
-const FIXED_TILES = ['About', 'Timeline', 'Search', 'Colophon'];
-const TILE_POOL: string[] = [...nav.map((c) => c.label), ...FIXED_TILES];
+//
+// **Each tile carries its category's hue.** Until 2.4 this mapped to `c.label` alone and threw
+// the hue away at this line — so a board of eleven tiles rendered eleven identical grey boxes
+// while the very data that distinguishes them sat one property away, already used to wash every
+// other page on the site. Reviewed at 3×, the board read as a settings panel rather than a
+// game, and that was why: one flat texture, no variety, nothing tying it to the portfolio it is
+// supposedly made of. `resolveWash` is the site's own resolver — a declared hue wins, otherwise
+// a stable hash of the slug picks from the warm band — so the fixed routes get sensible hues
+// with no decision required, exactly as a brand-new tab would.
+const FIXED_TILES = [
+  { label: 'About', slug: 'about' },
+  { label: 'Timeline', slug: 'timeline' },
+  { label: 'Search', slug: 'search' },
+  { label: 'Colophon', slug: 'colophon' },
+];
+type Tile = { label: string; hue: number };
+const TILE_POOL: Tile[] = [
+  ...nav.map((c) => ({ label: c.label, hue: resolveWash(c).hue })),
+  ...FIXED_TILES.map((f) => ({ label: f.label, hue: resolveWash(f).hue })),
+];
 const POOL_JSON = JSON.stringify(TILE_POOL);
 ---
 
@@ -341,19 +360,27 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
      left end and it stopped in mid-air with no track behind it: it read as a rendering glitch
      rather than a measure of anything. Inset to the header's padding, with a visible track and
      rounded caps, it reads as what it is. */
+  /* This bar is the entire stakes of the fight, and at 2px it was a hairline nobody would
+     look at — quieting the chrome had quieted the one thing that should not be quiet. It is
+     the drama, so it gets weight: tall enough to see move, and a fill that goes from wine to
+     a warm amber as you take the board, so *winning changes colour*, not just length. */
   .cat-card-territory {
-    height: 2px;
-    margin: 0 0.6rem 0.45rem;
+    height: 5px;
+    margin: 0 0.6rem 0.5rem;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--color-ink) 10%, transparent);
+    background: color-mix(in srgb, var(--color-ink) 12%, transparent);
     overflow: hidden;
   }
   .cat-card-territory-fill {
     height: 100%;
     width: calc(100% * var(--territory, 0.55));
     border-radius: inherit;
-    background: color-mix(in srgb, var(--color-accent) 70%, transparent);
-    transition: width 0.18s ease-out;
+    background: linear-gradient(
+      90deg,
+      var(--color-accent),
+      hsl(calc(20 + 24 * var(--territory, 0.55)) 62% 48%)
+    );
+    transition: width 0.3s cubic-bezier(0.2, 0.7, 0.3, 1);
   }
 
   /* Header — a caption, not a toolbar.
@@ -436,10 +463,35 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     align-items: center;
     justify-content: center;
     min-height: 44px;
-    padding: 0.3rem 0.35rem;
+    /* Labels sit at the top, not the middle. The board is where the cats walk, and centred
+       text put the labels exactly where the sprites are — "AI & Creative Projects" was being
+       read through a boss, a kitten and a speech bubble at once. Top-aligning gives every tile
+       a clear lower band to be walked across, and it gives the board the sky/ground structure
+       a playing surface wants. */
+    align-items: flex-start;
+    min-height: 46px;
+    padding: 0.28rem 0.35rem;
     border: 1px solid color-mix(in srgb, var(--color-ink) 16%, transparent);
     border-radius: 8px;
-    background: color-mix(in srgb, var(--color-ground) 94%, var(--color-ink) 6%);
+    /* Its category's own hue. Eleven identical grey boxes read as a form; a warm mosaic reads
+       as a board, and it is the same hue the section's page is washed with, so the game looks
+       made of the portfolio rather than placed on top of it.
+       18%, not the 9% this was first tried at — at 9% the tiles were still visibly grey and the
+       idea did not earn its own complexity. A tint you have to look for is not a tint.
+       `background-color` stays a *solid* colour on purpose: `arena.mjs` reads it to recompute
+       label contrast against the claimed wash, and a gradient there would hand it `transparent`.
+       The sheen goes in `background-image`, where it costs that check nothing and gives the tile
+       enough curvature to read as a chip rather than an input field. */
+    background-color: color-mix(
+      in srgb,
+      hsl(var(--tile-hue, 30) 58% 50%) 18%,
+      var(--color-ground)
+    );
+    background-image: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-ground) 55%, transparent),
+      transparent 62%
+    );
     /* 0.62rem, not 0.72. Four of eleven labels wrapped to two lines and nearly touched their
        edges — the type was fighting the box. The box may not shrink (44px is the touch target),
        so the type gives way, and the board gets its air back. */
@@ -471,7 +523,13 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
      `0.07 + 0.19 × --scrub`, and `arena` recomputes text contrast against exactly 7%. */
   :global(.cat-tile[data-state='claimed']) {
     box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--color-accent) 7%, transparent);
-    border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+    /* The cat's colour takes the tile over. Now that unclaimed tiles carry their category's own
+       hue, a 7% wash alone no longer separates the two states — one warm tint on another warm
+       tint. Claimed overrides the *base* colour so the board reads at a glance as "mine / its",
+       and the category hue disappears under it, which is exactly the fiction: the cat has taken
+       that square. The wash above is untouched — `touch-fight` parses its alpha. */
+    background-color: color-mix(in srgb, var(--color-accent) 22%, var(--color-ground));
+    border-color: color-mix(in srgb, var(--color-accent) 58%, transparent);
     transform: rotate(var(--tile-tilt, 0deg)) scale(0.99);
   }
 
@@ -507,7 +565,10 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     pointer-events: none;
     color: var(--color-ink);
     z-index: 3;
-    filter: drop-shadow(0 0 2px var(--color-ground));
+    /* Doubled halo. The sprites cross tinted tiles and their labels, and a single 2px ground
+       shadow was not enough separation once the tiles gained colour — the cat has to stay the
+       most legible thing on the board. */
+    filter: drop-shadow(0 0 2px var(--color-ground)) drop-shadow(0 0 3px var(--color-ground));
   }
   .cat-card-boss-svg {
     display: block;
@@ -641,7 +702,7 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     opacity: 0.92;
     /* The same ground-coloured halo the boss has. A kitten standing on a tinted claimed tile had
        nothing separating it from the tile. */
-    filter: drop-shadow(0 0 1.5px var(--color-ground));
+    filter: drop-shadow(0 0 1.5px var(--color-ground)) drop-shadow(0 0 2.5px var(--color-ground));
   }
   :global(.cat-card-kit svg) {
     display: block;
@@ -870,7 +931,7 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     const squadNode = squadEl;
     const treatNode = treatEl;
     const ribbonNode = ribbonEl;
-    const POOL: string[] = JSON.parse(poolRaw);
+    const POOL: { label: string; hue: number }[] = JSON.parse(poolRaw);
     let open = false;
 
     /* ---------------------------------------------------------------- *
@@ -1998,12 +2059,14 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       const pool = [...POOL].sort(() => Math.random() - 0.5).slice(0, count);
       const seed = (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0;
       const picked = pickClaims(pool.length, INITIAL_CLAIM_FRACTION, seed);
-      pool.forEach((label) => {
+      pool.forEach((t) => {
         const tile = document.createElement('button');
         tile.type = 'button';
         tile.className = 'cat-tile';
-        tile.textContent = label;
+        tile.textContent = t.label;
         tile.dataset.state = 'unclaimed';
+        // Its category's own wash hue — the same number that tints that section's page.
+        tile.style.setProperty('--tile-hue', String(t.hue));
         boardEl.appendChild(tile);
         arena.order.push(tile);
       });

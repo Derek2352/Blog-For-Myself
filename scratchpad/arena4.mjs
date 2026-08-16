@@ -282,9 +282,15 @@ async function playByFleeing(page, budgetMs = 150_000) {
   // behind it — it read as a rendering artefact rather than a measure of anything. It is now a
   // 2px inset gauge sitting between the header and the board, directly above what it measures.
   // The check follows the design rather than the other way round: thin, inset, and in place.
+  // Bounded on **both** sides now. 2.4 raised the gauge from 2px to 5px because this bar is the
+  // whole stakes of the fight and a hairline is not something anyone looks at — quieting the
+  // chrome had quieted the one thing that must not be quiet. So an upper bound alone is the
+  // wrong check: the fault this has to catch is the gauge shrinking back into invisibility,
+  // which no `<= 3` would ever have reported.
   ok(
-    'the gauge is a thin inset bar between the header and the board',
-    bar.h <= 3 &&
+    'the gauge is a visible inset bar between the header and the board',
+    bar.h >= 3 &&
+      bar.h <= 8 &&
       bar.belowHeader &&
       bar.aboveBoard &&
       bar.wide < bar.contentWide &&
