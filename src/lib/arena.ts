@@ -1269,6 +1269,15 @@ export interface FightState {
    */
   commanding?: boolean;
   /**
+   * Which game is being played, verbatim — `'commander' | 'manual' | 'hand'`.
+   *
+   * `commanding` above is kept because §8's dialogue table branches on it and those two lines mean
+   * exactly "does the visitor hold claims themselves". This is the wider fact, added for §16's
+   * prototype so a harness can tell the third mode from the first without inferring it from a
+   * boolean that was only ever asked one question.
+   */
+  mode?: 'commander' | 'manual' | 'hand';
+  /**
    * Which round beat is playing, in commander mode (§15, 2.0).
    *
    * Separate from `ending` because a round turning over is the opposite of an ending: the fight

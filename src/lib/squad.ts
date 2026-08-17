@@ -235,6 +235,40 @@ export function canFinish(
 }
 
 /**
+ * Should this kitten give up on the claim it is holding and get out of the way?
+ *
+ * **Why this exists.** `pickWork` decides where to *go*; nothing decided when to *leave*. A kitten
+ * that started a winnable hold and then had the cat walk onto it kept holding until it was pounced,
+ * because `KITTEN_FLINCH_MS` is explicitly cosmetic and does not interrupt work. On the page that
+ * was survivable; in a game where the **player's only verb is shoving the cat around**, it is the
+ * whole point — you push the cat toward a working kitten and the squad has to visibly react, or
+ * your interference never reaches them.
+ *
+ * Two conditions, both required:
+ *  - the cat is **inside the safe radius**, so it is a live threat rather than a distant one, and
+ *  - `canFinish` has gone **false**, so the hold is now genuinely doomed.
+ *
+ * Requiring both is the guard against a squad that never commits: a kitten does not run from a cat
+ * it can still out-work, which is exactly the trade `pickWork` already prices. Fleeing on proximity
+ * alone would make the kittens cowards and the board unwinnable.
+ */
+export function shouldFlee(
+  kitten: { x: number; y: number },
+  c: Candidate,
+  boss: { x: number; y: number },
+  scale: {
+    pounceRange?: number;
+    stalkSpeed?: number;
+    kittenSpeed?: number;
+    safePx?: number;
+  } = {},
+): boolean {
+  const safePx = scale.safePx ?? SAFE_WORK_PX;
+  const near = Math.hypot(boss.x - kitten.x, boss.y - kitten.y) <= safePx;
+  return near && !canFinish(kitten, c, boss, scale);
+}
+
+/**
  * Which claim this kitten should go and work on.
  *
  * **Two times, compared: can I finish before it can arrive?** Prefer every candidate where the

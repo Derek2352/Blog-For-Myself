@@ -655,6 +655,29 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     transform: rotate(-42deg);
   }
 
+  /* A landed swat. `SWAT_STUN_MS` (900) of stillness the player bought by hitting a recovering
+     cat with a treat — and until now it looked exactly like an ordinary recovery, because this
+     class was added by the script and styled nowhere. The cat rocks back once and wears the
+     accent while it is stunned, so the reward for a well-timed throw is visible. */
+  .cat-card-boss.boss-swatted {
+    color: var(--color-accent);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .cat-card-boss.boss-swatted .cat-card-boss-svg {
+      animation: cat-card-swat 0.34s cubic-bezier(0.2, 0.7, 0.3, 1);
+    }
+  }
+  /* Animates the independent `translate` and `rotate` properties, **not** `transform`. This
+     element's `transform` already carries the facing flip (`scaleX(-1)`), and a keyframe writing
+     `transform` would drop the flip for the animation's duration — the cat would spin round to
+     face right mid-swat. The individual properties compose with it instead. */
+  @keyframes cat-card-swat {
+    0% { translate: 0; rotate: 0deg; }
+    35% { translate: 3px; rotate: 7deg; }
+    70% { translate: -1.5px; rotate: -3deg; }
+    100% { translate: 0; rotate: 0deg; }
+  }
+
   .cat-card-boss[data-phase='telegraph'] .cat-card-boss-ear-near {
     transform-origin: 60px 6px;
     animation: cat-card-ear-charge 0.42s ease-in-out infinite alternate;
@@ -878,6 +901,7 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     ARRIVE_PX,
     WATCH_TRUCE_MS,
     canFinish,
+    shouldFlee,
     kittensFor,
     pickWork,
     assignOrder,
@@ -888,6 +912,18 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     writeBestRound,
     type Candidate,
   } from '@/lib/squad';
+  // §16's invisible hand — the swipe geometry, pure and unit-tested in tests/hand.test.ts.
+  import {
+    IMPULSE_MS,
+    swipeSpeed,
+    isSwipe,
+    segmentHit,
+    veer,
+    impulseAt,
+    swipeReady,
+    SHOVE_FOOTING,
+    SHOVE_MIN,
+  } from '@/lib/hand';
   import {
     CARD_SCALE,
     CARD_STALK_SPEED,
@@ -896,6 +932,7 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     CARD_HIT_RADIUS,
     CARD_PREDICT_CAP,
     CARD_DESPERATE_SPEED,
+    CARD_SAFE_FLEE_PX,
     CARD_LEAP_HEIGHT,
   } from '@/lib/card';
 
@@ -938,8 +975,28 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
      * Which game this is (§15, 2.0). Owned here — the page chips are gone
      * in the card model (§2.2: the HUD controls moved into the card).
      * ---------------------------------------------------------------- */
-    let mode: 'commander' | 'manual' = 'commander';
+    // `hand` is §16's prototype and is **not** on the mode chip: three modes on a portfolio is too
+    // much game, and the point of building it is to look at it beside commander mode before
+    // choosing. Reachable with `?cat=hand` (or `localStorage.cat-mode = 'hand'`) so the two shipped
+    // modes, and the twelve harnesses that assert on them, are untouched.
+    let mode: 'commander' | 'manual' | 'hand' = 'commander';
+    try {
+      const wanted = new URLSearchParams(location.search).get('cat') ?? localStorage.getItem('cat-mode');
+      if (wanted === 'hand') mode = 'hand';
+    } catch {
+      /* no storage, no query — stay on commander */
+    }
     const commanding = () => mode === 'commander';
+    /**
+     * §16's mode: the squad is autonomous and the player's only verb is shoving the cat.
+     *
+     * Named `swiping`, not `handing`, deliberately — `stepHold(hand, …)` and `dropHold(hand)`
+     * already use `hand` as the parameter for *whoever is holding a tile*, which is a kitten as
+     * often as it is the player. A `handing()` beside those would read as though it were about them.
+     */
+    const swiping = () => mode === 'hand';
+    /** Both modes where the *kittens* do the holding — everything except manual. */
+    const autonomous = () => mode !== 'manual';
 
     /* ---------------------------------------------------------------- *
      * State — the same shape as CatArena's, on tile elements.
@@ -1007,6 +1064,18 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       mood: 'even' as Mood,
       groomedAt: 0,
       groomUntil: 0,
+      /* §16's shove. A decaying velocity in card px/s, added to the stalk step — the first thing
+       * in this game that *displaces* the cat rather than re-timing or leashing it. `shoveAt` is
+       * when it landed, so `impulseAt` can decay it; `swipedAt` gates the cooldown. */
+      shoveX: 0,
+      shoveY: 0,
+      shoveAt: 0,
+      swipedAt: 0,
+      /* The heading it was knocked off, unit length. The walk blends back to the live quarry
+       * direction from this as the impulse decays — without it the homing correction erases the
+       * shove as fast as it lands, which is measured in `stepBoss`'s comment. */
+      shoveHx: 0,
+      shoveHy: 0,
     };
 
     /** The pointer (manual mode) or the nearest kitten (commander), in board coords. */
@@ -1082,6 +1151,59 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
         x: Math.max(halfW, Math.min(w - halfW, nx)),
         y: Math.max(halfH, Math.min(h - halfH, ny)),
       };
+    }
+
+    /**
+     * §16 — the invisible hand. One pointer segment, tested against the cat.
+     *
+     * Everything that decides *whether* and *how hard* lives in `src/lib/hand.ts` and is unit
+     * tested; this function is only the plumbing: read the segment, ask, apply, announce.
+     *
+     * The cat's heading comes from its own velocity this frame, taken as the direction to its
+     * quarry — not from `boss.facing`, which is only ±1 and would make every vertical swipe read
+     * as fully "across" a cat walking straight up the board.
+     */
+    function trySwipe(fromX: number, fromY: number, toX: number, toY: number, dtMs: number, t: number): void {
+      if (!swipeReady(t - boss.swipedAt)) return;
+      const dx = toX - fromX;
+      const dy = toY - fromY;
+      if (!isSwipe(swipeSpeed(dx, dy, dtMs))) return;
+      if (!segmentHit(fromX, fromY, toX, toY, boss.x, boss.y)) return;
+
+      const hx = quarry.x - boss.x;
+      const hy = quarry.y - boss.y;
+      const v = veer(hx, hy, dx, dy);
+      /*
+       * A dead zone, not an exact-zero test.
+       *
+       * This read `if (v.x === 0 && v.y === 0) return`, which is an equality test on a floating-point
+       * rejection and therefore never true in practice. `scratchpad/hand.mjs` §1 caught it: a flick
+       * dispatched exactly down the cat's heading still registered, because the dot product came back
+       * as 1 − 1e-16 and the "no purchase" case became a shove of 1e-14 px/s — with the recoil flash
+       * and the sound of a real one. Worse, the heading moves between the frame that aims a gesture and
+       * the frame that reads it, so a genuinely parallel flick reliably lands a *tiny* rejection.
+       *
+       * `SHOVE_MIN` makes the along-the-path case a real dead zone about 9° wide, which is also how it
+       * should read: brushing the cat lengthways does nothing at all, rather than doing an invisible
+       * something loudly. The rule the whole mechanic rests on — across shoves, along does not — was
+       * only ever true in the arithmetic; this is what makes it true on the board.
+       */
+      if (Math.hypot(v.x, v.y) < SHOVE_MIN) return;
+
+      boss.shoveX = v.x;
+      boss.shoveY = v.y;
+      boss.shoveAt = t;
+      boss.swipedAt = t;
+      // The line it was walking when it was hit, kept so `stepBoss` can carry it on that line while
+      // the impulse lasts instead of correcting straight back onto the quarry.
+      const hl = Math.hypot(hx, hy) || 1;
+      boss.shoveHx = hx / hl;
+      boss.shoveHy = hy / hl;
+      // Reuse the swat's vocabulary rather than inventing a second one: the player has hit the cat,
+      // and 2.5 just gave that class a recoil and a sound.
+      bossNode.classList.add('boss-swatted');
+      playCue('swat');
+      window.setTimeout(() => bossNode.classList.remove('boss-swatted'), IMPULSE_MS);
     }
 
     function bossPhase(phase: Phase, now: number): void {
@@ -1274,6 +1396,7 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
         rung: arena.rung,
         found: arena.ammoWas.filter(Boolean).length,
         commanding: commanding(),
+        mode,
         lastStand: (() => {
           const raised = boss.lastStand;
           if (consume) boss.lastStand = false;
@@ -1339,7 +1462,7 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       hand.since = now;
       hideRing();
       if (isWon(arena.claimed.length, arena.order.length)) {
-        if (commanding()) clearRound(now);
+        if (autonomous()) clearRound(now);
         else finish('win', now);
       }
       return 0;
@@ -1347,7 +1470,7 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
 
     /** One frame of the visitor scrubbing (manual mode). */
     function stepScrub(now: number): number {
-      if (arena.ending || commanding()) {
+      if (arena.ending || autonomous()) {
         dropHold(scrub);
         hideRing();
         return 0;
@@ -1501,7 +1624,7 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     }
 
     function stepSquad(t: number, dt: number): void {
-      if (!commanding() || arena.ending) return;
+      if (!autonomous() || arena.ending) return;
       const at = { x: boss.x, y: boss.y };
       const candidates = boardCandidates();
       const taken = squad.map((k) => (k.seek ? arena.order.indexOf(k.seek) : -1));
@@ -1519,8 +1642,18 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
         }
         const slot = squad.indexOf(k);
         const seekIndex = k.seek ? arena.order.indexOf(k.seek) : -1;
+        // §16: a kitten abandons a hold the cat has walked onto. Until now `k.target === k.seek`
+        // made an *already-started* hold unconditionally worth keeping, so a kitten held until it
+        // was pounced (`KITTEN_FLINCH_MS` is cosmetic and does not interrupt work). In a game whose
+        // only verb is shoving the cat, that meant the shove never reached the squad — push the cat
+        // onto a worker and nothing visibly happened. `shouldFlee` needs *both* proximity and a
+        // genuinely doomed hold, so kittens still commit to work they can win.
+        const fleeing =
+          k.seek !== null &&
+          candidates.some((c) => c.index === seekIndex && shouldFlee(k, c, at, { ...scale, safePx: CARD_SAFE_FLEE_PX }));
         const stillWorth =
           k.seek !== null &&
+          !fleeing &&
           (k.ordered ||
             k.target === k.seek ||
             candidates.some((c) => c.index === seekIndex && canFinish(k, c, at, scale)));
@@ -1619,6 +1752,10 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
         if (swatLands(boss.phase, dist, SWAT_RADIUS * CARD_SCALE)) {
           boss.since += SWAT_STUN_MS;
           bossNode.classList.add('boss-swatted');
+          // The cue was defined in cat-sfx.ts and never played, and `.boss-swatted` was set
+          // and never styled — so the *only* player action that touches the cat's body landed
+          // with no picture and no sound. A hit the player cannot perceive is not a mechanic.
+          playCue('swat');
           window.setTimeout(() => bossNode.classList.remove('boss-swatted'), SWAT_STUN_MS);
         }
         return;
@@ -1865,9 +2002,62 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
 
       if (dist > 1) {
         const slowed = t < boss.slowUntil ? boss.slowMul : 1;
-        const step = Math.min(dist, CARD_STALK_SPEED * spec.stalk * slowed * aggro * dt);
-        let nx = boss.x + (dx / dist) * step;
-        let ny = boss.y + (dy / dist) * step;
+        /*
+         * §16's shove: three terms, and two of them exist because the walk is **homing**.
+         *
+         * `dx/dist` is recomputed toward the quarry every frame, so a lateral offset is never a state the
+         * cat carries — it is an error the cat corrects, at roughly `step · δ / dist` per frame, which
+         * grows as the cat closes on what it is chasing. `tests/hand.test.ts` integrates this branch with
+         * the real constants: a bare sideways impulse lands 25.7px of its nominal 25.2 at 140px from the
+         * quarry and only 15.8px at 10px from it. So the erosion is real, worst exactly when a player
+         * would most want to shove, and **not** the difference between a mechanic and no mechanic — an
+         * earlier version of this comment said it was, on the strength of in-situ figures a 20fps
+         * harness could not actually resolve. The simulation is what settled it.
+         *
+         * The two remedies close most of that gap and both come from the same reading of the gesture:
+         *
+         * - **A shoved cat stops looking where it is going.** While the impulse lasts, the walk follows
+         *   the heading the cat had *when it was hit*, blending back to the live quarry direction as the
+         *   impulse decays. `shoveLeft` is both the strength of the push and the blend, because they are
+         *   one event — no second constant, nothing to keep in sync.
+         * - **`SHOVE_FOOTING`**: a gust does not add sideways speed to something with perfect traction, it
+         *   takes the traction away. A third of its stride at the peak, so the cat still visibly tries to
+         *   get where it was going rather than freezing.
+         *
+         * Together they take the worst case from 15.8px to 23.0px and leave the best case unchanged, which
+         * is the right shape: the mechanic stops depending on where the cat happens to be standing.
+         *
+         * Raising `IMPULSE_SPEED` was the alternative and is the wrong lever — a bigger shove buys a
+         * proportionally bigger correction, so it costs legibility everywhere to fix one case.
+         */
+        /*
+         * `boss.shoveAt > 0` is a guard on the sentinel, not a redundancy. `shoveAt` starts at `0`
+         * meaning "never shoved", and `impulseAt(t - 0)` is `impulseAt(t)` — which is only `0` because
+         * `t` is time since navigation start and is normally far past `IMPULSE_MS`. Inside the first
+         * 420ms of a page's life it would return a *live* impulse, and the cat would walk at
+         * `SHOVE_FOOTING` speed while being shoved by a stale direction, in every mode including the two
+         * shipped ones. A sentinel that happens to be safe because of how big a clock usually is, is
+         * the same bug as a magic number.
+         */
+        const shoveLeft = boss.shoveAt > 0 ? impulseAt(t - boss.shoveAt) : 0;
+        const footing = 1 - shoveLeft * (1 - SHOVE_FOOTING);
+        const step = Math.min(dist, CARD_STALK_SPEED * spec.stalk * slowed * aggro * footing * dt);
+        // Aim: the live quarry direction, blended with the heading it was knocked off.
+        let hx = dx / dist;
+        let hy = dy / dist;
+        if (shoveLeft > 0 && (boss.shoveHx || boss.shoveHy)) {
+          hx = hx * (1 - shoveLeft) + boss.shoveHx * shoveLeft;
+          hy = hy * (1 - shoveLeft) + boss.shoveHy * shoveLeft;
+          const hl = Math.hypot(hx, hy) || 1;
+          hx /= hl;
+          hy /= hl;
+        }
+        let nx = boss.x + hx * step;
+        let ny = boss.y + hy * step;
+        if (shoveLeft > 0) {
+          nx += boss.shoveX * shoveLeft * dt;
+          ny += boss.shoveY * shoveLeft * dt;
+        }
         if (t < boss.anchorUntil && boss.anchorPx > 0) {
           const ax = nx - boss.anchorX;
           const ay = ny - boss.anchorY;
@@ -1895,11 +2085,11 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       quarry.since = t;
       hideRing();
       arena.interrupts++;
-      if (commanding()) {
+      if (autonomous()) {
         const hit = squad.find((k) => k === quarry);
         if (hit) hit.flinchUntil = t + KITTEN_FLINCH_MS;
       }
-      for (let i = 0; i < (commanding() ? 0 : RECLAIM_ON_HIT); i++) {
+      for (let i = 0; i < (autonomous() ? 0 : RECLAIM_ON_HIT); i++) {
         const back = takeGround();
         if (!back) break;
         claim(back, arena.order.indexOf(back), arena.seed);
@@ -1984,7 +2174,7 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       say(record ? 'round-record' : 'round-clear', ROUND_BEAT_MS);
       clearTimeout(arena.beatTimer);
       arena.beatTimer = window.setTimeout(() => {
-        if (!arena.on || !commanding()) return;
+        if (!arena.on || !autonomous()) return;
         const then = performance.now();
         if (!dealBoard(then)) {
           endQuietly();
@@ -2001,7 +2191,7 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       say('round-again', ROUND_BEAT_MS);
       clearTimeout(arena.beatTimer);
       arena.beatTimer = window.setTimeout(() => {
-        if (!arena.on || !commanding()) return;
+        if (!arena.on || !autonomous()) return;
         const then = performance.now();
         if (!dealBoard(then)) {
           endQuietly();
@@ -2013,7 +2203,7 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     }
 
     function checkRound(): boolean {
-      if (!commanding() || arena.ending) return false;
+      if (!autonomous() || arena.ending) return false;
       const outcome = roundOutcome(arena.claimed.length, arena.order.length);
       if (outcome === 'restart') {
         restartRound();
@@ -2113,8 +2303,13 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       boss.facing = 1;
       boss.last = t;
       rollStance(arena.seed);
-      if (commanding()) dealSquad(t);
+      if (autonomous()) dealSquad(t);
       syncAmmo();
+      // §16 has no chip, so the caption is the only place its verb can be stated. A prototype that
+      // never tells you what your hands are for gets judged as a broken version of the mode it
+      // replaced. Overwritten by `arenaCaption` on the first reclaim, which is the right lifetime
+      // for an instruction: it is there until you have done the thing once.
+      if (swiping()) caption('swipe across the cat to shove it off course');
       now = t;
       arena.raf = requestAnimationFrame(tick);
     }
@@ -2216,7 +2411,7 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       if (!arena.on) return;
       arena.raf = requestAnimationFrame(tick);
 
-      const patience = commanding() ? WATCH_TRUCE_MS : IDLE_TRUCE_MS;
+      const patience = autonomous() ? WATCH_TRUCE_MS : IDLE_TRUCE_MS;
       if (scrub.seen && t - scrub.seen > patience) {
         endQuietly();
         setOpen(false);
@@ -2231,8 +2426,8 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       stepMood(t);
       stepSquad(t, dt);
       const worked = stepScrub(t);
-      quarry = commanding() ? (nearestKitten() ?? scrub) : scrub;
-      stepBoss(t, dt, commanding() ? scrubProgress(t - quarry.since) * (quarry.target ? 1 : 0) : worked);
+      quarry = autonomous() ? (nearestKitten() ?? scrub) : scrub;
+      stepBoss(t, dt, autonomous() ? scrubProgress(t - quarry.since) * (quarry.target ? 1 : 0) : worked);
       holdCaption();
       if (!arena.ending) stepTalk(t);
     }
@@ -2283,16 +2478,34 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     });
     syncSound();
 
-    // Mode — owned here too. Pressed means manual (§15); the switch takes effect
-    // on the next round, never mid-fight.
-    const syncMode = () =>
+    /**
+     * Mode — owned here too. Pressed means manual (§15); the switch takes effect on the next round,
+     * never mid-fight.
+     *
+     * Two things beyond the aria state, both of which §16 needed and neither of which was §16's own
+     * idea:
+     *
+     * 1. **The mode is written down.** `aria-pressed` can only say manual-or-not, so with three
+     *    modes there was no way for anything outside this closure — a harness, a stylesheet, a
+     *    person reading the DOM — to tell which game is running. `data-mode` on the panel is that
+     *    observable. On the panel and not on `<html>`: pillar 2 is about the card never writing to
+     *    the *page*, and this is the card's own element, the same one that already carries `hidden`.
+     * 2. **The chip cannot lie.** In `hand` mode it read "play it yourself" un-pressed — which
+     *    states commander — and pressing it set `mode = 'manual'`, so the one control on screen
+     *    quietly destroyed the prototype with no way back but a reload. While the flag is on, the
+     *    two-way switch has nothing true to say, so it is not shown.
+     */
+    const syncMode = () => {
+      panelEl.dataset.mode = mode;
       modeBtn?.setAttribute('aria-pressed', mode === 'manual' ? 'true' : 'false');
+      if (modeBtn) modeBtn.hidden = swiping();
+    };
     modeBtn?.addEventListener('click', () => {
       mode = mode === 'manual' ? 'commander' : 'manual';
       syncMode();
       if (arena.on) {
         // §15: mode takes effect on the next round — say what it will do.
-        caption(commanding() ? 'next round: kittens play' : 'next round: you play');
+        caption(autonomous() ? 'next round: kittens play' : 'next round: you play');
       }
     });
     syncMode();
@@ -2307,12 +2520,21 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       const t = performance.now();
       const dt = (t - scrub.at) / 1000;
       if (scrub.at && dt > 0.004 && dt < 0.12) {
-        scrub.vx = (e.clientX - scrub.x) / dt;
-        scrub.vy = (e.clientY - scrub.y) / dt;
+        // Both ends of the delta in *board* coordinates. This read `e.clientX - scrub.x`, which
+        // subtracted a board-relative position from a viewport-relative one: the difference carried
+        // the board's own left/top offset as a constant, so at dt≈0.016 a stationary pointer
+        // "moved" tens of thousands of px/s, always in +x/+y. `CARD_PREDICT_CAP` clamped it, which
+        // is why nothing ever looked broken — the leap simply always over-led down and to the
+        // right, in the one mode (§3 manual) where the aim is supposed to read your movement.
+        scrub.vx = (c.x - scrub.x) / dt;
+        scrub.vy = (c.y - scrub.y) / dt;
       } else {
         scrub.vx = 0;
         scrub.vy = 0;
       }
+      // §16: the shove. Measured on the segment the pointer just travelled, before `scrub.x/y`
+      // are overwritten — the previous position is the only place the segment's start exists.
+      if (swiping() && arena.on && !arena.ending) trySwipe(scrub.x, scrub.y, c.x, c.y, t - scrub.at, t);
       scrub.at = t;
       scrub.x = c.x;
       scrub.y = c.y;

@@ -533,6 +533,15 @@ const leaper = (page, want = 'ambush') =>
      * telegraph lands between ~7s and ~22s, so a 25s wait had no margin and flaked. 35s
      * covers the tail with room without softening the assertion — the cat still has to
      * commit, or the check fails.
+     *
+     * **2.5: 35s does not cover the whole tail either.** This check reds roughly one run in four,
+     * and it was measured at that rate on *both* sides of a `git stash` — four runs of 2.5's hand
+     * prototype (one red) and four of the commit before it (one red), the same failure text each
+     * time. So it is recorded here rather than re-diagnosed the next time it appears: a red on this
+     * one line, with the rest of the file green, is the flake and not a regression. Re-run before
+     * investigating, and if it is to be fixed properly the fix is to wait on the *regrow* the
+     * telegraph depends on rather than on a longer stopwatch — the same lesson `fixture.mjs` records
+     * about `CARD_MERCY_BUDGET_MS`, which is that a better budget was never the answer.
      */
     const still = await nearSpot(page);
     let answered = false;

@@ -1,6 +1,6 @@
 # GDD — "Whose Screen Is It" (cat boss fight)
 
-**Version** 2.3 · **the card is the only game — the fight leaves the page, and the page is left alone.** Five versions of
+**Version** 2.5 · **the card is the only game — the fight leaves the page, and the page is left alone.** Five versions of
 playtesting returned one sentence — *"she doesn't know what she's doing"* — and 1.3
 answered it with legibility, 1.4 with depth, and both missed the point. The fight was
 never unclear; it was **a game with three verbs on a CV site**. §5.2's core verb is
@@ -61,6 +61,8 @@ including the ones now running in a browser. Built is not playtested.
 | 2.2.1 | **The first Linux gate on the card, and what a screenshot found that no check did.** 2.2 shipped green on its author's machine; this pass looked at the card and then ran the fleet here. **Three faults were visible before any harness ran.** Kittens rendered as a full-board black rectangle: they are built with `document.createElement`, so — exactly as the tiles already learned one commit earlier — they never carry Astro's scoping attribute and *every* `.cat-card-kit` rule silently failed to match, leaving no width, no height, `position: static` and `fill` at SVG's initial black. The rule is now general: **anything the script creates needs `:global()`, and the tile comment was a note where a rule was needed.** Both cats were pure black in dark mode for a neighbouring reason — the sprite paths carry no `fill` attribute, so they took SVG's initial value instead of `currentColor` and vanished into a dark card; `fill: currentColor` is now stated on the icon and the boss. And the footer read `treats: 0 / 7 treats` (a `::before` over a `tallyFor()` string that already ends in the word) while ellipsis-truncating the caption at 320px — rebuilt as two rows, caption first, because the caption is the only thing that says what just happened. **Pillar 2 refused a convenience.** Stopping the page's paw row and the card's footer from showing one number twice looked like a job for a `cat-card-open` class on `<html>`; `arena.mjs` failed it on the first run, and correctly — the card may not write to the page, and `<html>` is the page. The rule survives contact: the page row now stands down through `body:has(.cat-card-root[data-open])`, CSS matching the card's own attribute, scoped to ≤480px where the card physically covers that corner. On desktop both stay, saying different things (n / N treats collected vs. n / N to throw). **Four harnesses had never run.** `card-check`, `card-fight`, `card-mechanics` and `card-ambient` each resolved Chromium from two Windows-only paths and exited 2 before a single check on every Linux run — the quietest possible failure, and the exact thing §12.1's shared `launch()` exists to prevent. Routed through it, three were red: two asserted the card chip "mirrors the page chip" against `#cat-sound-toggle`/`#cat-manual-toggle`, ids 2.2 deleted when it moved those chips into the card (the mirror half was measuring 2.1, so it is gone and a check that no 2.1 chip survives replaces it); `card-ambient` seeded treats by stamping `.got` onto paws on a 150ms interval and lost a race it could not win, since `SiteCat`'s own render pass toggles that class from `game.found` every frame — it now earns them through the fleet's `armAmmo()`. **That last one was hiding a real bug.** With treats properly earned the badge still read 0: `syncAmmo()` ran once at init, and nothing orders CatCard's `astro:page-load` against SiteCat's, so a returning visitor with treats saw no badge and no cue — the cue being the one thing that says the card is worth opening. A `MutationObserver` on the paw row removes the ordering question. **And one measurement was the harness's own:** a `card-check` failure that looked exactly like "opening the card scrolls the page 169→600" was the harness reading its baseline mid-`scroll-behavior: smooth` animation; `armAmmo()` had already known to scroll `behavior: 'instant'`. `focus({ preventScroll: true })` is kept on its merits, not on that number. **The gate, measured rather than assumed.** Three harnesses were red when this pass began — `arena2` (crash), `arena3` (30/34) and `arena5` (flaking 22/21/18). Each was re-run at the then-`HEAD` with this pass stashed and **failed identically there**, which is the only way to know a red is not yours: they were 2.2's. Three parallel commits (`88da7d2`, `55e9b6a`, `c15f0d4`) landed on the branch while this pass ran and fixed `arena2` and `arena3` at the source, plus the `arena7` §1 mercy window and the card's open-animation race — the same one-off reds this sweep had seen and recorded as flakes. After rebasing onto them the fleet is green: arena 55/55, arena2 28/28, arena3 34/34, arena4 39/39, arena5 22/22 twice, arena7 25/25, arena8 27/27, top-state 18/18, touch-fight 31/31, battle 25/25, commander 15/15, check-ink 20/20, cycle, first-run, and the four card harnesses at 21/21, 16/16, 10/10 and 5/5. Worth recording that two sessions found the same reds from different directions: one by re-running until a pattern showed, one by root-causing the window. **A flake named is a flake someone can fix** — which is the argument for reporting the one-off reds rather than rounding them away. |
 | 2.2.2 | **A review of the three parallel commits, and two paragraphs rewritten to sound like the pages they sit on.** `88da7d2`, `55e9b6a` and `c15f0d4` fixed real things and showed their arithmetic; this pass held them to §12.1 rather than re-litigating them, and found four. **A fallback that restores the exact bug it replaces.** `arena2` read the new `openedAt` tell as `Number(...dataset.openedAt) || performance.now()` — and `performance.now()` is *precisely the measurement that line exists to stop using*, so a renamed or dropped tell would not go red, it would quietly resume flaking. The hygiene test cannot catch it and says so: `tests/harness-hygiene.test.ts:174` records that the `x || fallback` shape was tried and dropped for flagging four correct sites. **A rule the checker deliberately declines to enforce is a rule the call site has to hold**, so the read now has no fallback and a missing tell is a reported fixture. **A shared strategy in one copy, again.** `c15f0d4`'s `waitOpen()` — wait for the card's open transform to settle, because `boundingBox()` mid-animation reads 275 for a 320px card — lived in `card-check` alone, while `card-mechanics` cleared the same race with a bare `waitForTimeout(500)`: a magic sleep that works exactly until the animation gets slower. It moves to `lib/fixture.mjs`, and `card-mechanics`'s 500ms splits into the condition (`waitOpen`) and the duration it was also silently serving (the fight's first beat). **The same treat-seeding race, left in the second copy.** 2.2.1 fixed `card-ambient`'s `.got`-stamping against `SiteCat`'s render pass and did not check whether anything else did it; `card-mechanics` did. Both earn ammo through `armAmmo()` now — *fixed in one copy and left in the other* is the fault §12.1 is named after, committed while writing the section about it. **A derived number frozen at its answer — and a derivation that should not have existed.** `arena7`'s mercy budget went 9s → `26000` with the sum in the commit message, so this pass derived it instead: mirror `AGGRO_BORED`, `GROOM_EVERY_MS`, `GROOM_MS` and compute the walk, giving 27s against the literal's 26s — checked against the measurement rather than trusted over it. Then `d6b89a5` landed with a better diagnosis and the derivation was deleted unused. The check had been waiting on the wrong things twice over: its "claims changed" signal *nets out* on the card (a hold flips its tile claimed→scrubbing while the last one clears back, so the count never moves through a hold-and-reclaim), and `parkableSpot` hands over the claim **furthest** from the boss — so the harness was timing a board-length walk that its subject, "does a bored cat still answer a hold", never needed. Holding the nearest claim and reading the telegraph alone bounds it by the regrow clock (~12s measured). **Deriving a number correctly is not the same as needing the number**, and the sound derivation was still modelling a wait the check should not have been doing. The constant is gone; the note in `lib/fixture.mjs` stays. **And the two paragraphs.** 2.2.1's welcome-note line asked a first-time reader to hold two cats apart before meeting either, spending a semicolon in a note whose other sentences are single clauses; it now points at the one thing nobody finds by accident. The colophon paragraph ended on *"which is the whole point of moving the game off the page"* — a design-diary sentence in a section that otherwise only describes what the site does (*"it walks, pauses, slips out of the room and back"*). Rewritten to describe rather than justify, and to keep the reduced-motion thread the paragraph above it closes on. Writing that thread caught a fifth thing: the first draft claimed the cat *"simply arrives where it was going"* under reduced motion, which is false — the CSS flourishes are gated but the boss still walks on rAF. **Prose about behaviour is a claim about behaviour**, and it was checked against the code like any other. |
 | 2.3 | **A design pass, after being told the aesthetic work had skipped the part that shows.** Two earlier passes read "aesthetic" as prose voice and code style; the correction was blunt and correct. Reviewed at 3×, the card was functional and plain and did not look like the site it lives on — this site is editorial and restrained, and the card was a widget with a big red button. **Ranked by how wrong it was:** the loudest object on the card was the *mute button* (`sound` rendered as a filled wine lozenge, higher contrast than the board it sits above); the cat was 24×15 among eleven chunky tiles, making the least visible thing on screen the thing the game is about; the territory strip ran full-bleed along the panel's top where the border-radius clipped it and it stopped in mid-air, reading as a rendering artefact; six dashed outlines made the board look like a cut-here template; three type systems shared 320px; and four of eleven labels wrapped to two lines and touched their edges. **The fixes are mostly subtraction.** The chip is now always neutral and **the pip carries the state** — the markup already had a `.cat-card-pip` doing nothing. Territory became a 2px inset gauge with a track, sitting between the header and the board, *directly above what it measures* (§6 amended: an edge is not automatically the right place for a gauge). Dashed outlines became the tile's own border going accent-tinted, so a claim reads as occupied rather than outlined. Type dropped a size everywhere, because the 44px tile is a touch target and may not shrink — so the type gives way and the board gets its air back. **The constraints were measured before anything moved**, and two of them are absolute: `touch-fight` parses the claimed tile's `box-shadow` alpha and requires exactly `0.07 + 0.19 × --scrub`, and `arena` recomputes text contrast over a 7% tint with a comment saying it must match. The wash is therefore untouchable, and the *type* had to give way rather than the tint — which is the correct direction anyway, since smaller text needs more contrast, not less. **Two bugs fell out of looking.** `--boss-scale` had been set by `paintTerritory` every frame since 2.2 and **no CSS rule ever read it** — the cat has never once grown with its territory. Wiring it meant choosing the range for the first time rather than preserving one, and 2.2's `1.2 + share × 0.6` would be a 50px cat on a 318px board, so it is `1 + share × 0.35`, applied with the `scale` property so `[data-boss]`'s layout box stays 28×18 and no distance measurement moves. And the dialogue ribbon was placed at `boss.y - height - 8` where `boss.y` is the cat's **centre**, so the bubble was drawn *on* the speaker; it now clears the sprite's half-height and its tail tracks the cat's x, because a bubble centred on the cat stops being centred the moment a board edge clamps it. **The cat itself took two tries, and the first was worse than what it replaced.** The card's copy of `#site-cat` had quietly broken §0 — it dropped the four legs *and* the head circle, so the sprite was a floating loaf with detached ears, and it left the eye at `currentColor`, painting ink on ink. The first attempt patched that with a bigger dome, two eyes and a smile: a cartoon, on a site that draws ink silhouettes, and it was rejected on sight. **The fix was never a better invention — it was the drawing that already existed.** All three sprites (icon, boss, kitten) are now `#site-cat`'s silhouette, legs and head and one knocked-out eye, which is what §0 asked for in the first place. **Gate:** 474 unit tests, `astro check` clean, and the full fleet green — arena 55/55, arena4 39/39 (its territory check rewritten to describe the new gauge rather than the old strip), arena5 22/22, arena7 25/25, arena8 27/27, top-state 18/18, touch-fight 31/31, battle 25/25, commander 15/15, check-ink 20/20, cycle, first-run, card-check 21/21, card-fight 16/16, card-mechanics 11/11, card-ambient 5/5. `arena2` and `arena3` went red mid-pass and were **verified red at a stashed baseline with the identical signature** — the way to know a red is not yours is to go and look, not to argue about it — so the visual work was not their cause, and three parallel commits (`91a2783`, `30453bb`, `60f920d`) then fixed those flakes at the source. **But the bigger sprite did break something, and only the last harness left standing said so.** `arena2`'s "the boss never leaves the board" went to 0/5: the stalk step clamped the cat with the literals `12` and `8` — the *old* 24×15 sprite's half-width and half-height — so a 28×18 cat overhung the board by 2px at every edge, against a check that allows 1. Spawn carried the same stale `8`. Both derive from `bossNode.offsetWidth/offsetHeight` now, so the next change to the drawing cannot reintroduce it. **The first fix then over-applied it:** clamping the *fetch* walk too stopped the cat a few pixels short of a treat that had landed in the board's padding, `away` never closed, and `arena5` timed out for 20s waiting on an `eat` phase that could no longer arrive. Fetching to the very edge with the sprite overhanging is correct; the clamp belongs to the stalk. **A cosmetic change is not cosmetic when a literal somewhere else encodes the old size.** **And one more figure was wrong, which the sprite work only made obvious:** the squad was `#site-cat`'s drawing at 16×10 next to the boss's 28×18 — *the same animal at two sizes*, so telling your kittens from the cat hunting them came down to judging size at 16px on a board of eleven labelled tiles. Two opposed sides have to be readable at a glance; that is a functional requirement in a game where you order one of them about, not decoration. **§0 is amended here on purpose** — "nothing new is drawn" exists to stop art accreting, not to leave the two sides indistinguishable — and the kitten is now drawn as a kitten, by the tells that survive being 16px wide: an oversized head, a short body, and a **tail carried straight up**, a vertical stroke the boss's low back-sweeping tail never makes. Its viewBox is its own (44×36, taller than long, against the boss's longer-than-tall), so even the two footprints differ. Candidates were rendered side by side at true size before choosing — a sitting pose read even more distinctly and was rejected, because a unit that trots to a claim may not be drawn sitting down. Final: 18 harnesses green on one build. |
+| 2.4 | **The board was a form, so colour it like a board.** Asked whether the game looked appealing. It did not — it looked like a well-made settings panel with a cat in it, and the diagnosis is that 2.3 designed the *chrome* down and never designed the *board* up. Every change in that pass was subtraction, which cures ugliness and not dullness. **Tiles carry their category's hue.** The pool mapped `nav.map((c) => c.label)` and threw the hue away at that line, so eleven tiles rendered eleven identical grey boxes while the number that distinguishes them sat one property away, already washing every other page on the site — the same fault as `--boss-scale`: **data that exists and never reaches the eye.** `resolveWash()` is the site's own resolver, so the four fixed routes get warm-band hues by slug hash with no decision required. First tried at 9% and it was still visibly grey: *a tint you have to look for is not a tint.* 18%. **Claimed tiles then had to fight a warm tint with a warm tint**, so the cat's colour takes the tile's base colour over and the board reads taken / free at a glance instead of asking anyone to spot a thin edge; the 7% `box-shadow` wash is untouched, because `touch-fight` parses its alpha and `arena` recomputes label contrast against it. **Territory went 2px to 5px, wine to amber as you take ground** — this bar is the entire stakes of the fight, and quieting the chrome had quieted the one thing that must not be quiet. `arena4`'s check now bounds it on *both* sides: an upper bound alone could never report the fault that mattered, which is the gauge shrinking back to invisibility. Labels top-align and the sprite halos double, because the cats walk across the labels and colour made the collision worse. Gate: arena 55/55, arena2 29/29, arena3 34/34, arena4 39/39, arena8 27/27, commander 15/15, touch-fight 31/31, card-check 21/21, card-mechanics 11/11, first-run, 474 unit tests, `astro check` clean. |
+| 2.5 | **The invisible hand (§16) — a prototype, behind a flag, and the measuring cost more than the mechanic.** Asked as a switch of thought: *what if we act as an invisible hand disturbing the movement of the cat while the kittens work on their own?* Decided with three answers — the verb is a **swipe across its path**, the kittens stay **autonomous and react to the cat**, and it is built to be **judged beside commander mode** rather than replacing it. So `mode` gains a third value reachable only by `?cat=hand` or `localStorage.cat-mode`, because three modes on a portfolio is too much game and the two shipped ones must not notice this exists.<br><br>**It began as a bug fix, because the same verb was already half-built and invisible.** `swatLands()` has fired since 1.4, adding `SWAT_STUN_MS` to the phase clock and setting `.boss-swatted` — for which **no CSS rule existed anywhere in `src/`** — while the `'swat'` cue in `cat-sfx.ts` was **never played**. The one existing player-to-cat interaction in the game resolved with no picture and no sound. It now recoils and sounds, and §16 reuses that vocabulary rather than inventing a second one.<br><br>**`src/lib/hand.ts` is the gesture, pure and unit-tested.** The one design idea is that the impulse is the component of the swipe **perpendicular to the cat's heading** — `veer()` returns the rejection, whose magnitude is `IMPULSE_SPEED · |sin θ|`, so the rule *across shoves, along does not* is the arithmetic itself and not a fudge on top of it. `segmentHit()` is point-to-**segment** distance, because a 900px/s flick covers 40px in a frame and testing only where the pointer landed would let a fast swipe tunnel through a 28px sprite — the faster you flicked, the less it would work. A cooldown longer than the impulse stops the pointer being scrubbed in circles to pin the cat forever, which is a fidget with no failure state. `shouldFlee()` in `squad.ts` is `near && !canFinish(...)` — **both**, so kittens still commit to winnable work — and it is what makes interference matter indirectly: shove the cat and the squad visibly regroups.<br><br>**Four faults, and the interesting ones are about measurement rather than about cats.** (1) `IMPULSE_PX` was documented as a displacement and returned as a velocity: at 26 it integrated to 7.3px against the cat's own 14px walk over the same 420ms — *the shove was slower than the thing it was meant to interrupt.* A legibility unit test caught it before anything was looked at; it is `IMPULSE_SPEED = 90` with `IMPULSE_TRAVEL_PX` **derived** (∫₀¹(1−t²)dt = ⅔). (2) The swat keyframes were written on `transform`, which already carries the sprite's facing flip — animating it would have dropped the flip mid-recoil, so they use the independent `translate`/`rotate` properties. (3) `trySwipe`'s no-purchase guard was `v.x === 0 && v.y === 0`: **an equality test on a floating-point rejection**, therefore never true. A flick dispatched exactly down the cat's heading came back as `1 − 1e-16` and landed a shove of 1e-14px/s — with the full recoil flash and the full sound. `SHOVE_MIN` makes it a real dead zone ~8.6° wide, because **an acknowledgement of something that did not happen is worse than no acknowledgement**: it teaches the player a rule and then contradicts it. (4) `boss.shoveAt` starts at `0` meaning "never shoved", and `impulseAt(t − 0)` only returns `0` because `t` is time since navigation start — inside the first 420ms of a page's life the cat would have walked at `SHOVE_FOOTING` speed while being shoved by a stale direction, **in every mode including the two shipped ones.** A sentinel that is safe because a clock is usually big is the same bug as a magic number.<br><br>**One shipped-code bug fell out that has nothing to do with §16.** The board's `pointermove` computed `scrub.vx = (e.clientX - scrub.x) / dt` — a *viewport*-relative coordinate minus a *board*-relative one, so the difference carried the board's own offset as a constant and a stationary pointer "moved" tens of thousands of px/s, always in +x/+y. `CARD_PREDICT_CAP` clamped it, which is why nothing ever looked broken: §3 manual mode's leap simply always over-led down and to the right, in the one mode where the aim is supposed to read your movement.<br><br>**The prototype was to be judged by looking at it, and building something worth looking at took five wrong versions of the rig.** (a) A strip of `locator.screenshot()` calls: each costs ~330ms here, so the first frame arrived at +332ms of a 420ms impulse and the strip showed 2.6 seconds of a cat walking. CDP `Page.startScreencast` instead — no per-frame round trip, ~40fps. (b) The recording was started with a fixed duration and the flick placed "early" in it; but **every `mouse.move` is its own ~100ms round trip**, so a flick advertised as 104ms of pointer movement took 700ms of a 940ms window and the camera closed as the shove began. A duration fixed in advance cannot bracket an event whose own cost is unknown. (c) Those same round trips meant the page saw 8.5px moves 100ms apart — 85px/s, *below* the 240px/s floor — so whether the flick registered came down to socket load: two runs passed and the third did not, from identical code. The gesture is dispatched in-page now, and the trade is named rather than hidden (`isTrusted: false`, so `hand.mjs` §5 keeps one real-mouse check). (d) The aim was computed in Node and passed in, 200–300ms stale, by which time a rotating heading made `veer` reject nearly all of it — this is what surfaced fault (3). (e) Each frame was cropped around its own action, which is a **tracking shot**: the cat sits still while the tiles slide past, the exact opposite of what a strip is for. One locked window, computed from every position it will show.<br><br>**And the measurement it was all for turned out to be the wrong instrument, which is the pass's real lesson.** In-situ figures put the shove's displacement at 0–14px against a nominal 25.2px with no stable story, and a reading of them concluded the mechanic did nothing at all — a conclusion that reached a code comment before it was checked. What settled it was **integrating `stepBoss`'s stalk branch deterministically** (`tests/hand.test.ts`): the bare impulse lands 25.7px at 140px from the quarry and 15.8px at 10px, because the walk is **homing** — `dx/dist` is recomputed every frame, so a lateral offset is not a state the cat carries but an error it corrects, hardest exactly when it is closest to what it is chasing, which is the one moment a player would want to shove it. Two remedies close that gap and both come from the same reading of the gesture: **a shoved cat stops looking where it is going** (the walk follows the heading it was hit on, blending back as the impulse decays, `shoveLeft` serving as both strength and blend so there is no second constant), and **`SHOVE_FOOTING`** (a gust does not add sideways speed to something with perfect traction, it takes the traction away). Worst case 15.8px → 23.0px, best case unchanged: the mechanic stops depending on where the cat happens to be standing. Raising `IMPULSE_SPEED` was the alternative and is the wrong lever, since a bigger shove buys a proportionally bigger correction. **A browser harness that cannot resolve the quantity it is reporting will report a number anyway**, and the line between `hand.mjs` and `tests/hand.test.ts` is now drawn on exactly that: the browser asserts only what survives a frame of jitter — did it register, did it not, did it stay on the board — and every figure needing three significant figures lives in a unit test.<br><br>**Two things the mode itself was missing, both the session's recurring fault.** The card wrote no observable for which mode it is in — `aria-pressed` can only say manual-or-not, so with three modes nothing outside the closure could tell which game was running; `data-mode` on the panel is that observable (on the panel, not `<html>`, because pillar 2 is about the *page*). And the mode chip **lied**: in hand mode it read "play it yourself" un-pressed, which states commander, and pressing it set `mode = 'manual'` — the one control on screen quietly destroyed the prototype with no way back but a reload. It is hidden while the flag is on, and the opening caption names the verb, because a prototype that never says what your hands are for gets judged as a broken version of the mode it replaced.<br><br>**Gate:** 520 unit tests (42 in `tests/hand.test.ts`, including the deterministic shove-vs-homing simulation), `astro check` clean, warning-free build, a new 8-check `scratchpad/hand.mjs` at 8/8, `scratchpad/hand-look.mjs` at 8/8 with its frame strips and path drawings, and the **full twenty-harness fleet green on one build** — arena 55/55, arena2 29/29, arena3 34/34, arena4 39/39, arena5 22/22, arena7 25/25, arena8 27/27, battle 25/25, card-ambient 5/5, card-check 21/21, card-fight 16/16, card-mechanics 11/11, check-ink 20/20, commander 15/15, cycle, first-run, top-state 18/18, touch-fight 31/31. `arena7` §1's mercy check went red once and was measured at **one run in four on both sides of a `git stash`** — four runs of this pass and four of the commit before it, one red each, identical text — so it is recorded in the harness as a known flake with the shape of the real fix, rather than re-diagnosed next time. **Still not playtested by a person**, and this pass is the one where that matters most: it produced a picture and a set of numbers, and neither can say whether shoving a cat is fun. |
 
 ---
 
@@ -2632,6 +2634,26 @@ never asking it to — the fix I had just written for a flaky gate, failing twic
 reason. There is one `FIGHTS` constant now. **A budget expressed as two numbers is a budget that will
 disagree with itself**, and a fix verified only by "the code is more correct now" is not verified.
 
+**2.5: a mechanic can be fully built, fully reachable, and have no output at all — and nothing in the
+fleet is looking for that.** The swat has fired since 1.4: `swatLands()` decides it, `SWAT_STUN_MS`
+lands it, `.boss-swatted` announces it, the `'swat'` cue exists to sound it. **No CSS rule for that
+class existed anywhere in `src/`, and the cue was never played.** For four versions the only
+player-to-cat interaction in the game resolved with no picture and no sound, and every harness was green
+throughout, because each one asserted the state the swat *changes* — a phase clock, a stun — and no
+harness asserts that a state change is **visible**.
+
+This is the same fault as `--boss-scale` set every frame and never read, six boss postures sharing one
+drawing, and eleven category hues thrown away at `nav.map((c) => c.label)`: **state the code knows that
+never reaches the eye.** The fleet cannot catch it by construction, because a check reads the DOM and the
+DOM *was* correct. What catches it is rendering the thing and looking — which is why 2.3, 2.4 and 2.5
+each began with a screenshot rather than a harness, and why `scratchpad/hand-look.mjs` exists at all.
+
+**The corollary 2.5 added, and it is the sharper half:** output with no state behind it is worse than no
+output. `trySwipe`'s guard was an equality test on a floating-point rejection, so a flick along the cat's
+path flashed the recoil and played the cue for a shove of 1e-14px/s. **An acknowledgement of something
+that did not happen looks exactly like success**, to a harness and to a player, and it teaches the player
+a rule the game will then contradict.
+
 ---
 
 ## 13. The arena toggle
@@ -3151,3 +3173,190 @@ inside a game loop. `commander.mjs` section 5 plays a round with storage denied.
 - **Still not playtested by a person.** Every number here is `[PH]`, the gate proves the mode
   *works*, and the tester who could not read 1.2 or 1.4 is the only one who can say whether
   this one is finally the right shape.
+
+---
+
+## 16. The invisible hand (2.5) — you disturb the cat, the kittens work
+
+**Status: prototype, behind a flag.** Reachable with `?cat=hand` or `localStorage.cat-mode = 'hand'`
+and nowhere else. It is not on the mode chip and should not be until somebody has played it beside
+commander mode and said which is better: three modes on a portfolio is more game than a portfolio
+wants, and the point of building this was to have something to compare.
+
+### 16.1 Purpose, and what it inverts
+
+§15 gave the *hold* to a kitten and left the visitor two optional clicks — point at a claim to send
+somebody, throw a treat to pull the cat. This asks the opposite question: **what if the player's only
+job is interfering with the cat, and the squad gets on with the work by itself?**
+
+One verb instead of two. It also suits a phone better than tap-to-order does, because a swipe is a
+finger's native gesture rather than a small target to hit.
+
+**What already existed, measured rather than assumed:**
+
+- **The kittens were already fully autonomous.** `stepSquad` runs every frame regardless of mode, and
+  `pickWork()` compares two clocks per candidate — the time to walk there and hold (`KITTEN_WORK_MS`)
+  against how long before the cat could interrupt — taking the soonest *finishable* claim and falling
+  back to the best ratio, so a claim under the cat's nose scores zero and the kitten walks away. "The
+  kittens work on their own" needed nothing built. What this mode removes is the *order*, and
+  `assignOrder`'s `k.ordered` override with it.
+- **Every existing lever on the cat is a clock or a leash, never a displacement.** Treats lure
+  (`fetch`), slow (`slowMul`), leash (`anchorPx`), stretch the telegraph (`telegraphMul`), or stun
+  (`SWAT_STUN_MS`); mood and round scale speed and patience; stances scale stalk. **Nothing in the game
+  moved the cat.** A deflection is genuinely new movement code, which is why it is its own module
+  rather than another special case inside `stepBoss`.
+- **The swat was built, reachable, and invisible.** `swatLands()` has fired since 1.4 and set
+  `.boss-swatted` — for which no CSS rule existed anywhere in `src/` — while the `'swat'` cue was never
+  played. The one player-to-cat interaction the game already had resolved with no picture and no sound.
+  2.5 fixes that first, and §16 reuses that vocabulary rather than inventing a second one.
+
+### 16.2 The gesture
+
+`src/lib/hand.ts`, pure and DOM-free like `arena.ts`/`squad.ts`/`card.ts`. Distances are in *card* px
+already, because the hand only ever exists on the card and there is no page game left to share them
+with.
+
+| Constant | `[PH]` | Rationale |
+|---|---|---|
+| `SWIPE_MIN_SPEED` | 240 px/s | ~5× the cat's fastest walk (`CARD_STALK_SPEED` 34, desperate ~48). The floor exists so a pointer merely *following* the cat cannot deflect it continuously. |
+| `SWIPE_RADIUS` | 20 px | The sprite is 28×18, half-diagonal ~16.6. "You have to actually cross the animal", plus a couple of px for a finger. Compare `SWAT_RADIUS · CARD_SCALE` = 12.8, tighter because a thrown treat is aimed at leisure. |
+| `IMPULSE_MS` | 420 | Long enough to read as a push, short enough that the cat's own intent takes back over quickly. This is interference, not remote control. |
+| `IMPULSE_SPEED` | 90 px/s | **A velocity, not a distance** — see §16.5. ~2.6× the cat's walk, ~1.9× a desperate cat: decisively faster than the thing it interrupts, which is what makes a shove feel like one. |
+| `IMPULSE_TRAVEL_PX` | ~25 px | **Derived, not chosen.** The impulse decays as 1−t², ∫₀¹(1−t²)dt = ⅔, so travel is `peak × ⅔ × duration`. About half a tile on a 318×225 board. |
+| `SWIPE_COOLDOWN_MS` | 460 | Longer than the impulse, so shoves cannot overlap and the cat always gets a moment of its own movement back. Without it, scrubbing the pointer in circles pins the cat forever and the game becomes a fidget with no failure state. |
+| `SHOVE_MIN` | 0.15 × `IMPULSE_SPEED` | The along-the-path **dead zone**, ~8.6° either side of the cat's line. See §16.5 fault 3. |
+| `SHOVE_FOOTING` | 0.35 | What fraction of its stride the cat keeps at the peak of a shove. Not 0, because a cat stopped dead reads as *paused*. See §16.4. |
+
+**The one design idea, stated once.** `veer()` returns the component of the swipe **perpendicular to
+the cat's heading** — the rejection of the unit swipe against the heading, whose magnitude is therefore
+`IMPULSE_SPEED · |sin θ|`. A flick across the cat's path shoves it hard; a flick along its path does
+nothing. **The rule is the arithmetic**, not a fudge factor applied on top of it, and that is what makes
+the gesture read as *a gust of wind rather than a button*: the cat is not being commanded, it is being
+interfered with, and the angle you choose is the whole skill.
+
+**`segmentHit()` is point-to-segment distance, and that is why it is a function.** A genuine flick
+covers far more ground in one frame than the sprite is wide — 14px at 900px/s, 40px at a fast one — so
+testing only where the pointer *landed* would let the swipe tunnel straight through the cat. The faster
+you flicked, the less it would work: exactly backwards.
+
+**The cat's heading comes from `quarry − boss`, not from `boss.facing`.** Facing is only ±1, which would
+make every vertical swipe read as fully "across" a cat walking straight up the board.
+
+### 16.3 The squad reacts
+
+`shouldFlee(kitten, c, boss, scale)` is `near && !canFinish(...)` — **both**, so a kitten still commits
+to work it can finish and only abandons a hold that has become hopeless. Before this, a kitten only
+re-picked a target when it arrived somewhere; `KITTEN_FLINCH_MS` is explicitly cosmetic and does not stop
+work, so a doomed kitten held on until it was pounced.
+
+Fleeing is what makes interference matter **indirectly**: shove the cat and the squad visibly regroups.
+That is the emergent half the mode was asked for, and it is the reason the player's single verb is worth
+having — a shove that only moved a sprite would be a toy.
+
+### 16.4 The homing problem, and the two remedies
+
+This is the section to read before changing any number above.
+
+`stepBoss`'s stalk branch recomputes `dx/dist` toward the cat's quarry **every frame**. A lateral offset
+is therefore never a state the cat carries — it is an **error the cat corrects**, at roughly
+`step · δ / dist` per frame, so the correction grows as the cat closes on what it is chasing.
+`tests/hand.test.ts` integrates the branch with the real constants:
+
+| Distance to quarry | Bare impulse | With both remedies |
+|---|---|---|
+| 140 px | 25.7 px | 26.8 px |
+| 40 px | 22.3 px | 25.9 px |
+| 10 px | 15.8 px | 23.0 px |
+
+So the erosion is real, and worst **exactly where a player would most want to shove** — the moment
+before a pounce, when the cat is on top of a kitten. Two remedies close the gap, and both come from the
+same reading of the gesture rather than from tuning:
+
+1. **A shoved cat stops looking where it is going.** While the impulse lasts the walk follows the heading
+   the cat had *when it was hit*, blending back to the live quarry direction as the impulse decays.
+   `shoveLeft` is both the strength of the push and the blend, because they are one event — no second
+   constant and nothing to keep in sync.
+2. **`SHOVE_FOOTING`.** A gust does not add sideways speed to something with perfect traction; it takes
+   the traction away. A third of its stride at the peak, so the cat still visibly *tries* to get where it
+   was going.
+
+Together: worst case 15.8 → 23.0px, best case unchanged. **The point is consistency, not force** — the
+mechanic stops depending on where the cat happens to be standing.
+
+**Raising `IMPULSE_SPEED` is the wrong lever** and was the obvious first idea. The erosion is
+proportional, so a bigger shove buys a proportionally bigger correction; the only way to win that race
+outright is a shove large enough to throw the cat across the board, which is a different game.
+
+### 16.5 What went wrong, in the order it was found
+
+1. **A unit error hidden by a plausible name.** `IMPULSE_PX` was documented as a displacement and
+   returned as a velocity. At 26 it integrated to 7.3px of travel against the cat's own 14px walk over
+   the same 420ms — the shove was *half the speed of the thing it was meant to interrupt*. A legibility
+   unit test caught it before anything had been looked at, which is the argument for writing that kind of
+   test at all: it asserts a *relationship* to another constant rather than a value.
+2. **A keyframe on the wrong property.** The recoil was written on `transform`, which already carries the
+   sprite's facing flip — animating it would have silently dropped the flip mid-recoil. It uses the
+   independent `translate`/`rotate` properties, which compose.
+3. **An equality test on a floating-point rejection.** `trySwipe`'s no-purchase guard was
+   `v.x === 0 && v.y === 0`, which is therefore never true. `scratchpad/hand.mjs` §1 found a flick
+   dispatched exactly down the cat's heading landing a shove of ~1e-14px/s — with the full recoil flash
+   and the full sound. Worse, the heading moves between the frame that aims a gesture and the frame that
+   reads it, so a genuinely parallel flick reliably lands a *tiny* rejection. `SHOVE_MIN` makes the
+   along-the-path case a real dead zone, which is also how it should read: brushing the cat lengthways
+   does nothing at all rather than doing an invisible something loudly. **An acknowledgement of something
+   that did not happen is worse than no acknowledgement** — it teaches a rule and then contradicts it.
+4. **A sentinel that was safe by accident.** `boss.shoveAt` starts at `0` meaning "never shoved", and
+   `impulseAt(t − 0)` only returns `0` because `t` is time since navigation start and is normally far
+   past 420ms. Inside the first 420ms of a page's life it would return a *live* impulse: the cat walking
+   at `SHOVE_FOOTING` speed while shoved by a stale direction, **in every mode including the two shipped
+   ones.** A sentinel that happens to be safe because a clock is usually big is the same bug as a magic
+   number.
+5. **A shipped bug with nothing to do with §16, found while reading the handler.** The board's
+   `pointermove` computed `scrub.vx = (e.clientX − scrub.x) / dt` — a viewport-relative coordinate minus a
+   board-relative one — so the difference carried the board's own offset as a constant and a stationary
+   pointer "moved" tens of thousands of px/s, always in +x/+y. `CARD_PREDICT_CAP` clamped it, which is
+   why nothing ever looked broken: §3 manual mode's leap simply always over-led down and to the right, in
+   the one mode where the aim is meant to read your movement.
+
+### 16.6 How it is verified, and where the line is drawn
+
+**The browser asserts only what survives a frame of jitter.** `scratchpad/hand.mjs`: a flick across the
+path shoves (6/6) and a flick along it shoves far less often, the cooldown bounds how often a shove can
+land, no shove takes the **sprite** — not its centre — off the board, both shipped modes register nothing
+at all, a *real* pointer flick reaches the same handler, and a kitten inside the cat's safe radius is
+seen backing off while the cat is still on top of it.
+
+**Every figure needing three significant figures is a unit test.** `tests/hand.test.ts` owns the
+geometry, the dead zone, the decay shape, the derived travel, and §16.4's simulation.
+
+That line was drawn because it had to be. In-situ figures put the shove's displacement anywhere in 0–14px
+against a nominal 25.2px with no stable story, and **a reading of those figures concluded the mechanic
+did nothing at all** — a conclusion that reached a code comment before it was checked. The deterministic
+simulation overturned it. A browser harness sampling at ~20fps against a rolled stance and a walking
+kitten **will report a number whether or not it can resolve one**, and the number will look like a
+finding.
+
+**`scratchpad/hand-look.mjs` is the third kind of check: the picture**, because "does a shove read" is not
+a question a number answers. It records a CDP screencast of the same flick in `hand` and `commander`
+mode, crops every frame to one locked window, marks the cat and the *ghost* — where an undisturbed walk
+would have put it at that instant — and draws the cat's own path from a per-frame recorder. Five versions
+of that rig were wrong before it showed anything, all recorded in the 2.5 changelog row; the two worth
+carrying elsewhere are that **a recording cannot be bracketed by a duration fixed before the event's own
+cost is known**, and that **a crop which follows the subject is a tracking shot** — movement is only
+visible against something that is not moving.
+
+### 16.7 Known properties, honestly
+
+- **The recoil does more communicative work than the displacement.** In the frame strips the wine flash
+  and the stagger are unmistakable from +52ms; the ~23px of travel is real and visible against the tile
+  grid, but it is the *colour* that says "you hit it". A player may well read this mode as hitting the cat
+  rather than as steering it, which is a different game from the one described above.
+- **The dead zone is invisible.** Nothing on screen distinguishes a flick that was too parallel from one
+  that missed the cat entirely. Both do nothing, for different reasons, and the player cannot tell which.
+- **`SHOVE_FOOTING`'s contribution was not separately measurable in situ.** It is justified by §16.4's
+  simulation and by the physics of the reading; the browser could not resolve it either way, and this
+  section says so rather than claiming it.
+- **The mode has no chip and therefore no discoverability**, by design for a prototype. The opening
+  caption is the only thing that names the verb.
+- **Not playtested by a person.** This pass produced a picture and a set of numbers, and neither of them
+  can say whether shoving a cat is fun. That remains, five versions on, the only gate that has mattered.

@@ -20,6 +20,7 @@ import {
   workTimeMs,
   threatTimeMs,
   canFinish,
+  shouldFlee,
   assignOrder,
   ROUND_REGROW_STEP,
   ROUND_AGGRO_CAP,
@@ -440,4 +441,37 @@ describe('the one thing that is remembered (§7.2/§13.4, amended)', () => {
    * browser API, and the interesting thing about them — that a browser refusing storage must not
    * throw inside a game loop — is what the browser harness checks by running with storage denied.
    */
+});
+
+describe('shouldFlee — the hand reaching the kittens indirectly', () => {
+  const scale = { safePx: 85, pounceRange: 18, stalkSpeed: 48, kittenSpeed: 50 };
+  const claim = { x: 100, y: 100, i: 0 };
+  const kitten = { x: 100, y: 100 };
+
+  it('does not flee a cat that is far away', () => {
+    expect(shouldFlee(kitten, claim, { x: 100, y: 400 }, scale)).toBe(false);
+  });
+
+  it('flees when the cat is close AND the hold has become unwinnable', () => {
+    // Cat sitting on the claim: threatTime is 0, so canFinish is false and it is inside the radius.
+    expect(shouldFlee(kitten, claim, { x: 104, y: 100 }, scale)).toBe(true);
+  });
+
+  it('does NOT flee a nearby cat it can still out-work', () => {
+    // This is the guard that keeps the squad from being cowards. Just inside the safe radius, but
+    // far enough that the kitten's walk-plus-hold still beats the cat's approach.
+    const far = { x: 100, y: 100 - scale.safePx + 2 };
+    const near = Math.hypot(far.x - kitten.x, far.y - kitten.y) <= scale.safePx;
+    expect(near).toBe(true);
+    const winnable = canFinish(kitten, claim, far, scale);
+    // Only assert the coupling: if the hold is still winnable, it must not flee.
+    expect(shouldFlee(kitten, claim, far, scale)).toBe(!winnable);
+  });
+
+  it('requires both conditions — proximity alone is not enough', () => {
+    // A doomed hold with the cat outside the radius: still no flee, because it is not a live threat.
+    const outside = { x: 100, y: 100 + scale.safePx + 40 };
+    expect(canFinish(kitten, claim, outside, scale)).toBe(true);
+    expect(shouldFlee(kitten, claim, outside, scale)).toBe(false);
+  });
 });

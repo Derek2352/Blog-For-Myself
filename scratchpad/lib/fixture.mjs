@@ -115,6 +115,18 @@ export const CARD_SAFE_FLEE_PX = SAFE_FLEE_PX * CARD_SCALE; // ~85
 /** The same walk-and-hold arithmetic `squad.ts` proves, for a kitten rather than a hand. */
 export const SAFE_WORK_PX = POUNCE_RANGE + STALK_SPEED * AGGRO_DESPERATE * (SCRUB_MS / 1000);
 
+/* §16's invisible hand. Mirrored from src/lib/hand.ts, which states these in *card* px already —
+ * the hand exists only on the card, so unlike every constant above there is no page figure to
+ * scale down from, and no `CARD_` prefix to earn. */
+export const SWIPE_MIN_SPEED = 240; // src/lib/hand.ts
+export const SWIPE_RADIUS = 20;
+export const IMPULSE_MS = 420;
+export const IMPULSE_SPEED = 90;
+export const SWIPE_COOLDOWN_MS = 460;
+export const SHOVE_FOOTING = 0.35;
+/** Derived there and here alike: ∫₀¹(1−t²)dt = ⅔, so travel is peak × ⅔ × duration. ~25px. */
+export const IMPULSE_TRAVEL_PX = IMPULSE_SPEED * (2 / 3) * (IMPULSE_MS / 1000);
+
 /** Mirrors `INTERACTIVE` in src/lib/arena.ts — and deliberately *not* `PROTECTED`. */
 export const INTERACTIVE = 'a[href], button, input, select, textarea, summary, label, [contenteditable]';
 
@@ -239,6 +251,27 @@ const PICK_MANUAL = () => {
   });
 };
 
+/**
+ * 2.5: **the hand is chosen before the page runs, not clicked afterwards.**
+ *
+ * There is no chip for `hand` mode and deliberately so — §16 is a prototype behind a flag, because
+ * three modes on a portfolio is too much game. `CatCard` reads `?cat=hand` first and
+ * `localStorage.cat-mode` second, and this uses the storage key rather than the query string for one
+ * reason: a harness that navigates (`armAmmo` hops five pages to seed treats) would drop a query
+ * param on the first hop and quietly measure commander mode while its name said otherwise. The key
+ * survives every navigation in the context.
+ *
+ * Set at init rather than after load, since `mode` is read once when the card's script runs.
+ */
+const PICK_HAND = () => {
+  try {
+    localStorage.setItem('cat-mode', 'hand');
+  } catch {
+    /* DENY_STORAGE is a legitimate combination: the card then stays on commander, which is the
+     * documented fallback, and a harness asserting the hand will fail loudly rather than silently. */
+  }
+};
+
 /** A browser that refuses storage — private mode, a hardened profile, a policy. */
 const DENY_STORAGE = () => {
   const boom = () => {
@@ -294,9 +327,9 @@ const NO_AUDIO = () => {
 /**
  * A context with the welcome dismissed and the mode declared.
  *
- * @param mode     'manual' presses §13.8's chip before any fight; 'commander' (default) leaves 2.0's
- *                 default alone. There is no third option, and passing nothing means commander,
- *                 because that is what a visitor gets.
+ * @param mode     'manual' presses §13.8's chip before any fight; 'hand' sets §16's flag, which has
+ *                 no chip to press; 'commander' (default) leaves 2.0's default alone. Passing
+ *                 nothing means commander, because that is what a visitor gets.
  * @param storage  false installs a `localStorage` that throws, for §13.4's boundary.
  * @param phone    the 390×844 touch profile `touch-fight` measures on.
  */
@@ -309,6 +342,7 @@ export async function fresh(browser, { mode = 'commander', storage = true, phone
   if (welcomed) await ctx.addInitScript(() => localStorage.setItem('welcomed', '1'));
   await ctx.addInitScript(NO_AUDIO);
   if (mode === 'manual') await ctx.addInitScript(PICK_MANUAL);
+  if (mode === 'hand') await ctx.addInitScript(PICK_HAND);
   if (!storage) await ctx.addInitScript(DENY_STORAGE);
   return ctx;
 }
@@ -832,4 +866,171 @@ export async function finger(cdp, x, y, hold = 0) {
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
   if (hold) await new Promise((r) => setTimeout(r, hold));
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+}
+
+/* ------------------------------------------------------------------ *
+ * §16's flick — the invisible hand's gesture
+ * ------------------------------------------------------------------ */
+
+/** Segments per flick and the gap between them: together these set the gesture's measured px/s. */
+export const FLICK_SEGMENTS = 6;
+export const FLICK_GAP_MS = 16;
+
+/** Shortest flick whose *segments* still clear the gesture floor, with 20% headroom. */
+export const MIN_FLICK_PX = Math.ceil((SWIPE_MIN_SPEED * (FLICK_GAP_MS / 1000) * FLICK_SEGMENTS) / 0.8);
+
+/**
+ * One flick at the cat, aimed and dispatched **inside the page**. Shared because `hand-look` needs it
+ * to make a picture and `hand` needs it to make assertions, and it has already been got wrong twice.
+ *
+ * ## Why the events are synthetic
+ *
+ * Two versions using real input came first, and they fail in opposite directions:
+ *
+ * - `mouse.move(x, y, { steps: n })` dispatches every step back-to-back with ~1ms between them, so
+ *   *any* drag reads as a 10,000px/s flick and a harness could "prove" a gesture floor it never
+ *   tested.
+ * - `mouse.move` in a loop with `waitForTimeout(16)` between calls looks like the fix and is not:
+ *   **every `mouse.move` is its own CDP round trip**, ~100ms in this container. The page therefore saw
+ *   8.5px moves 100ms apart — 85px/s, comfortably *below* `SWIPE_MIN_SPEED`'s 240 — so whether the
+ *   flick registered came down to how busy the socket was. Two runs passed and the third did not, from
+ *   identical code.
+ *
+ * `PointerEvent`s dispatched in the page put the cadence on the page's own clock, accurate to a frame.
+ * The trade is real and named rather than hidden: these are `isTrusted: false` and skip the browser's
+ * input pipeline, so this proves *the card's handler* answers a gesture of a given speed, not that a
+ * physical pointer produces such a gesture. `hand.mjs` keeps one real-mouse check for that half.
+ *
+ * ## Why it aims in the page too
+ *
+ * Reading the heading in Node, deciding the perpendicular and dispatching costs 200–300ms of round
+ * trips, during which the cat walks and its quarry moves. The flick then arrives across a heading the
+ * cat no longer has — and because `veer` returns `strength · |sin θ|`, a heading rotated to nearly
+ * parallel yields a shove of almost nothing. `trySwipe` only bails on an *exactly* zero rejection, so
+ * it still adds `.boss-swatted` and still plays the cue: the report showed a cat flashing red, shoved
+ * by 0.0px, and called it 8 swat frames. **A visible acknowledgement of a shove that did not happen is
+ * the worst failure available, because it looks like success.**
+ *
+ * @param axis  'across' aims perpendicular to the cat's heading — the gesture the mechanic is about.
+ *              'along' aims down its heading, which `veer` must reject: the control case.
+ */
+const FLICK_IN = ({ segments, gapMs, reach, inset, travel, axis }) =>
+  new Promise((done) => {
+    const board = document.querySelector('[data-board]');
+    const boss = document.querySelector('[data-boss]');
+    if (!board || !boss) return done({ aimed: false, why: 'no board or boss' });
+    const r = board.getBoundingClientRect();
+    const rb = boss.getBoundingClientRect();
+    const bx = rb.left - r.left + rb.width / 2;
+    const by = rb.top - r.top + rb.height / 2;
+
+    // The cat's heading as the *card* computes it: `quarry - boss`, quarry being `nearestKitten()`.
+    // Reconstructed from `.cat-card-kit` positions, which is the only way in from outside the closure.
+    let q = null;
+    for (const k of document.querySelectorAll('.cat-card-kit')) {
+      const kr = k.getBoundingClientRect();
+      const kx = kr.left - r.left + kr.width / 2;
+      const ky = kr.top - r.top + kr.height / 2;
+      const d = Math.hypot(kx - bx, ky - by);
+      if (!q || d < q.d) q = { x: kx, y: ky, d };
+    }
+    /*
+     * No kitten: fall back to the cat's facing.
+     *
+     * §3 manual mode never spawns a squad — the cat's quarry there is the *pointer* — so a kitten-only
+     * aim made `swipeCat` unusable in exactly the mode where "a flick must do nothing" most needs
+     * checking, and reported it as a missing fixture rather than as the coverage hole it was. `facing`
+     * is only ±1, which is why `trySwipe` does not use it for the real heading; but for a flick whose
+     * expected effect is *nothing*, any direction near the cat is a fair test.
+     */
+    const fallback = !q;
+    const face = Number(boss.dataset.facing || 1) >= 0 ? 1 : -1;
+    const aLen = q ? Math.hypot(q.x - bx, q.y - by) || 1 : 1;
+    const ax = q ? (q.x - bx) / aLen : face;
+    const ay = q ? (q.y - by) / aLen : 0;
+    // Across: rotate the aim by 90°. Along: the aim itself.
+    const px = axis === 'along' ? ax : ay;
+    const py = axis === 'along' ? ay : -ax;
+    // Of the two directions, the one whose destination has more board around it — `onBoard` clamps the
+    // cat, and a shove spent against a wall is indistinguishable from a shove too small to see.
+    const room = (s) =>
+      Math.min(
+        bx + px * s * travel,
+        by + py * s * travel,
+        r.width - (bx + px * s * travel),
+        r.height - (by + py * s * travel),
+      );
+    const sign = room(1) >= room(-1) ? 1 : -1;
+    const dx = px * sign;
+    const dy = py * sign;
+    const clamp = (p) => ({
+      x: Math.max(inset, Math.min(r.width - inset, p.x)),
+      y: Math.max(inset, Math.min(r.height - inset, p.y)),
+    });
+    const from = clamp({ x: bx - dx * reach, y: by - dy * reach });
+    const to = clamp({ x: bx + dx * reach, y: by + dy * reach });
+
+    let hitAt = 0;
+    const obs = new MutationObserver(() => {
+      if (!hitAt && boss.classList.contains('boss-swatted')) hitAt = performance.now();
+    });
+    obs.observe(boss, { attributes: true, attributeFilter: ['class'] });
+
+    const send = (p) =>
+      board.dispatchEvent(
+        new PointerEvent('pointermove', {
+          bubbles: true,
+          cancelable: true,
+          pointerType: 'mouse',
+          clientX: r.left + p.x,
+          clientY: r.top + p.y,
+        }),
+      );
+
+    send(from); // land first: the opening move has no previous sample to measure a speed against
+    let i = 0;
+    const step = () => {
+      i += 1;
+      const k = i / segments;
+      send({ x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k });
+      if (i < segments) return void setTimeout(step, gapMs);
+      obs.disconnect();
+      const perf = performance.now();
+      // Both clocks, read at the same instant: the trail and the card's timers are in
+      // `performance.now()`, screencast frames are stamped `Network.TimeSinceEpoch`, and a frame
+      // cannot be placed on the trail's timeline without the offset between them.
+      done({
+        aimed: true,
+        perf,
+        epoch: Date.now(),
+        hitAt,
+        skew: Date.now() - performance.now(),
+        from,
+        to,
+        aim: { x: ax, y: ay },
+        dir: { x: dx, y: dy },
+        at: { x: bx, y: by },
+        quarryPx: q ? q.d : null,
+        fallback,
+        len: Math.hypot(to.x - from.x, to.y - from.y),
+      });
+    };
+    setTimeout(step, 24);
+  });
+
+/**
+ * Flick at the cat and report what actually happened.
+ *
+ * `perf` is the moment the **shove** began — read from `.boss-swatted` appearing, which is the card's
+ * own announcement — and falls back to the end of the gesture when nothing registered, which is the
+ * expected outcome in the two shipped modes and in the `along` control case.
+ */
+export async function swipeCat(
+  page,
+  { axis = 'across', segments = FLICK_SEGMENTS, gapMs = FLICK_GAP_MS, reach = SWIPE_RADIUS + 24, inset = 2, travel = IMPULSE_TRAVEL_PX } = {},
+) {
+  const out = await page.evaluate(FLICK_IN, { segments, gapMs, reach, inset, travel, axis });
+  if (!out.aimed) return out;
+  const perf = out.hitAt || out.perf;
+  return { ...out, perf, epoch: perf + out.skew, landed: out.hitAt > 0 };
 }

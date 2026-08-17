@@ -28,3 +28,7 @@ yarn-error.log*
 # media inbox — unsorted drops never enter git history
 _inbox/*
 !_inbox/README.md
+
+# harness output — frame strips and report pages the cat harnesses render (scratchpad/hand-look.mjs).
+# Regenerated on every run and measured in megabytes; the findings they produced live in the GDD.
+scratchpad/out/
