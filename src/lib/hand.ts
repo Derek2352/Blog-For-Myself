@@ -75,23 +75,72 @@ export const IMPULSE_SPEED = 90;
 export const IMPULSE_TRAVEL_PX = IMPULSE_SPEED * (2 / 3) * (IMPULSE_MS / 1000);
 
 /**
- * The smallest shove worth having, in card px/s — the along-the-path **dead zone**.
+ * The along-the-path **dead zone**, stated as the angle it actually is.
  *
  * `veer` returns `IMPULSE_SPEED · |sin θ|`, so a swipe exactly down the cat's heading returns zero and
- * a swipe one degree off returns 1.6px/s: a shove too small to see, arriving with the full recoil
- * flash and the full sound. The card's guard was `v.x === 0 && v.y === 0`, an equality test on a
- * floating-point rejection, so in practice it never fired at all — `scratchpad/hand.mjs` §1 found a
- * flick aimed exactly along the heading landing a shove of ~1e-14px/s, loudly.
+ * one degree off returns 1.6px/s: a shove too small to see, arriving with the full recoil and the full
+ * sound. The card's guard was `v.x === 0 && v.y === 0` — an equality test on a floating-point rejection,
+ * therefore never true — so in practice there was no dead zone at all.
  *
- * `0.15 · IMPULSE_SPEED` is |sin θ| ≥ 0.15, a dead zone about 8.6° either side of the cat's line. Below
- * that the gesture is simply not a shove: nothing moves, nothing flashes, nothing sounds. That matters
- * beyond tidiness, because **an acknowledgement of something that did not happen is worse than no
- * acknowledgement** — it teaches the player the wrong rule and then contradicts it.
+ * **The first zone was 8.6° and the browser proved it unreachable.** `scratchpad/hand.mjs` sweeps a
+ * half-circle of flicks at 12° spacing, which guarantees one lands within 6° of parallel; across three
+ * runs that produced **14–15 shoves and 0 grazes out of 15**. The cause is not the harness and would not
+ * spare a human finger: a flick takes ~104ms to travel, and the cat's heading is `quarry − boss` where
+ * the quarry is a walking kitten, so the aim rotates 6–11° *during the gesture* (36° when the cat is on
+ * top of its kitten). A zone narrower than its own target's drift is a zone nobody can enter, and
+ * §16's central claim — *across shoves, along does not, and the angle you choose is the whole skill* —
+ * was decoration.
  *
- * Wide enough to be a real zone rather than a mathematical point; narrow enough that the smooth
- * `|sin θ|` ramp the mechanic is built on survives everywhere else.
+ * 20° is that drift plus room for a person aiming by eye. It suppresses impulses below ~31px/s, which
+ * travel under 9px against a 28px cat and were never legible anyway, and leaves 78% of directions live.
+ *
+ * **It is only affordable because the graze has a tell.** A dead zone this wide with no feedback would
+ * be a mechanic that silently ignores a quarter of what you do; with the tail flick, the cat visibly
+ * says "you touched me and got no purchase". The tell is what buys the zone, and the zone is what makes
+ * the tell worth having — neither works alone.
+ *
+ * Stated as an angle with the threshold derived, rather than as a tuned magnitude, because the angle is
+ * the quantity the design reasons about and the magnitude is downstream of it.
  */
-export const SHOVE_MIN = IMPULSE_SPEED * 0.15;
+export const SHOVE_MIN_DEG = 20;
+export const SHOVE_MIN = IMPULSE_SPEED * Math.sin((SHOVE_MIN_DEG * Math.PI) / 180);
+
+/**
+ * How long the graze tell lasts, and the throttle on it.
+ *
+ * A graze is feedback about *aim*, which a learning player will trigger constantly, so it gets its own
+ * short throttle rather than sharing `SWIPE_COOLDOWN_MS`. Sharing would be actively wrong: brushing the
+ * cat lengthways would then lock you out of a real shove for half a second, punishing the mistake twice
+ * and making the dead zone feel like a trap instead of a miss.
+ */
+export const GRAZE_MS = 300;
+
+/** What a swipe that crossed the cat did. There is no third case — see below. */
+export type Contact = 'shove' | 'graze';
+
+/**
+ * Classify the impulse a crossing swipe produced.
+ *
+ * The distinction exists because the player has to be able to tell two failures apart, and until 2.5.1
+ * they wore the same face: a flick that **missed** the cat and a flick that **crossed it lengthways**
+ * both did nothing at all, for completely different reasons. A player cannot learn which half of the
+ * gesture to fix from an outcome that never varies — and the second is the informative one, because it
+ * means the aim was right and only the angle was wrong.
+ *
+ * **This had a third case, `none`, and a test deleted it.** The reasoning was that a zero-magnitude
+ * rejection is not really contact, so the type should say so; the property test that walks every angle
+ * then found `veer` returning *exactly* zero at 0° and 180°, where the arithmetic is axis-aligned and
+ * the floating point happens to cancel. So the one function written to remove a silent case had a
+ * silent case of its own, at precisely the two angles a player aiming down the cat's back would hit.
+ * The caller was accidentally safe — it branched on `!== 'shove'` — which is the worst kind of safe,
+ * since the next caller to read the type literally would reintroduce the bug.
+ *
+ * A zero rejection **is** a graze: you crossed the cat and got no purchase, which is the definition.
+ * The type is now total over what the caller can actually receive, and the answer is never silence.
+ */
+export function contactFor(vx: number, vy: number): Contact {
+  return Math.hypot(vx, vy) < SHOVE_MIN ? 'graze' : 'shove';
+}
 
 /**
  * What fraction of its own stride the cat keeps at the height of a shove.

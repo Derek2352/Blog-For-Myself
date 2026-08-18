@@ -33,7 +33,9 @@ import {
   bounded,
   BASE,
   IMPULSE_MS,
+  IMPULSE_SPEED,
   IMPULSE_TRAVEL_PX,
+  SHOVE_MIN,
   SWIPE_COOLDOWN_MS,
   SWIPE_RADIUS,
   CARD_SAFE_FLEE_PX,
@@ -47,7 +49,9 @@ const RECORD = () => {
   if (!board || !boss) return;
   window.__trail = [];
   window.__swats = 0;
+  window.__grazes = 0;
   let was = false;
+  let wasG = false;
   const tick = () => {
     if (!boss.isConnected) return;
     const b = board.getBoundingClientRect();
@@ -55,6 +59,12 @@ const RECORD = () => {
     const now = boss.classList.contains('boss-swatted');
     if (now && !was) window.__swats += 1; // *edges*, not frames: one shove is one swat however long
     was = now;
+    // §16's dead-zone tell, counted the same way. A flick that crossed the cat but ran along its line
+    // gets this instead of a shove; before 2.5.1 it got nothing at all, and nothing at all is also what
+    // a flick that missed entirely gets — which is the ambiguity this counter exists to prove is gone.
+    const g = boss.classList.contains('boss-grazed');
+    if (g && !wasG) window.__grazes += 1;
+    wasG = g;
     window.__trail.push({
       t: performance.now(),
       x: r.left - b.left + r.width / 2,
@@ -135,50 +145,249 @@ const r = report();
  * ------------------------------------------------------------------ */
 
 /*
- * **A rate, not a single verdict**, and the reason is the quarry.
+ * **Sweep the angle, measure what you got, and check the card agrees with it.**
  *
- * The first version flicked once along the heading and asserted zero shoves. It failed, and not
- * because the dead zone is broken: the cat's heading is `quarry − boss` and the quarry is a *walking
- * kitten*, so over the ~120ms a flick takes to dispatch the aim rotates — the more so the closer the
- * cat is, where a small kitten step swings the line a long way. A flick launched exactly along the
- * heading is partly across the heading by the time `trySwipe` reads it. That is the game being alive,
- * not the guard being wrong, and no amount of in-situ care removes it.
+ * Four versions, and the first three were all trying to hit a target the harness cannot hit.
  *
- * `tests/hand.test.ts` proves the geometry: rejection zero along, `SHOVE_MIN` dead zone to 8.6°, full
- * `|sin θ|` ramp beyond. What only the browser can show is that **the card is wired to that geometry**,
- * and the honest form of it is comparative: across should shove nearly every time, along should shove
- * rarely. A `trySwipe` that ignored `veer` and shoved on any flick would score the same on both, and
- * that is the failure this catches.
+ * v1 flicked once along the heading and asserted zero shoves. v2 made it comparative — across should
+ * shove nearly always, along rarely — which is the right *shape* of claim but compared two separate
+ * fights, so the two rates never measured the same geometry: it scored along 2/6, then 3/6, then 6/6
+ * from unchanged code. v3 put both axes in one fight and added a distance floor, on the theory that the
+ * aim rotates as `quarry movement / distance to quarry`. It still failed at 5/6.
+ *
+ * **So the aim was probed instead of theorised about**, recording the angle the card actually saw at
+ * each contact against the distance to the quarry:
+ *
+ * | quarry | angle | | quarry | angle |
+ * |---|---|---|---|---|
+ * | 11px | 36° | | 108px | 11° |
+ * | 43px | 14° | | 143px | 10° |
+ * | 76px | 11° | | 174px | 6° |
+ *
+ * The distance effect is real and the floor was right to exist — but underneath it sits a **~6–11°
+ * residual that never goes away**, from reconstructing the cat's heading out of `.cat-card-kit` rects
+ * one frame late. `SHOVE_MIN`'s dead zone is 8.6° wide. **A harness that can aim to ±10° cannot
+ * reliably land inside an 8.6° zone**, and no amount of re-rolling changes that: it is a limit of the
+ * instrument, exactly like the displacement figures §16.6 hands to a unit test.
+ *
+ * The fix is to stop needing the aim to be right. This sweeps a range of offsets, and at each contact
+ * records **the angle the card itself saw** — the crossing segment against `quarry − boss`, captured in
+ * the capture phase so it is the triggering segment and not a later one. Then it asserts the only thing
+ * that matters: **the card's classification agrees with the geometry it was given.** Contacts whose
+ * measured `IMPULSE_SPEED · |sin θ|` falls below `SHOVE_MIN` must be grazes; the rest must be shoves.
+ * Wherever the aim lands is fine, because the check reads where it landed.
  */
-const ATTEMPTS = 6;
+/**
+ * A half-circle of offsets at 12°, which **guarantees** a near-parallel flick without needing the aim
+ * to be accurate.
+ *
+ * The earlier sweeps hand-picked offsets near 0° and 180° and then failed to land inside the 8.6° dead
+ * zone, because the reconstructed heading is only good to ~10° — so "aim along the heading" is a target
+ * this instrument cannot hit, and no list of offsets fixes that.
+ *
+ * Sweeping the whole half-circle removes the dependency instead of fighting it. `|sin θ|` is symmetric
+ * about 90°, so 0–180° covers every distinguishable angle; at 12° spacing, whatever the true heading
+ * turns out to be, some flick in the sweep lands within **6°** of parallel — inside the dead zone by
+ * construction rather than by luck. The offsets are still measured on arrival, so an inaccurate estimate
+ * costs nothing: it shifts which flick is the parallel one, not whether there is one.
+ */
+const SWEEP = Array.from({ length: 15 }, (_, i) => i * 12);
+/**
+ * Contacts whose measured impulse sits this close to `SHOVE_MIN` are recorded but not judged.
+ *
+ * Even with the snapshot taken in the same event as the card's own read (below), one difference
+ * remains and cannot be closed from outside: the card's `quarry` is assigned once per animation frame
+ * in `tick()`, so it can be up to a frame staler than the DOM this reads. A kitten at
+ * `CARD_KITTEN_SPEED` covers ~2.5px in 50ms, which at 100px of separation is ~1.4° — sin 0.025. 0.08
+ * covers that with room, and excluding a band around the threshold is honest in a way that widening
+ * the threshold would not be: these contacts are still counted and reported, just not used to judge a
+ * boundary this instrument cannot resolve.
+ *
+ * **0.08 was still too tight**, and the arithmetic says so once done properly rather than sketched. At
+ * 48px of separation a kitten covers 2.5px in one 50ms frame, swinging the heading ~3°; near the
+ * threshold `d(sin)/dθ ≈ cos 20° = 0.94 per radian`, so 3° is Δsin 0.049 — **4.4px/s from the stale
+ * frame alone**, before this recorder's own rect-versus-logical error. A contact measured at 38.4px/s
+ * against a 30.8px/s threshold was classified a graze and flagged: 7.6px/s out, which is inside the
+ * error budget and outside the old band. 0.12 covers it.
+ *
+ * What survives at this resolution is worth having anyway: the check exists to catch a *gross* wiring
+ * fault — an inverted comparison, the wrong constant, `veer` bypassed — which would misclassify most
+ * contacts rather than one at the edge. The exact boundary is `tests/hand.test.ts`'s job, where it can
+ * be examined at machine precision instead of through a 20fps window.
+ */
+const BOUNDARY_SLACK = IMPULSE_SPEED * 0.12;
+
+/**
+ * Contacts nearer than this to the quarry are recorded but not judged — **the angle cannot be measured
+ * there**, whatever the aim was.
+ *
+ * A distance floor was tried once before, on the *aim*, and helped without fixing it. This is the same
+ * arithmetic pointed at the right thing. The heading is `quarry − boss`, so an error ε in either
+ * position perturbs its angle by about `ε / d`: reading the kitten's centre from a DOM rect rather than
+ * from the card's own `Kitten.x/y` is worth well under a pixel, and it is *still* worth 5° at 11px.
+ * A real contact logged `sin 0.099 at 11px → shove` — the card classifying by a geometry this recorder
+ * measured as 0.099 and the card evidently saw as ≥ 0.15.
+ *
+ * At 40px a one-pixel discrepancy is 1.4°, sin 0.025, comfortably inside `BOUNDARY_SLACK`. Note what
+ * this is *not*: it is not the game misbehaving near its quarry, and it is not a reason to move
+ * `SHOVE_MIN`. It is this instrument having a resolution, and saying so.
+ */
+const MEASURE_MIN_PX = 40;
+
+/** Record, at each contact, the geometry the card must have used to classify it. */
+const WATCH_CONTACTS = () => {
+  window.__contacts = [];
+  const board = document.querySelector('[data-board]');
+  const boss = document.querySelector('[data-boss]');
+  let last = null;
+  let snap = null;
+  /*
+   * **The whole snapshot is taken in the capture phase**, not just the segment.
+   *
+   * Capture runs before the card's own `pointermove` listener, so this sees exactly the board the card
+   * is about to judge. The first version recorded only the segment here and read the boss and kitten
+   * positions later, inside the MutationObserver — a different instant, by however long the card's
+   * handler and the microtask queue took. That is invisible in the middle of the range and decisive at
+   * the boundary, where it produced one misclassification per run or so: the check was comparing the
+   * card's answer against a geometry the card never saw.
+   */
+  board.addEventListener(
+    'pointermove',
+    (e) => {
+      const r = board.getBoundingClientRect();
+      const p = { x: e.clientX - r.left, y: e.clientY - r.top };
+      if (last) {
+        const br = boss.getBoundingClientRect();
+        const bx = br.left - r.left + br.width / 2;
+        const by = br.top - r.top + br.height / 2;
+        let q = null;
+        for (const k of document.querySelectorAll('.cat-card-kit')) {
+          const kr = k.getBoundingClientRect();
+          const kx = kr.left - r.left + kr.width / 2;
+          const ky = kr.top - r.top + kr.height / 2;
+          const d = Math.hypot(kx - bx, ky - by);
+          if (!q || d < q.d) q = { x: kx, y: ky, d };
+        }
+        if (q) {
+          const sx = p.x - last.x;
+          const sy = p.y - last.y;
+          const hx = q.x - bx;
+          const hy = q.y - by;
+          const sl = Math.hypot(sx, sy);
+          const hl = Math.hypot(hx, hy);
+          // |sin θ| straight from the 2-D cross product — the same quantity `veer`'s magnitude is.
+          if (sl && hl) snap = { sin: Math.abs((sx * hy - sy * hx) / (sl * hl)), quarryPx: q.d };
+        }
+      }
+      last = p;
+    },
+    true,
+  );
+  new MutationObserver(() => {
+    const shove = boss.classList.contains('boss-swatted');
+    const graze = boss.classList.contains('boss-grazed');
+    if ((!shove && !graze) || !snap) return;
+    window.__contacts.push({ kind: shove ? 'shove' : 'graze', ...snap });
+  }).observe(boss, { attributes: true, attributeFilter: ['class'] });
+};
+
 {
-  const rate = {};
-  for (const axis of ['across', 'along']) {
-    const f = await fightWith(browser, 'hand', r, `§1 ${axis}`);
-    if (!f) continue;
-    let aimed = 0;
-    for (let i = 0; i < ATTEMPTS; i++) {
-      const out = await swipeCat(f.page, { axis });
-      if (out.aimed) aimed += 1;
+  const f = await fightWith(browser, 'hand', r, '§1');
+  if (!f) {
+    r.fixture('§1: a stalking fight', null, 1);
+  } else {
+    await f.page.evaluate(WATCH_CONTACTS);
+    for (const angleDeg of SWEEP) {
+      await swipeCat(f.page, { angleDeg });
       await f.page.waitForTimeout(SWIPE_COOLDOWN_MS + 80); // never let the cooldown be the reason
     }
-    const swats = await f.page.evaluate(() => window.__swats);
-    rate[axis] = { swats, aimed };
+    const contacts = await f.page.evaluate(() => window.__contacts);
+    const measurable = contacts.filter((c) => c.quarryPx >= MEASURE_MIN_PX);
+    const judged = measurable.filter((c) => Math.abs(c.sin * IMPULSE_SPEED - SHOVE_MIN) > BOUNDARY_SLACK);
+    const shoves = judged.filter((c) => c.sin * IMPULSE_SPEED >= SHOVE_MIN);
+    const grazes = judged.filter((c) => c.sin * IMPULSE_SPEED < SHOVE_MIN);
+    r.note(
+      `§1: ${contacts.length} contacts from ${SWEEP.length} flicks — ` +
+        `${contacts.length - measurable.length} inside ${MEASURE_MIN_PX}px of the quarry (angle not measurable), ` +
+        `${measurable.length - judged.length} within ${BOUNDARY_SLACK.toFixed(1)}px/s of the threshold, ${judged.length} judged`,
+    );
+
+    /*
+     * **Two claims, and they need different evidence — which took four attempts to see.**
+     *
+     * The versions before this tried to make one check carry both, and kept failing on the fixture
+     * rather than on the build: it wanted a contact that was simultaneously *near-parallel* (to exercise
+     * the dead zone) and *far from the quarry* (so the angle is measurable), and the cat spends most of
+     * its time close to its kitten — 9 of 14 contacts in one run. Those two conditions are close to
+     * mutually exclusive in a live fight, so the suite was reporting the difficulty of staging a
+     * coincidence as though it were a finding about the game.
+     *
+     * They are separate claims and only one of them needs the angle at all.
+     */
+
+    /*
+     * (A) **Both outcomes are reachable — and the rate is the finding.**
+     *
+     * This was written as a flat assertion ("a swept half-circle produces both") and it failed two runs
+     * in three, at 8.6° and again at 20°. That is not the check being fragile. Sweeping a half-circle at
+     * 12° spacing guarantees a flick within 6° of the heading *this recorder estimates*, and the graze
+     * still almost never happens, because two errors stack on top of that 6°: the estimate is ±10° off,
+     * and the heading itself rotates 6–11° during the ~104ms the flick takes (36° when the cat is on
+     * top of its kitten). **The axis the player is asked to aim along is invisible and moving** — it is
+     * the line from the cat to a walking kitten, which is drawn nowhere.
+     *
+     * So the shove is the assertion and the graze is a **roll**: re-flicked until it lands, reporting
+     * which attempt it took, exactly as §12.1 prescribes for anything that comes from a roll. The
+     * attempt count is not bookkeeping here, it *is* the measurement — it says how often a player
+     * genuinely trying to swipe along the cat's back would succeed, which is the number §16.7 needs and
+     * no flat pass/fail could ever have reported.
+     */
+    r.ok(
+      '§1: the sweep shoves the cat',
+      contacts.some((c) => c.kind === 'shove'),
+      `${contacts.filter((c) => c.kind === 'shove').length} shoves, ${contacts.filter((c) => c.kind === 'graze').length} grazes from ${SWEEP.length} swept flicks`,
+    );
+
+    let grazeAt = contacts.findIndex((c) => c.kind === 'graze') >= 0 ? SWEEP.length : 0;
+    if (!grazeAt) {
+      // Aim as parallel as this instrument can, and keep trying. Small alternating offsets rather than a
+      // fixed 0°, so a systematic bias in the estimate cannot make every attempt fail the same way.
+      const NUDGE = [0, 4, -4, 8, -8, 2, -2, 6, -6, 10, -10, 0, 4, -4, 0];
+      for (let i = 0; i < NUDGE.length; i++) {
+        const before = await f.page.evaluate(() => window.__grazes);
+        await swipeCat(f.page, { angleDeg: NUDGE[i] });
+        await f.page.waitForTimeout(SWIPE_COOLDOWN_MS + 80);
+        if ((await f.page.evaluate(() => window.__grazes)) > before) {
+          grazeAt = SWEEP.length + i + 1;
+          break;
+        }
+      }
+    }
+    r.fixture(
+      '§1: a flick that grazes rather than shoves',
+      { value: grazeAt || null, deal: grazeAt, deals: SWEEP.length + 15 },
+    );
+    r.note(
+      `§1: **the dead zone is hard to enter on purpose** — a graze took ${grazeAt || '>' + (SWEEP.length + 15)} flicks. ` +
+        `The heading is the line to a walking kitten, which is drawn nowhere, and it rotates 6–11° during the gesture.`,
+    );
+
+    // (B) The card's classification agrees with the geometry it was handed — on the contacts where that
+    // geometry can actually be measured. This is the wiring check: a `trySwipe` that ignored `veer` and
+    // shoved on everything would pass (A) never and this always, so both are needed.
+    if (judged.length < 2) {
+      r.fixture(`§1: two measurable contacts beyond ${MEASURE_MIN_PX}px`, null, 1);
+    } else {
+      const show = (c) => `sin ${c.sin.toFixed(3)} (${(c.sin * IMPULSE_SPEED).toFixed(1)}px/s) at ${Math.round(c.quarryPx)}px → ${c.kind}`;
+      const wrong = judged.filter((c) => (c.sin * IMPULSE_SPEED >= SHOVE_MIN ? 'shove' : 'graze') !== c.kind);
+      r.ok(
+        '§1: every measurable contact was classified as its own geometry demands',
+        wrong.length === 0,
+        `${judged.length} judged (${shoves.length} above SHOVE_MIN, ${grazes.length} below), ${wrong.length} misclassified${wrong.length ? ': ' + wrong.map(show).join(', ') : ''}`,
+      );
+    }
+
     await f.ctx.close();
-  }
-  if (!rate.across || !rate.along) {
-    r.fixture('§1: a stalking fight for each axis', null, 1);
-  } else {
-    r.ok(
-      '§1 across: a flick across the cat’s path shoves it',
-      rate.across.swats >= Math.ceil(rate.across.aimed * 0.6),
-      `${rate.across.swats} shoves from ${rate.across.aimed} flicks`,
-    );
-    r.ok(
-      '§1 along: a flick down the cat’s path shoves far less often',
-      rate.along.swats * 2 <= rate.across.swats,
-      `along ${rate.along.swats}/${rate.along.aimed} vs across ${rate.across.swats}/${rate.across.aimed}`,
-    );
   }
 }
 
@@ -258,7 +467,14 @@ for (const mode of ['commander', 'manual']) {
      * assert on them must not notice this exists. `swats === 0` is the strong form — the shove's own
      * announcement never fires — and it also covers the treat swat, since no treat is thrown here.
      */
-    r.ok(`§4 ${mode}: a flick at the cat does nothing`, swats === 0, `${swats} shoves after a ${Math.round(out.len ?? 0)}px flick`);
+    const grazes = await f.page.evaluate(() => window.__grazes);
+    // Both tells, not just the shove. 2.5.1 gave the dead zone a picture, and a picture is a response —
+    // a shipped mode that grazed would be answering a gesture it does not have.
+    r.ok(
+      `§4 ${mode}: a flick at the cat does nothing`,
+      swats === 0 && grazes === 0,
+      `${swats} shoves, ${grazes} grazes after a ${Math.round(out.len ?? 0)}px flick`,
+    );
     r.note(`§4 ${mode}: travelled ${travelled(trail, out.perf, out.perf + IMPULSE_MS).toFixed(1)}px in the ${IMPULSE_MS}ms after (${trail.length - before} new samples)`);
     await f.ctx.close();
   }

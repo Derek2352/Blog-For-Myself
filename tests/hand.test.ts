@@ -4,10 +4,13 @@ import {
   SWIPE_RADIUS,
   IMPULSE_SPEED,
   IMPULSE_TRAVEL_PX,
+  GRAZE_MS,
   IMPULSE_MS,
   SHOVE_FOOTING,
   SHOVE_MIN,
+  SHOVE_MIN_DEG,
   SWIPE_COOLDOWN_MS,
+  contactFor,
   swipeSpeed,
   isSwipe,
   segmentHit,
@@ -115,32 +118,49 @@ describe('veer — the design rule is the arithmetic', () => {
 });
 
 describe('SHOVE_MIN — the along-the-path dead zone', () => {
-  it('rejects everything inside a few degrees of the cat’s line', () => {
-    for (let deg = 0; deg <= 8; deg += 1) {
-      const r = (deg * Math.PI) / 180;
-      const v = veer(1, 0, Math.cos(r), Math.sin(r));
-      expect(Math.hypot(v.x, v.y)).toBeLessThan(SHOVE_MIN);
-    }
+  const at = (deg: number) => {
+    const r = (deg * Math.PI) / 180;
+    const v = veer(1, 0, Math.cos(r), Math.sin(r));
+    return Math.hypot(v.x, v.y);
+  };
+
+  it('is exactly the angle it claims to be', () => {
+    // The threshold is derived from the angle rather than the other way round, so this pins the two
+    // together: a magnitude tuned by feel would drift away from the number the design reasons about.
+    expect(at(SHOVE_MIN_DEG - 0.5)).toBeLessThan(SHOVE_MIN);
+    expect(at(SHOVE_MIN_DEG + 0.5)).toBeGreaterThan(SHOVE_MIN);
   });
 
-  it('admits everything from ten degrees out, so the |sin θ| ramp survives', () => {
-    for (let deg = 10; deg <= 90; deg += 5) {
-      const r = (deg * Math.PI) / 180;
-      const v = veer(1, 0, Math.cos(r), Math.sin(r));
-      expect(Math.hypot(v.x, v.y)).toBeGreaterThanOrEqual(SHOVE_MIN);
-    }
+  it('rejects everything inside the zone', () => {
+    for (let deg = 0; deg < SHOVE_MIN_DEG; deg += 1) expect(at(deg)).toBeLessThan(SHOVE_MIN);
   });
 
-  it('is a small fraction of a full shove — a dead zone, not a difficulty', () => {
-    expect(SHOVE_MIN).toBeGreaterThan(0);
-    expect(SHOVE_MIN).toBeLessThan(IMPULSE_SPEED * 0.25);
+  it('admits everything outside it, so the |sin θ| ramp survives', () => {
+    for (let deg = SHOVE_MIN_DEG + 1; deg <= 90; deg += 2) expect(at(deg)).toBeGreaterThanOrEqual(SHOVE_MIN);
+  });
+
+  it('is wider than the heading’s own drift during a flick, or nobody can enter it', () => {
+    // The finding that widened it from 8.6°. A flick takes ~104ms and the cat's heading rotates 6–11°
+    // in that time because its quarry walks, so a zone narrower than that drift is unreachable in play:
+    // `scratchpad/hand.mjs` swept a half-circle at 12° spacing and got 14–15 shoves and 0 grazes.
+    expect(SHOVE_MIN_DEG).toBeGreaterThan(11);
+  });
+
+  it('still leaves most of the circle live — a dead zone, not a difficulty', () => {
+    // Four quadrant-ends are dead: 4 × SHOVE_MIN_DEG out of 360°.
+    expect((4 * SHOVE_MIN_DEG) / 360).toBeLessThan(0.3);
+  });
+
+  it('suppresses only impulses that were never legible anyway', () => {
+    // At the threshold the shove travels this far against a 28px cat. Below ~9px it cannot be seen, so
+    // the zone costs nothing visible — which is what makes it affordable.
+    const travelAtThreshold = SHOVE_MIN * (2 / 3) * (IMPULSE_MS / 1000);
+    expect(travelAtThreshold).toBeLessThan(9);
   });
 
   it('is symmetric: swiping against the heading is as dead as swiping along it', () => {
-    for (const deg of [175, 178, 180, 182, 185]) {
-      const r = (deg * Math.PI) / 180;
-      const v = veer(1, 0, Math.cos(r), Math.sin(r));
-      expect(Math.hypot(v.x, v.y)).toBeLessThan(SHOVE_MIN);
+    for (const deg of [180 - SHOVE_MIN_DEG + 1, 178, 180, 182, 180 + SHOVE_MIN_DEG - 1]) {
+      expect(at(deg)).toBeLessThan(SHOVE_MIN);
     }
   });
 
@@ -206,6 +226,75 @@ describe('swipeReady', () => {
     // The cat must always get a moment of its own movement back between two shoves, or the game
     // is a fidget with no failure state.
     expect(SWIPE_COOLDOWN_MS).toBeGreaterThan(IMPULSE_MS);
+  });
+});
+
+describe('contactFor — three outcomes, because the player must tell them apart', () => {
+  it('calls a square-across swipe a shove', () => {
+    const v = veer(1, 0, 0, 1);
+    expect(contactFor(v.x, v.y)).toBe('shove');
+  });
+
+  it('calls a near-parallel swipe a graze rather than nothing', () => {
+    // The whole point of the type. Before this, "crossed the cat lengthways" and "missed the cat"
+    // were the same outcome and the same picture, so a player could not tell which half of the
+    // gesture to fix — and it is the graze that carries the useful information: the aim was right.
+    for (const deg of [1, 3, 5, 8, 15, 19]) {
+      const r = (deg * Math.PI) / 180;
+      const v = veer(1, 0, Math.cos(r), Math.sin(r));
+      expect(contactFor(v.x, v.y)).toBe('graze');
+    }
+  });
+
+  it('agrees with SHOVE_MIN exactly, so the guard and the tell can never disagree', () => {
+    expect(contactFor(SHOVE_MIN, 0)).toBe('shove');
+    expect(contactFor(SHOVE_MIN - 1e-9, 0)).toBe('graze');
+  });
+
+  it('calls an exactly-zero impulse a graze, because that is what it is', () => {
+    // This test deleted a third case. `contactFor` used to return `'none'` here on the theory that a
+    // zero rejection is not contact — but the angle sweep below found `veer` returning exactly zero at
+    // 0° and 180°, where the arithmetic is axis-aligned and the floating point cancels cleanly. So the
+    // function written to remove a silent outcome had one of its own, at exactly the two angles a
+    // player aiming down the cat's back produces. You crossed the cat and got no purchase: that is a
+    // graze.
+    expect(contactFor(0, 0)).toBe('graze');
+    expect(contactFor(veer(1, 0, 1, 0).x, veer(1, 0, 1, 0).y)).toBe('graze');
+    expect(contactFor(veer(1, 0, -1, 0).x, veer(1, 0, -1, 0).y)).toBe('graze');
+  });
+
+  it('is direction-blind: only the magnitude decides', () => {
+    for (let deg = 0; deg < 360; deg += 11) {
+      const r = (deg * Math.PI) / 180;
+      const big = contactFor(Math.cos(r) * SHOVE_MIN * 2, Math.sin(r) * SHOVE_MIN * 2);
+      const small = contactFor((Math.cos(r) * SHOVE_MIN) / 2, (Math.sin(r) * SHOVE_MIN) / 2);
+      expect(big).toBe('shove');
+      expect(small).toBe('graze');
+    }
+  });
+
+  it('covers every angle: a swipe that crosses the cat is never silent', () => {
+    // The property the whole fix exists to establish, and it is stronger than "the dead zone has a
+    // tell": it says there is no gap *between* the two tells where feedback disappears. This is the
+    // check that found the `none` case, at 0° and 180°.
+    for (let deg = 0; deg < 360; deg += 3) {
+      const r = (deg * Math.PI) / 180;
+      const v = veer(1, 0, Math.cos(r), Math.sin(r));
+      expect(['shove', 'graze']).toContain(contactFor(v.x, v.y));
+    }
+  });
+});
+
+describe('GRAZE_MS', () => {
+  it('does not share the shove cooldown, so a miss is not punished twice', () => {
+    // If a graze consumed `SWIPE_COOLDOWN_MS`, brushing the cat lengthways would lock the player out
+    // of a real shove for half a second — the dead zone would feel like a trap instead of a miss.
+    expect(GRAZE_MS).toBeLessThan(SWIPE_COOLDOWN_MS);
+  });
+
+  it('is long enough to be seen and short enough not to trail the gesture', () => {
+    expect(GRAZE_MS).toBeGreaterThanOrEqual(200);
+    expect(GRAZE_MS).toBeLessThan(IMPULSE_MS);
   });
 });
 

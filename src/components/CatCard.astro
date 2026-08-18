@@ -678,6 +678,55 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     100% { translate: 0; rotate: 0deg; }
   }
 
+  /* A graze — §16's dead zone, made visible. The swipe crossed the cat but ran along its line, so
+     `veer` rejected it and nothing moved. Until 2.5.1 that looked exactly like missing the cat
+     altogether, which leaves a player unable to tell "you were nowhere near it" from "you were on it
+     and pushed the wrong way" — and only the second tells them what to change.
+
+     Deliberately the *opposite* half of the swat's vocabulary, so the two can never be confused: the
+     swat moves the whole body and wears the accent, while a graze moves one extremity and keeps the
+     cat's colour. Annoyed, not displaced. No cue either — this is feedback about aim that a learning
+     player will trigger constantly, and a sound on a mistake you are about to repeat is how a mechanic
+     becomes irritating.
+
+     **The tail alone, swept forward over the back**, chosen by rendering seven candidates at 28px
+     rather than at the size they were authored. Two findings from that sheet:
+
+     - **The ear does nothing here.** Pinned at -18° on its own it is indistinguishable from neutral at
+       true size, and the ears already carry `desperate` mood, `sleepy` stance and the telegraph charge —
+       a fourth meaning would muddy three existing tells to add nothing.
+     - **The obvious pose was the forbidden one.** Rotating the tail *negative* raises it into a near
+       vertical stroke, which reads beautifully and is exactly the kitten's signature: §0 and 2.3 make "a
+       tail carried straight up" the one shape the boss never makes, because it is what tells your side
+       from its side at 16px. So the flick goes the other way, sweeping the tail forward across the back
+       — clear of every standing posture (`bored` -32°, `desperate` +20°, `sleepy` -38°, `groom` -42°)
+       and clear of the squad.
+
+     On the independent `rotate` property, not `transform`, for the same compositional reason the swat
+     avoids it: the tail already carries `transform: rotate()` from those posture rules, and a keyframe on
+     `transform` would blank the cat's standing posture for the duration. `rotate` composes, so a
+     desperate cat's flick starts from where a desperate cat's tail already is.
+
+     The held form is stated first and unconditionally, and that is also the reduced-motion form. It
+     matters more here than for the swat: the swat's accent colour is ungated and its shake is garnish,
+     so it degrades to a colour change and stays legible, whereas a graze's whole tell *is* movement.
+     Gating it would put the dead zone straight back to invisible for exactly the visitors who cannot see
+     a twitch. §11's motion row is a promise about vestibular safety, not a licence to drop information. */
+  .cat-card-boss.boss-grazed .cat-card-boss-tail {
+    rotate: 60deg;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .cat-card-boss.boss-grazed .cat-card-boss-tail {
+      animation: cat-card-graze-tail 0.3s ease-out;
+    }
+  }
+  @keyframes cat-card-graze-tail {
+    0% { rotate: 0deg; }
+    30% { rotate: 66deg; }
+    70% { rotate: 44deg; }
+    100% { rotate: 60deg; }
+  }
+
   .cat-card-boss[data-phase='telegraph'] .cat-card-boss-ear-near {
     transform-origin: 60px 6px;
     animation: cat-card-ear-charge 0.42s ease-in-out infinite alternate;
@@ -921,8 +970,9 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     veer,
     impulseAt,
     swipeReady,
+    contactFor,
+    GRAZE_MS,
     SHOVE_FOOTING,
-    SHOVE_MIN,
   } from '@/lib/hand';
   import {
     CARD_SCALE,
@@ -1076,6 +1126,8 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
        * shove as fast as it lands, which is measured in `stepBoss`'s comment. */
       shoveHx: 0,
       shoveHy: 0,
+      /* When the last *graze* was shown. Separate from `swipedAt` on purpose — see `trySwipe`. */
+      grazedAt: 0,
     };
 
     /** The pointer (manual mode) or the nearest kitten (commander), in board coords. */
@@ -1174,21 +1226,37 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       const hy = quarry.y - boss.y;
       const v = veer(hx, hy, dx, dy);
       /*
-       * A dead zone, not an exact-zero test.
+       * A dead zone, not an exact-zero test — and a dead zone the player can see.
        *
-       * This read `if (v.x === 0 && v.y === 0) return`, which is an equality test on a floating-point
+       * The guard read `if (v.x === 0 && v.y === 0) return`, an equality test on a floating-point
        * rejection and therefore never true in practice. `scratchpad/hand.mjs` §1 caught it: a flick
        * dispatched exactly down the cat's heading still registered, because the dot product came back
        * as 1 − 1e-16 and the "no purchase" case became a shove of 1e-14 px/s — with the recoil flash
-       * and the sound of a real one. Worse, the heading moves between the frame that aims a gesture and
+       * and the sound of a real one. The heading also moves between the frame that aims a gesture and
        * the frame that reads it, so a genuinely parallel flick reliably lands a *tiny* rejection.
        *
-       * `SHOVE_MIN` makes the along-the-path case a real dead zone about 9° wide, which is also how it
-       * should read: brushing the cat lengthways does nothing at all, rather than doing an invisible
-       * something loudly. The rule the whole mechanic rests on — across shoves, along does not — was
-       * only ever true in the arithmetic; this is what makes it true on the board.
+       * `SHOVE_MIN` makes the along-the-path case a real dead zone about 9° wide. But a silent return
+       * left **two different failures wearing the same face**: a flick that missed the cat entirely and
+       * a flick that crossed it lengthways both did nothing, and the player cannot learn which half of
+       * the gesture to fix from an outcome that never varies. The second is the one worth telling them
+       * about — the aim was right and only the angle was wrong.
+       *
+       * So a graze gets a tell: the cat flicks its tail and pins its ears, and does not move. That is
+       * deliberately *not* the shove's vocabulary — no accent, no body travel, and **no cue**, because
+       * this is feedback about aim that a learning player will trigger constantly, and a sound on a
+       * mistake you are about to repeat is how a mechanic becomes annoying. `cat-sfx.ts` keeps one cue
+       * per visual event; it does not owe every visual event a cue.
        */
-      if (Math.hypot(v.x, v.y) < SHOVE_MIN) return;
+      if (contactFor(v.x, v.y) === 'graze') {
+        // Its own throttle, not `SWIPE_COOLDOWN_MS`: sharing would mean brushing the cat lengthways
+        // locked you out of a real shove for half a second, punishing the miss twice.
+        if (t - boss.grazedAt >= GRAZE_MS) {
+          boss.grazedAt = t;
+          bossNode.classList.add('boss-grazed');
+          window.setTimeout(() => bossNode.classList.remove('boss-grazed'), GRAZE_MS);
+        }
+        return;
+      }
 
       boss.shoveX = v.x;
       boss.shoveY = v.y;

@@ -124,6 +124,13 @@ export const IMPULSE_MS = 420;
 export const IMPULSE_SPEED = 90;
 export const SWIPE_COOLDOWN_MS = 460;
 export const SHOVE_FOOTING = 0.35;
+/** The along-the-path dead zone, stated as the angle the design reasons about. Widened from 8.6° when
+ *  a half-circle sweep produced 14–15 shoves and 0 grazes: a zone narrower than the heading's own drift
+ *  during a flick (6–11°) is one nobody can enter. */
+export const SHOVE_MIN_DEG = 20;
+export const SHOVE_MIN = IMPULSE_SPEED * Math.sin((SHOVE_MIN_DEG * Math.PI) / 180);
+/** How long the graze tell shows, and its own throttle — deliberately not `SWIPE_COOLDOWN_MS`. */
+export const GRAZE_MS = 300;
 /** Derived there and here alike: ∫₀¹(1−t²)dt = ⅔, so travel is peak × ⅔ × duration. ~25px. */
 export const IMPULSE_TRAVEL_PX = IMPULSE_SPEED * (2 / 3) * (IMPULSE_MS / 1000);
 
@@ -911,10 +918,15 @@ export const MIN_FLICK_PX = Math.ceil((SWIPE_MIN_SPEED * (FLICK_GAP_MS / 1000) *
  * by 0.0px, and called it 8 swat frames. **A visible acknowledgement of a shove that did not happen is
  * the worst failure available, because it looks like success.**
  *
- * @param axis  'across' aims perpendicular to the cat's heading — the gesture the mechanic is about.
- *              'along' aims down its heading, which `veer` must reject: the control case.
+ * @param axis     'across' aims perpendicular to the cat's heading — the gesture the mechanic is about.
+ *                 'along' aims down its heading, which `veer` must reject: the control case.
+ * @param angleDeg an explicit offset from the heading, in degrees, overriding `axis`. Needed because a
+ *                 harness **cannot aim inside the dead zone**: probing showed the reconstructed heading
+ *                 is only good to ~6–11° even far from the quarry (and 36° when the cat is on top of
+ *                 it), while `SHOVE_MIN`'s zone is 8.6° wide. So a check that needs the zone measures
+ *                 the angle it actually achieved rather than assuming the one it asked for.
  */
-const FLICK_IN = ({ segments, gapMs, reach, inset, travel, axis }) =>
+const FLICK_IN = ({ segments, gapMs, reach, inset, travel, axis, angleDeg }) =>
   new Promise((done) => {
     const board = document.querySelector('[data-board]');
     const boss = document.querySelector('[data-boss]');
@@ -948,9 +960,12 @@ const FLICK_IN = ({ segments, gapMs, reach, inset, travel, axis }) =>
     const aLen = q ? Math.hypot(q.x - bx, q.y - by) || 1 : 1;
     const ax = q ? (q.x - bx) / aLen : face;
     const ay = q ? (q.y - by) / aLen : 0;
-    // Across: rotate the aim by 90°. Along: the aim itself.
-    const px = axis === 'along' ? ax : ay;
-    const py = axis === 'along' ? ay : -ax;
+    // An explicit offset when given, otherwise across (90°) or along (0°).
+    const off = ((typeof angleDeg === 'number' ? angleDeg : axis === 'along' ? 0 : 90) * Math.PI) / 180;
+    const cs = Math.cos(off);
+    const sn = Math.sin(off);
+    const px = ax * cs - ay * sn;
+    const py = ax * sn + ay * cs;
     // Of the two directions, the one whose destination has more board around it — `onBoard` clamps the
     // cat, and a shove spent against a wall is indistinguishable from a shove too small to see.
     const room = (s) =>
@@ -1027,9 +1042,9 @@ const FLICK_IN = ({ segments, gapMs, reach, inset, travel, axis }) =>
  */
 export async function swipeCat(
   page,
-  { axis = 'across', segments = FLICK_SEGMENTS, gapMs = FLICK_GAP_MS, reach = SWIPE_RADIUS + 24, inset = 2, travel = IMPULSE_TRAVEL_PX } = {},
+  { axis = 'across', angleDeg, segments = FLICK_SEGMENTS, gapMs = FLICK_GAP_MS, reach = SWIPE_RADIUS + 24, inset = 2, travel = IMPULSE_TRAVEL_PX } = {},
 ) {
-  const out = await page.evaluate(FLICK_IN, { segments, gapMs, reach, inset, travel, axis });
+  const out = await page.evaluate(FLICK_IN, { segments, gapMs, reach, inset, travel, axis, angleDeg });
   if (!out.aimed) return out;
   const perf = out.hitAt || out.perf;
   return { ...out, perf, epoch: perf + out.skew, landed: out.hitAt > 0 };
