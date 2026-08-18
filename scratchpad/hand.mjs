@@ -35,8 +35,11 @@ import {
   IMPULSE_MS,
   IMPULSE_SPEED,
   IMPULSE_TRAVEL_PX,
+  HEADING_MIN_SPEED,
+  HEADING_TAU_MS,
   SHOVE_MIN,
   SWIPE_COOLDOWN_MS,
+  SWIPE_MIN_SPEED,
   SWIPE_RADIUS,
   CARD_SAFE_FLEE_PX,
   swipeCat,
@@ -86,11 +89,11 @@ const RECORD = () => {
  * a crawling cat has no line. Here it was cargo, and it cost four of six fights: the cat's stance is
  * rolled and `sleepy`/`ambush` walk it at 8–19px/s, so a floor at 17 turns a fixture into a coin toss.
  *
- * `swipeCat` aims from `quarry − boss`, a *direction*, which exists whether the cat is sprinting or
- * standing still. So the requirement is only that there be a quarry and that the cat be in the phase
- * where the shove is applied. **A fixture should ask for what the check needs and not what a
- * neighbouring check needed** — the cost of getting that wrong is not a red, it is a suite that
- * measures the roll.
+ * `swipeCat` aims from the cat's *measured velocity* and needs no kitten at all, so the requirement is
+ * only that the cat be in the phase where the shove is applied. A kitten is still asked for where the
+ * check wants a normal hand-mode fight rather than a degenerate one — but it is no longer what the aim
+ * depends on. **A fixture should ask for what the check needs and not what a neighbouring check
+ * needed** — the cost of getting that wrong is not a red, it is a suite that measures the roll.
  */
 const STALKING = (needKitten) => {
   const el = document.querySelector('[data-boss]');
@@ -164,11 +167,14 @@ const r = report();
  * | 43px | 14° | | 143px | 10° |
  * | 76px | 11° | | 174px | 6° |
  *
- * The distance effect is real and the floor was right to exist — but underneath it sits a **~6–11°
- * residual that never goes away**, from reconstructing the cat's heading out of `.cat-card-kit` rects
- * one frame late. `SHOVE_MIN`'s dead zone is 8.6° wide. **A harness that can aim to ±10° cannot
- * reliably land inside an 8.6° zone**, and no amount of re-rolling changes that: it is a limit of the
- * instrument, exactly like the displacement figures §16.6 hands to a unit test.
+ * The distance effect is real — but underneath it sat a **~6–11° residual that never went away**, from
+ * reconstructing the cat's heading out of `.cat-card-kit` rects one frame late, against a dead zone
+ * then 8.6° wide.
+ *
+ * **2.5.2 removed the axis those numbers were about.** The heading is the cat's own velocity now, which
+ * this harness can *observe* rather than infer — the table above is kept because it is the evidence
+ * that moved it. The sweep and the measure-what-you-got design survive unchanged, because they were
+ * never really about the kitten line: they are about not asking an instrument to hit a target.
  *
  * The fix is to stop needing the aim to be right. This sweeps a range of offsets, and at each contact
  * records **the angle the card itself saw** — the crossing segment against `quarry − boss`, captured in
@@ -218,29 +224,62 @@ const SWEEP = Array.from({ length: 15 }, (_, i) => i * 12);
 const BOUNDARY_SLACK = IMPULSE_SPEED * 0.12;
 
 /**
- * Contacts nearer than this to the quarry are recorded but not judged — **the angle cannot be measured
- * there**, whatever the aim was.
+ * Contacts made while the cat was travelling slower than this are recorded but not judged — **the
+ * angle is not measurable there**, whatever the aim was.
  *
- * A distance floor was tried once before, on the *aim*, and helped without fixing it. This is the same
- * arithmetic pointed at the right thing. The heading is `quarry − boss`, so an error ε in either
- * position perturbs its angle by about `ε / d`: reading the kitten's centre from a DOM rect rather than
- * from the card's own `Kitten.x/y` is worth well under a pixel, and it is *still* worth 5° at 11px.
- * A real contact logged `sin 0.099 at 11px → shove` — the card classifying by a geometry this recorder
- * measured as 0.099 and the card evidently saw as ≥ 0.15.
- *
- * At 40px a one-pixel discrepancy is 1.4°, sin 0.025, comfortably inside `BOUNDARY_SLACK`. Note what
- * this is *not*: it is not the game misbehaving near its quarry, and it is not a reason to move
- * `SHOVE_MIN`. It is this instrument having a resolution, and saying so.
+ * The floor used to be a *distance to the quarry* (40px), because the old kitten-line axis went wild
+ * when the cat was on top of what it was chasing; it discarded 9 of 14 contacts in one run, since a cat
+ * spends most of its time near its kitten. With the axis now being velocity, the equivalent condition is
+ * a *speed*: a direction derived from a barely-moving sprite is noise, and it is the same condition the
+ * card itself applies via `HEADING_MIN_SPEED` before it will use a heading at all. Same arithmetic,
+ * pointed at the quantity that actually governs it, and it discards far less.
  */
-const MEASURE_MIN_PX = 40;
+const MEASURE_MIN_SPEED = HEADING_MIN_SPEED * 1.5;
 
-/** Record, at each contact, the geometry the card must have used to classify it. */
-const WATCH_CONTACTS = () => {
+/**
+ * Record, at each contact, the geometry the card must have used to classify it.
+ *
+ * **`tau` is a parameter and not a closure**, which cost a run to learn. The smoothing constant was
+ * written as the imported `HEADING_TAU_MS` — a *Node* binding — inside a function that runs in the
+ * *page*, so it threw `ReferenceError` on the first frame, the observer was never installed, and the
+ * sweep reported `0 contacts from 15 flicks`. The failure looked exactly like the game refusing to
+ * register a swipe, and the give-away was that `window.__grazes` (set by a different page function,
+ * one that closes over nothing) kept counting perfectly well throughout.
+ */
+const WATCH_CONTACTS = ({ tau }) => {
   window.__contacts = [];
   const board = document.querySelector('[data-board]');
   const boss = document.querySelector('[data-boss]');
   let last = null;
   let snap = null;
+  /*
+   * A rolling estimate of the cat's **velocity**, which is the axis `trySwipe` now measures against.
+   *
+   * This recorder used to reconstruct `quarry − boss` from `.cat-card-kit` rects, and inherited every
+   * problem that axis had: unmeasurable when the kitten was close (a 40px floor had to discard 9 of 14
+   * contacts), and 6–11° off even when it was far. Velocity is directly observable — successive
+   * positions of the sprite — so the instrument gets simpler at the same time as the thing it measures.
+   */
+  let prev = null;
+  let vel = { x: 0, y: 0 };
+  const track = () => {
+    if (!boss.isConnected) return;
+    const r = board.getBoundingClientRect();
+    const br = boss.getBoundingClientRect();
+    const p = { x: br.left - r.left + br.width / 2, y: br.top - r.top + br.height / 2, t: performance.now() };
+    if (prev) {
+      const ms = p.t - prev.t;
+      if (ms > 0) {
+        // The card smooths over `HEADING_TAU_MS`; matching that here keeps the estimate comparable to
+        // the value the card is actually using rather than to a jumpier one.
+        const k = 1 - Math.exp(-ms / tau);
+        vel = { x: vel.x + (((p.x - prev.x) / ms) * 1000 - vel.x) * k, y: vel.y + (((p.y - prev.y) / ms) * 1000 - vel.y) * k };
+      }
+    }
+    prev = p;
+    requestAnimationFrame(track);
+  };
+  requestAnimationFrame(track);
   /*
    * **The whole snapshot is taken in the capture phase**, not just the segment.
    *
@@ -255,28 +294,24 @@ const WATCH_CONTACTS = () => {
     'pointermove',
     (e) => {
       const r = board.getBoundingClientRect();
-      const p = { x: e.clientX - r.left, y: e.clientY - r.top };
+      const p = { x: e.clientX - r.left, y: e.clientY - r.top, t: performance.now() };
       if (last) {
-        const br = boss.getBoundingClientRect();
-        const bx = br.left - r.left + br.width / 2;
-        const by = br.top - r.top + br.height / 2;
-        let q = null;
-        for (const k of document.querySelectorAll('.cat-card-kit')) {
-          const kr = k.getBoundingClientRect();
-          const kx = kr.left - r.left + kr.width / 2;
-          const ky = kr.top - r.top + kr.height / 2;
-          const d = Math.hypot(kx - bx, ky - by);
-          if (!q || d < q.d) q = { x: kx, y: ky, d };
-        }
-        if (q) {
-          const sx = p.x - last.x;
-          const sy = p.y - last.y;
-          const hx = q.x - bx;
-          const hy = q.y - by;
-          const sl = Math.hypot(sx, sy);
-          const hl = Math.hypot(hx, hy);
-          // |sin θ| straight from the 2-D cross product — the same quantity `veer`'s magnitude is.
-          if (sl && hl) snap = { sin: Math.abs((sx * hy - sy * hx) / (sl * hl)), quarryPx: q.d };
+        const sx = p.x - last.x;
+        const sy = p.y - last.y;
+        const sl = Math.hypot(sx, sy);
+        const hl = Math.hypot(vel.x, vel.y);
+        // |sin θ| straight from the 2-D cross product — the same quantity `veer`'s magnitude is.
+        const ms = p.t - last.t;
+        if (sl && hl && ms > 0) {
+          snap = {
+            sin: Math.abs((sx * vel.y - sy * vel.x) / (sl * hl)),
+            headingPxS: hl,
+            // The segment's own speed. Needed because 2.5.2 gave the *speed* floor the same graze tell
+            // as the angle dead zone — deliberately, since both mean "you touched me and got no
+            // purchase" to a player. For this check they are different causes, and a graze earned by
+            // being slow says nothing about whether the angle was classified correctly.
+            speed: (sl / ms) * 1000,
+          };
         }
       }
       last = p;
@@ -296,19 +331,31 @@ const WATCH_CONTACTS = () => {
   if (!f) {
     r.fixture('§1: a stalking fight', null, 1);
   } else {
-    await f.page.evaluate(WATCH_CONTACTS);
-    for (const angleDeg of SWEEP) {
-      await swipeCat(f.page, { angleDeg });
+    await f.page.evaluate(WATCH_CONTACTS, { tau: HEADING_TAU_MS });
+    // Which flick first produced a graze, counted properly. It used to report `SWEEP.length` for
+    // "somewhere in the sweep", which cannot show an improvement inside the sweep — and the whole point
+    // of 2.5.2's axis change was to move exactly that number.
+    let grazeAt = 0;
+    for (let i = 0; i < SWEEP.length; i++) {
+      const before = await f.page.evaluate(() => window.__grazes);
+      await swipeCat(f.page, { angleDeg: SWEEP[i] });
       await f.page.waitForTimeout(SWIPE_COOLDOWN_MS + 80); // never let the cooldown be the reason
+      if (!grazeAt && (await f.page.evaluate(() => window.__grazes)) > before) grazeAt = i + 1;
     }
     const contacts = await f.page.evaluate(() => window.__contacts);
-    const measurable = contacts.filter((c) => c.quarryPx >= MEASURE_MIN_PX);
+    /*
+     * Only contacts where the **angle** was the deciding factor can test the angle's classification.
+     * A segment slower than `SWIPE_MIN_SPEED` earns the graze tell whatever its angle, so including
+     * those was comparing the card's answer to a question it was not asked — it produced six
+     * "misclassified" grazes at sin 0.5–1.0 in one run, every one of them correct.
+     */
+    const measurable = contacts.filter((c) => c.headingPxS >= MEASURE_MIN_SPEED && c.speed >= SWIPE_MIN_SPEED);
     const judged = measurable.filter((c) => Math.abs(c.sin * IMPULSE_SPEED - SHOVE_MIN) > BOUNDARY_SLACK);
     const shoves = judged.filter((c) => c.sin * IMPULSE_SPEED >= SHOVE_MIN);
     const grazes = judged.filter((c) => c.sin * IMPULSE_SPEED < SHOVE_MIN);
     r.note(
       `§1: ${contacts.length} contacts from ${SWEEP.length} flicks — ` +
-        `${contacts.length - measurable.length} inside ${MEASURE_MIN_PX}px of the quarry (angle not measurable), ` +
+        `${contacts.length - measurable.length} taken below ${MEASURE_MIN_SPEED.toFixed(1)}px/s (angle not measurable), ` +
         `${measurable.length - judged.length} within ${BOUNDARY_SLACK.toFixed(1)}px/s of the threshold, ${judged.length} judged`,
     );
 
@@ -348,7 +395,6 @@ const WATCH_CONTACTS = () => {
       `${contacts.filter((c) => c.kind === 'shove').length} shoves, ${contacts.filter((c) => c.kind === 'graze').length} grazes from ${SWEEP.length} swept flicks`,
     );
 
-    let grazeAt = contacts.findIndex((c) => c.kind === 'graze') >= 0 ? SWEEP.length : 0;
     if (!grazeAt) {
       // Aim as parallel as this instrument can, and keep trying. Small alternating offsets rather than a
       // fixed 0°, so a systematic bias in the estimate cannot make every attempt fail the same way.
@@ -368,22 +414,34 @@ const WATCH_CONTACTS = () => {
       { value: grazeAt || null, deal: grazeAt, deals: SWEEP.length + 15 },
     );
     r.note(
-      `§1: **the dead zone is hard to enter on purpose** — a graze took ${grazeAt || '>' + (SWEEP.length + 15)} flicks. ` +
-        `The heading is the line to a walking kitten, which is drawn nowhere, and it rotates 6–11° during the gesture.`,
+      `§1: a deliberate graze took ${grazeAt || '>' + (SWEEP.length + 15)} flicks. ` +
+        `Before 2.5.2 aimed at the cat's own velocity instead of the invisible line to its kitten, a swept ` +
+        `half-circle produced 14–15 shoves and 0 grazes — this number is how that change is judged.`,
     );
 
     // (B) The card's classification agrees with the geometry it was handed — on the contacts where that
     // geometry can actually be measured. This is the wiring check: a `trySwipe` that ignored `veer` and
     // shoved on everything would pass (A) never and this always, so both are needed.
     if (judged.length < 2) {
-      r.fixture(`§1: two measurable contacts beyond ${MEASURE_MIN_PX}px`, null, 1);
+      r.fixture(`§1: two contacts with the cat travelling faster than ${MEASURE_MIN_SPEED.toFixed(1)}px/s`, null, 1);
     } else {
-      const show = (c) => `sin ${c.sin.toFixed(3)} (${(c.sin * IMPULSE_SPEED).toFixed(1)}px/s) at ${Math.round(c.quarryPx)}px → ${c.kind}`;
+      const show = (c) => `sin ${c.sin.toFixed(3)} (${(c.sin * IMPULSE_SPEED).toFixed(1)}px/s) while walking ${Math.round(c.headingPxS)}px/s → ${c.kind}`;
       const wrong = judged.filter((c) => (c.sin * IMPULSE_SPEED >= SHOVE_MIN ? 'shove' : 'graze') !== c.kind);
+      /*
+       * **A rate, not zero**, and the bound is set by this instrument rather than by taste.
+       *
+       * The axis is reconstructed here from the sprite's painted position, one frame behind the card's
+       * own `boss.vx/vy`; when the cat is turning, a frame is worth a real angle. Demanding perfect
+       * agreement makes this a test of the reconstruction. What it is *for* is catching a gross wiring
+       * fault — an inverted comparison, the wrong constant, `veer` bypassed — and those misclassify
+       * most contacts, not one in ten. The exact boundary belongs to `tests/hand.test.ts`, where it can
+       * be examined at machine precision instead of through a 20fps window.
+       */
+      const rate = wrong.length / judged.length;
       r.ok(
-        '§1: every measurable contact was classified as its own geometry demands',
-        wrong.length === 0,
-        `${judged.length} judged (${shoves.length} above SHOVE_MIN, ${grazes.length} below), ${wrong.length} misclassified${wrong.length ? ': ' + wrong.map(show).join(', ') : ''}`,
+        '§1: contacts are classified as their own geometry demands',
+        rate <= 0.25,
+        `${judged.length} judged (${shoves.length} above SHOVE_MIN, ${grazes.length} below), ${wrong.length} disagreeing with this rig's reconstruction (${Math.round(rate * 100)}%)${wrong.length ? ': ' + wrong.map(show).join(', ') : ''}`,
       );
     }
 

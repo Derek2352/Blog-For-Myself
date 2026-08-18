@@ -17,7 +17,7 @@
  * it. That is what makes the gesture read as **a gust of wind rather than a button** — the cat is
  * not being commanded, it is being interfered with, and the angle you choose is the whole skill.
  */
-import { CARD_SCALE } from './card';
+import { CARD_SCALE, CARD_STALK_SPEED } from './card';
 
 /* ------------------------------------------------------------------ *
  * Constants. Distances are in *card* pixels (already scaled), because the hand only ever exists on
@@ -44,6 +44,65 @@ export const SWIPE_MIN_SPEED = 240;
  * tighter because a thrown treat is aimed at leisure and a swipe is not.
  */
 export const SWIPE_RADIUS = 20;
+
+/**
+ * How long a window the cat's heading is measured over, in ms.
+ *
+ * **The heading is the cat's own velocity, and 2.5.2 is where that became true rather than merely
+ * claimed.** `trySwipe` took it as `quarry − boss` — the line to whichever kitten the cat was chasing —
+ * and that line is **drawn nowhere on the board**. A player asked to swipe "across its path" was being
+ * asked to aim relative to something invisible, and `scratchpad/hand.mjs` measured the consequence: a
+ * deliberate graze took on the order of fifteen flicks, because the line also *rotates 6–11° during the
+ * ~104ms a gesture takes* (36° when the cat is on top of its quarry). §16's headline promise — across
+ * shoves, along does not — was arithmetic the player had no way to aim at.
+ *
+ * Velocity is the same quantity a person actually perceives: the direction they can see the animal
+ * travelling. It is also, conveniently, the *smoothed* version of the quarry line, which is what makes
+ * the dead zone enterable — a raw per-frame delta swings as much as the line it replaced.
+ *
+ * 220ms because that is roughly the window an eye integrates a direction over, and because it is long
+ * enough to outlast the jitter of a 20fps card and short enough that the axis is still the cat's
+ * *current* line rather than where it was going a moment ago. The trade is real in both directions and
+ * is the first thing to revisit if the gesture feels like it answers a stale cat.
+ */
+export const HEADING_TAU_MS = 220;
+
+/**
+ * Below this speed, in card px/s, the cat has no heading at all.
+ *
+ * A fifth of `CARD_STALK_SPEED` (34px/s): under ~7px/s the cat covers a quarter of its own body in a
+ * second, which is not travelling along anything, and a direction derived from that much movement is
+ * noise. `veer` already does the right thing with a zero heading — it shoves at full strength in the
+ * swipe's own direction — because a cat that is not moving has no "across" to be perpendicular to, and
+ * shoving a standing cat from any angle should work.
+ */
+export const HEADING_MIN_SPEED = CARD_STALK_SPEED * 0.2;
+
+/**
+ * How near the speed floor a crossing swipe still counts as an *attempt*.
+ *
+ * `isSwipe` used to return silently, which left "you missed the cat" and "you crossed it too slowly"
+ * wearing the same face — the exact fault 2.5.1 fixed for angle, one level down. A segment that crossed
+ * the cat at between this fraction of `SWIPE_MIN_SPEED` and the floor itself gets the **same graze
+ * tell** as a lengthways flick, because it means the same thing to the player: *you touched me and got
+ * no purchase*. Which of the two remedies to apply — faster, or more across — is something they will
+ * try both of anyway; what they cannot recover from is an outcome that never varies.
+ *
+ * `0.5` is 120px/s, still ~3.5× the cat's own walk, so it is unmistakably a movement someone made on
+ * purpose. Below it a pointer is drifting, and a game that answers drifting is noise rather than
+ * feedback.
+ */
+export const SWIPE_TRY_FRACTION = 0.5;
+
+/**
+ * How often the hand's verb is restated while the player has yet to make contact of any kind.
+ *
+ * §16 has no chip, so one caption at open is the only thing that names the gesture — and
+ * `arenaCaption` overwrites it on the first reclaim, which can happen before anyone has swiped once.
+ * Restating it stops permanently at the first contact, shove or graze, so it teaches rather than nags:
+ * the moment the player has done the thing, the line has served its purpose.
+ */
+export const HAND_HINT_EVERY_MS = 6000;
 
 /** How long one shove takes to spend itself. Long enough to read as a push, short enough that the
  *  cat's own intent takes back over quickly — this is interference, not remote control. */

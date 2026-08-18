@@ -972,7 +972,12 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     swipeReady,
     contactFor,
     GRAZE_MS,
+    HAND_HINT_EVERY_MS,
+    HEADING_MIN_SPEED,
+    HEADING_TAU_MS,
     SHOVE_FOOTING,
+    SWIPE_MIN_SPEED,
+    SWIPE_TRY_FRACTION,
   } from '@/lib/hand';
   import {
     CARD_SCALE,
@@ -1047,6 +1052,9 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     const swiping = () => mode === 'hand';
     /** Both modes where the *kittens* do the holding — everything except manual. */
     const autonomous = () => mode !== 'manual';
+    /** One copy of the verb line, because it is said in two places and they must not drift apart. */
+    const HAND_VERB = 'swipe across the cat to shove it off course';
+    let handHintAt = 0;
 
     /* ---------------------------------------------------------------- *
      * State — the same shape as CatArena's, on tile elements.
@@ -1128,6 +1136,11 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       shoveHy: 0,
       /* When the last *graze* was shown. Separate from `swipedAt` on purpose — see `trySwipe`. */
       grazedAt: 0,
+      /* The cat's own velocity, smoothed over `HEADING_TAU_MS` — **the axis the gesture is measured
+       * against**, and the only one the player can see. Written once per frame in `tick`, from the
+       * distance actually travelled, so clamps and leaps are in it. */
+      vx: 0,
+      vy: 0,
     };
 
     /** The pointer (manual mode) or the nearest kitten (commander), in board coords. */
@@ -1208,22 +1221,47 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     /**
      * §16 — the invisible hand. One pointer segment, tested against the cat.
      *
-     * Everything that decides *whether* and *how hard* lives in `src/lib/hand.ts` and is unit
-     * tested; this function is only the plumbing: read the segment, ask, apply, announce.
+     * Everything that decides *whether* and *how hard* lives in `src/lib/hand.ts` and is unit tested;
+     * this function is only the plumbing: read the segment, ask, apply, announce.
      *
-     * The cat's heading comes from its own velocity this frame, taken as the direction to its
-     * quarry — not from `boss.facing`, which is only ±1 and would make every vertical swipe read
-     * as fully "across" a cat walking straight up the board.
+     * **The cat's heading is its own velocity** (`boss.vx/vy`, smoothed over `HEADING_TAU_MS` in
+     * `tick`). It used to be the direction to its quarry, and this comment used to claim both at once —
+     * "its own velocity this frame, taken as the direction to its quarry" — which is two different
+     * lines described as though they were one. The quarry line is the one the cat is *steering* by; the
+     * velocity is the one a player can *see*. Asking someone to swipe across a line drawn nowhere is
+     * what made §16's dead zone unenterable, measured at ~15 flicks per deliberate graze. It is not
+     * `boss.facing` either, which is only ±1 and would make every vertical swipe read as fully "across"
+     * a cat walking straight up the board.
      */
     function trySwipe(fromX: number, fromY: number, toX: number, toY: number, dtMs: number, t: number): void {
       if (!swipeReady(t - boss.swipedAt)) return;
       const dx = toX - fromX;
       const dy = toY - fromY;
-      if (!isSwipe(swipeSpeed(dx, dy, dtMs))) return;
+
+      /*
+       * **Did it cross the cat** is asked first, and the order is the point.
+       *
+       * The speed test came first and returned silently, so a segment that crossed the cat too slowly
+       * was indistinguishable from one that never went near it — the same two-failures-one-face fault
+       * 2.5.1 fixed for angle, one level down. Only a segment that actually touched the animal can earn
+       * a tell, so the touch has to be established before the speed is judged.
+       */
       if (!segmentHit(fromX, fromY, toX, toY, boss.x, boss.y)) return;
 
-      const hx = quarry.x - boss.x;
-      const hy = quarry.y - boss.y;
+      const speed = swipeSpeed(dx, dy, dtMs);
+      if (!isSwipe(speed)) {
+        // Fast enough to be an attempt, too slow to be a swipe: say so. Below the try band it is a
+        // drift, and a game that answers drifting is noise rather than feedback.
+        if (speed >= SWIPE_MIN_SPEED * SWIPE_TRY_FRACTION) showGraze(t);
+        return;
+      }
+
+      // The axis, from the cat's own travel. Below `HEADING_MIN_SPEED` it is standing, and a standing
+      // cat has no "across" — `veer` answers a zero heading with a full shove in the swipe's own
+      // direction, which is what shoving a stationary animal should do.
+      const moving = Math.hypot(boss.vx, boss.vy) >= HEADING_MIN_SPEED;
+      const hx = moving ? boss.vx : 0;
+      const hy = moving ? boss.vy : 0;
       const v = veer(hx, hy, dx, dy);
       /*
        * A dead zone, not an exact-zero test — and a dead zone the player can see.
@@ -1232,29 +1270,19 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
        * rejection and therefore never true in practice. `scratchpad/hand.mjs` §1 caught it: a flick
        * dispatched exactly down the cat's heading still registered, because the dot product came back
        * as 1 − 1e-16 and the "no purchase" case became a shove of 1e-14 px/s — with the recoil flash
-       * and the sound of a real one. The heading also moves between the frame that aims a gesture and
-       * the frame that reads it, so a genuinely parallel flick reliably lands a *tiny* rejection.
+       * and the sound of a real one.
        *
-       * `SHOVE_MIN` makes the along-the-path case a real dead zone about 9° wide. But a silent return
-       * left **two different failures wearing the same face**: a flick that missed the cat entirely and
-       * a flick that crossed it lengthways both did nothing, and the player cannot learn which half of
-       * the gesture to fix from an outcome that never varies. The second is the one worth telling them
-       * about — the aim was right and only the angle was wrong.
+       * `SHOVE_MIN` makes the along-the-path case a real dead zone, `SHOVE_MIN_DEG` (20°) either side
+       * of the cat's line. It was 8.6° until a half-circle sweep proved that unreachable — a zone
+       * narrower than its own axis's drift is one nobody can enter.
        *
-       * So a graze gets a tell: the cat flicks its tail and pins its ears, and does not move. That is
-       * deliberately *not* the shove's vocabulary — no accent, no body travel, and **no cue**, because
-       * this is feedback about aim that a learning player will trigger constantly, and a sound on a
-       * mistake you are about to repeat is how a mechanic becomes annoying. `cat-sfx.ts` keeps one cue
-       * per visual event; it does not owe every visual event a cue.
+       * And a silent return left **two different failures wearing the same face**: a flick that missed
+       * the cat entirely and a flick that crossed it lengthways both did nothing, and the player cannot
+       * learn which half of the gesture to fix from an outcome that never varies. The second is the one
+       * worth telling them about — the aim was right and only the angle was wrong.
        */
       if (contactFor(v.x, v.y) === 'graze') {
-        // Its own throttle, not `SWIPE_COOLDOWN_MS`: sharing would mean brushing the cat lengthways
-        // locked you out of a real shove for half a second, punishing the miss twice.
-        if (t - boss.grazedAt >= GRAZE_MS) {
-          boss.grazedAt = t;
-          bossNode.classList.add('boss-grazed');
-          window.setTimeout(() => bossNode.classList.remove('boss-grazed'), GRAZE_MS);
-        }
+        showGraze(t);
         return;
       }
 
@@ -1262,16 +1290,41 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       boss.shoveY = v.y;
       boss.shoveAt = t;
       boss.swipedAt = t;
-      // The line it was walking when it was hit, kept so `stepBoss` can carry it on that line while
-      // the impulse lasts instead of correcting straight back onto the quarry.
-      const hl = Math.hypot(hx, hy) || 1;
-      boss.shoveHx = hx / hl;
-      boss.shoveHy = hy / hl;
+      // The line it was travelling when it was hit, kept so `stepBoss` can carry it on that line while
+      // the impulse lasts instead of correcting straight back onto the quarry. The same heading the
+      // gesture was measured against, because "the line it was knocked off" and "the line you aimed
+      // across" are the same line — they were two different ones until 2.5.2, for no reason.
+      const hl = Math.hypot(hx, hy);
+      boss.shoveHx = hl ? hx / hl : 0;
+      boss.shoveHy = hl ? hy / hl : 0;
       // Reuse the swat's vocabulary rather than inventing a second one: the player has hit the cat,
       // and 2.5 just gave that class a recoil and a sound.
       bossNode.classList.add('boss-swatted');
       playCue('swat');
       window.setTimeout(() => bossNode.classList.remove('boss-swatted'), IMPULSE_MS);
+    }
+
+    /**
+     * The graze tell: *you touched me and got no purchase*.
+     *
+     * One function for both ways of earning it — too slow, or too far along the cat's line — because it
+     * says the same thing to the player either way, and which remedy to try is something they will
+     * work through anyway. What they cannot recover from is an outcome that never varies.
+     *
+     * The cat flicks its tail forward over its back and does not move. Deliberately the opposite half
+     * of the swat's vocabulary — no accent, no body travel, and **no cue**, because this is feedback
+     * about aim that a learning player triggers constantly, and a sound on a mistake you are about to
+     * repeat is how a mechanic becomes irritating. `cat-sfx.ts` keeps one cue per visual event; it does
+     * not owe every visual event a cue.
+     *
+     * Its own throttle, not `SWIPE_COOLDOWN_MS`: sharing would mean brushing the cat lengthways locked
+     * you out of a real shove for half a second, punishing the miss twice.
+     */
+    function showGraze(t: number): void {
+      if (t - boss.grazedAt < GRAZE_MS) return;
+      boss.grazedAt = t;
+      bossNode.classList.add('boss-grazed');
+      window.setTimeout(() => bossNode.classList.remove('boss-grazed'), GRAZE_MS);
     }
 
     function bossPhase(phase: Phase, now: number): void {
@@ -2370,6 +2423,13 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       placeBoss(spawn.x, spawn.y);
       boss.facing = 1;
       boss.last = t;
+      // A spawn is a teleport, not travel: the axis starts empty rather than pointing at wherever the
+      // last fight left the cat. Same reason `mood` and `groom` are cleared on close.
+      boss.vx = 0;
+      boss.vy = 0;
+      boss.swipedAt = 0;
+      boss.grazedAt = 0;
+      handHintAt = 0;
       rollStance(arena.seed);
       if (autonomous()) dealSquad(t);
       syncAmmo();
@@ -2377,7 +2437,10 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       // never tells you what your hands are for gets judged as a broken version of the mode it
       // replaced. Overwritten by `arenaCaption` on the first reclaim, which is the right lifetime
       // for an instruction: it is there until you have done the thing once.
-      if (swiping()) caption('swipe across the cat to shove it off course');
+      if (swiping()) {
+        caption(HAND_VERB);
+        handHintAt = t;
+      }
       now = t;
       arena.raf = requestAnimationFrame(tick);
     }
@@ -2495,7 +2558,35 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       stepSquad(t, dt);
       const worked = stepScrub(t);
       quarry = autonomous() ? (nearestKitten() ?? scrub) : scrub;
+      const wasX = boss.x;
+      const wasY = boss.y;
       stepBoss(t, dt, autonomous() ? scrubProgress(t - quarry.since) * (quarry.target ? 1 : 0) : worked);
+      /*
+       * §16's axis: the cat's own velocity, smoothed.
+       *
+       * Measured **around** `stepBoss` rather than inside its stalk branch, from the distance actually
+       * travelled — so the clamp at the board edge is in it, and so is a leap. That is right rather
+       * than merely convenient: a leaping cat is genuinely travelling that way, and swiping across a
+       * leap should read as across it.
+       *
+       * An exponential moving average framed on `dt`, not a fixed per-frame alpha. A per-frame constant
+       * would make the smoothing depend on the frame rate — the cat's axis would settle faster on a
+       * desktop than on a phone — which is the same bug class the `dt` cap above exists to prevent.
+       * `dt` can be exactly 0 when two ticks land in the same millisecond, and this is the first place
+       * in the loop that would divide by it.
+       */
+      if (dt > 0) {
+        const k = 1 - Math.exp(-dt / (HEADING_TAU_MS / 1000));
+        boss.vx += ((boss.x - wasX) / dt - boss.vx) * k;
+        boss.vy += ((boss.y - wasY) / dt - boss.vy) * k;
+      }
+      // §16 has no chip, so the caption is the only thing that names the verb — and `arenaCaption`
+      // overwrites it on the first reclaim, which can happen before anyone has swiped once. Restated
+      // until the player has made contact of either kind, then never again: it teaches, it does not nag.
+      if (swiping() && !boss.swipedAt && !boss.grazedAt && t - handHintAt > HAND_HINT_EVERY_MS) {
+        handHintAt = t;
+        caption(HAND_VERB);
+      }
       holdCaption();
       if (!arena.ending) stepTalk(t);
     }

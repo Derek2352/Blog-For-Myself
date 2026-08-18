@@ -5,11 +5,15 @@ import {
   IMPULSE_SPEED,
   IMPULSE_TRAVEL_PX,
   GRAZE_MS,
+  HAND_HINT_EVERY_MS,
+  HEADING_MIN_SPEED,
+  HEADING_TAU_MS,
   IMPULSE_MS,
   SHOVE_FOOTING,
   SHOVE_MIN,
   SHOVE_MIN_DEG,
   SWIPE_COOLDOWN_MS,
+  SWIPE_TRY_FRACTION,
   contactFor,
   swipeSpeed,
   isSwipe,
@@ -295,6 +299,116 @@ describe('GRAZE_MS', () => {
   it('is long enough to be seen and short enough not to trail the gesture', () => {
     expect(GRAZE_MS).toBeGreaterThanOrEqual(200);
     expect(GRAZE_MS).toBeLessThan(IMPULSE_MS);
+  });
+});
+
+describe('the heading is the cat’s own velocity', () => {
+  /**
+   * The card's smoothing, restated so its shape is pinned by a test rather than by one line in a
+   * 2500-line component: an exponential moving average framed on dt, not a per-frame alpha.
+   *
+   * The remainder step is not a detail. Without it the loop overshoots — at 20fps five 50ms steps cover
+   * 250ms of a 220ms window — and the frame-rate comparison below then measures *the helper's* rounding
+   * rather than the average's behaviour. It failed that way first, at 0.039 against a 0.02 bound, and
+   * the average was innocent.
+   */
+  const settle = (fps: number, ms: number) => {
+    const step = Math.min(0.05, 1 / fps);
+    const tau = HEADING_TAU_MS / 1000;
+    let v = 0;
+    let left = ms / 1000;
+    while (left > 1e-9) {
+      const dt = Math.min(step, left);
+      v += (1 - v) * (1 - Math.exp(-dt / tau));
+      left -= dt;
+    }
+    return v;
+  };
+
+  it('settles at the same rate whatever the frame rate', () => {
+    // The reason the average is framed on `dt`. With a fixed per-frame alpha the cat's axis would
+    // settle faster on a desktop than on a phone — the bug class the card's `dt` cap exists to stop.
+    const slow = settle(20, HEADING_TAU_MS);
+    const fast = settle(120, HEADING_TAU_MS);
+    expect(Math.abs(slow - fast)).toBeLessThan(1e-9);
+    // And both land on the continuous answer, 1 − 1/e, which is what "one time constant" means.
+    for (const fps of [20, 30, 60, 120]) {
+      expect(settle(fps, HEADING_TAU_MS)).toBeCloseTo(1 - 1 / Math.E, 6);
+    }
+  });
+
+  it('is most of the way there after one time constant, and not before', () => {
+    // 1 − 1/e ≈ 0.63. Pins the window to the number `HEADING_TAU_MS` claims to be.
+    expect(settle(60, HEADING_TAU_MS)).toBeGreaterThan(0.55);
+    expect(settle(60, HEADING_TAU_MS)).toBeLessThan(0.72);
+    expect(settle(60, HEADING_TAU_MS / 4)).toBeLessThan(0.35);
+  });
+
+  it('is long enough to outlast the drift that made the dead zone unenterable', () => {
+    // The quarry line rotates 6–11° during a ~104ms flick. A window shorter than the gesture would
+    // inherit that swing instead of damping it, which is the whole reason the axis moved to velocity.
+    expect(HEADING_TAU_MS).toBeGreaterThan(104);
+  });
+
+  it('is short enough that the axis is the cat’s current line, not its history', () => {
+    // Past ~400ms the shove would be answering where the cat used to be going.
+    expect(HEADING_TAU_MS).toBeLessThan(400);
+  });
+
+  it('treats a barely-moving cat as having no heading at all', () => {
+    // Below this, a direction derived from the movement is noise — and `veer` already does the right
+    // thing with a zero heading, so the floor hands it that case rather than a random axis.
+    expect(HEADING_MIN_SPEED).toBeLessThan(CARD_STALK_SPEED / 2);
+    expect(HEADING_MIN_SPEED).toBeGreaterThan(0);
+  });
+
+  it('shoves a cat with no heading at full strength, from any direction', () => {
+    // What the floor hands to `veer`, checked at the boundary the card actually passes: a standing cat
+    // has no "across", and every angle must work on it.
+    for (let deg = 0; deg < 360; deg += 15) {
+      const r = (deg * Math.PI) / 180;
+      const v = veer(0, 0, Math.cos(r), Math.sin(r));
+      expect(Math.hypot(v.x, v.y)).toBeCloseTo(IMPULSE_SPEED, 6);
+      expect(contactFor(v.x, v.y)).toBe('shove');
+    }
+  });
+});
+
+describe('SWIPE_TRY_FRACTION — the speed floor stops being silent', () => {
+  const band = (speed: number) => isSwipe(speed) || speed >= SWIPE_MIN_SPEED * SWIPE_TRY_FRACTION;
+
+  it('answers a crossing swipe that was merely too slow', () => {
+    // The fault this closes: "you missed the cat" and "you crossed it too slowly" were the same
+    // picture, which is the identical two-failures-one-face problem the graze fixed for angle.
+    expect(band(SWIPE_MIN_SPEED * 0.9)).toBe(true);
+    expect(band(SWIPE_MIN_SPEED * SWIPE_TRY_FRACTION)).toBe(true);
+  });
+
+  it('stays silent below the band, because answering a drift is noise', () => {
+    expect(band(SWIPE_MIN_SPEED * SWIPE_TRY_FRACTION - 0.01)).toBe(false);
+    expect(band(0)).toBe(false);
+  });
+
+  it('keeps the band clear of the cat’s own walk, so following it cannot trigger anything', () => {
+    // A pointer tracking the cat must never produce a tell, which is what `SWIPE_MIN_SPEED` was set
+    // against in the first place — lowering the *response* threshold must not undo that.
+    const catTopSpeed = CARD_STALK_SPEED * 1.4;
+    expect(SWIPE_MIN_SPEED * SWIPE_TRY_FRACTION).toBeGreaterThan(catTopSpeed * 2);
+  });
+
+  it('is a band, not a second floor: everything above SWIPE_MIN_SPEED is still a real swipe', () => {
+    expect(SWIPE_TRY_FRACTION).toBeGreaterThan(0);
+    expect(SWIPE_TRY_FRACTION).toBeLessThan(1);
+  });
+});
+
+describe('HAND_HINT_EVERY_MS', () => {
+  it('waits long enough between restatements to be a hint rather than a nag', () => {
+    expect(HAND_HINT_EVERY_MS).toBeGreaterThan(3000);
+  });
+
+  it('comes back well within a fight, so a caption lost to the score is not lost for good', () => {
+    expect(HAND_HINT_EVERY_MS).toBeLessThan(15_000);
   });
 });
 

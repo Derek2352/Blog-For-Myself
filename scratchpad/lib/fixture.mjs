@@ -129,6 +129,12 @@ export const SHOVE_FOOTING = 0.35;
  *  during a flick (6–11°) is one nobody can enter. */
 export const SHOVE_MIN_DEG = 20;
 export const SHOVE_MIN = IMPULSE_SPEED * Math.sin((SHOVE_MIN_DEG * Math.PI) / 180);
+/** §16's axis is the cat's own velocity, smoothed over this window — the line a player can see. */
+export const HEADING_TAU_MS = 220;
+/** Below this the cat is standing and has no axis; `veer` then shoves at full strength any way. */
+export const HEADING_MIN_SPEED = CARD_STALK_SPEED * 0.2;
+/** A crossing swipe this fraction of the speed floor still earns the graze tell rather than silence. */
+export const SWIPE_TRY_FRACTION = 0.5;
 /** How long the graze tell shows, and its own throttle — deliberately not `SWIPE_COOLDOWN_MS`. */
 export const GRAZE_MS = 300;
 /** Derived there and here alike: ∫₀¹(1−t²)dt = ⅔, so travel is peak × ⅔ × duration. ~25px. */
@@ -936,30 +942,41 @@ const FLICK_IN = ({ segments, gapMs, reach, inset, travel, axis, angleDeg }) =>
     const bx = rb.left - r.left + rb.width / 2;
     const by = rb.top - r.top + rb.height / 2;
 
-    // The cat's heading as the *card* computes it: `quarry - boss`, quarry being `nearestKitten()`.
-    // Reconstructed from `.cat-card-kit` positions, which is the only way in from outside the closure.
-    let q = null;
-    for (const k of document.querySelectorAll('.cat-card-kit')) {
-      const kr = k.getBoundingClientRect();
-      const kx = kr.left - r.left + kr.width / 2;
-      const ky = kr.top - r.top + kr.height / 2;
-      const d = Math.hypot(kx - bx, ky - by);
-      if (!q || d < q.d) q = { x: kx, y: ky, d };
-    }
     /*
-     * No kitten: fall back to the cat's facing.
+     * **The cat's heading, measured the way the card now defines it and the way a player sees it: its
+     * own velocity.**
      *
-     * §3 manual mode never spawns a squad — the cat's quarry there is the *pointer* — so a kitten-only
-     * aim made `swipeCat` unusable in exactly the mode where "a flick must do nothing" most needs
-     * checking, and reported it as a missing fixture rather than as the coverage hole it was. `facing`
-     * is only ±1, which is why `trySwipe` does not use it for the real heading; but for a flick whose
-     * expected effect is *nothing*, any direction near the cat is a fair test.
+     * This used to reconstruct `quarry − boss` from `.cat-card-kit` rects, because that is what
+     * `trySwipe` used. It was a poor instrument for a poor axis — probing put its error at 6–11° even
+     * far from the kitten, and 36° when the cat was on top of one, against a dead zone then 8.6° wide.
+     * Velocity is *directly observable*: two successive animation frames of the sprite's own position,
+     * which is exactly what an eye does. No inference, no kitten, and it works in manual mode where
+     * there is no squad at all.
+     *
+     * Two frames rather than a longer window on purpose: the card smooths over `HEADING_TAU_MS`, so a
+     * short sample of an already-smoothed quantity is close to it, and a long sample here would add its
+     * own lag on top and aim at where the cat was.
      */
-    const fallback = !q;
+    const sample = (cb) => {
+      const a = boss.getBoundingClientRect();
+      const t0 = performance.now();
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const b = boss.getBoundingClientRect();
+          const ms = performance.now() - t0;
+          cb(ms > 0 ? { vx: ((b.left - a.left) / ms) * 1000, vy: ((b.top - a.top) / ms) * 1000 } : { vx: 0, vy: 0 });
+        });
+      });
+    };
+    sample((vel) => {
+    const vLen = Math.hypot(vel.vx, vel.vy);
+    // Standing still has no axis. `facing` is only ±1 — never the real heading, which is why
+    // `trySwipe` refuses it — but for a cat that is not travelling, any line through it is as good as
+    // any other, and this keeps `swipeCat` usable in the modes where a flick must simply do nothing.
+    const fallback = vLen < 1;
     const face = Number(boss.dataset.facing || 1) >= 0 ? 1 : -1;
-    const aLen = q ? Math.hypot(q.x - bx, q.y - by) || 1 : 1;
-    const ax = q ? (q.x - bx) / aLen : face;
-    const ay = q ? (q.y - by) / aLen : 0;
+    const ax = fallback ? face : vel.vx / vLen;
+    const ay = fallback ? 0 : vel.vy / vLen;
     // An explicit offset when given, otherwise across (90°) or along (0°).
     const off = ((typeof angleDeg === 'number' ? angleDeg : axis === 'along' ? 0 : 90) * Math.PI) / 180;
     const cs = Math.cos(off);
@@ -1025,12 +1042,13 @@ const FLICK_IN = ({ segments, gapMs, reach, inset, travel, axis, angleDeg }) =>
         aim: { x: ax, y: ay },
         dir: { x: dx, y: dy },
         at: { x: bx, y: by },
-        quarryPx: q ? q.d : null,
+        headingPxS: vLen,
         fallback,
         len: Math.hypot(to.x - from.x, to.y - from.y),
       });
     };
     setTimeout(step, 24);
+    });
   });
 
 /**
