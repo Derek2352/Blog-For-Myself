@@ -39,6 +39,26 @@ import {
 const browser = await launch();
 const { ok, note, fixture, done } = report();
 
+/**
+ * The two clocks §1's mercy check used to fuse into one 35s budget.
+ *
+ * `REGROW_BUDGET_MS` covers the cat re-claiming the tile under the parked pointer — a cadence
+ * (~15s for a leaper, stretched by the bored tier's grooming beats) whose *phase* relative to the
+ * hold is arbitrary. Generous on purpose, and reported as a fixture, because a regrow that never
+ * comes is the setup failing rather than the cat.
+ *
+ * `ANSWER_CYCLES` is the assertion, and it counts *offers* rather than seconds — see the long note at
+ * the check itself. A hold lasts `SCRUB_MS`, so each regrow buys the cat exactly one chance to
+ * commit, and a grooming beat can consume it; giving it three and stopping at the first commitment
+ * asks the question the check is named for without a stopwatch anywhere near the judgement.
+ */
+const REGROW_BUDGET_MS = 40_000;
+/** How many offers the cat gets. Three, because one hold is one chance and a grooming beat can eat it. */
+const ANSWER_CYCLES = 3;
+/** Only to stop the suite, never to judge the cat — every decision inside is made on an observable. */
+const MERCY_CAP_MS = 90_000;
+const GROOM_MS = 1500;
+
 /** Shared with the fleet; this file has always allowed 8000ms for the open. */
 const press = (page) => sharedPress(page, { timeout: 8000 });
 const release = (page) => sharedRelease(page, { timeout: 8000 });
@@ -534,32 +554,94 @@ const leaper = (page, want = 'ambush') =>
      * covers the tail with room without softening the assertion — the cat still has to
      * commit, or the check fails.
      *
-     * **2.5: 35s does not cover the whole tail either.** This check reds roughly one run in four,
-     * and it was measured at that rate on *both* sides of a `git stash` — four runs of 2.5's hand
-     * prototype (one red) and four of the commit before it (one red), the same failure text each
-     * time. So it is recorded here rather than re-diagnosed the next time it appears: a red on this
-     * one line, with the rest of the file green, is the flake and not a regression. Re-run before
-     * investigating, and if it is to be fixed properly the fix is to wait on the *regrow* the
-     * telegraph depends on rather than on a longer stopwatch — the same lesson `fixture.mjs` records
-     * about `CARD_MERCY_BUDGET_MS`, which is that a better budget was never the answer.
+     * **2.5.3: fixed by waiting on the right thing, which the paragraph above had already named.**
+     *
+     * The check reds roughly one run in four, measured at that rate on *both* sides of a `git stash`
+     * — four runs of 2.5's prototype and four of the commit before it, one red each, identical text.
+     * So it was never a regression, and it was never going to be cured by a longer stopwatch either:
+     * the paragraph above says outright that the wait "measures the regrow's phase, not the boss's
+     * answer", and then measures it anyway with a single 35s budget.
+     *
+     * **Those are two events and they deserve two clocks.** The telegraph cannot arrive until the
+     * regrow has re-claimed the tile under the parked pointer, and *when* that happens is a cadence
+     * this check does not control and is not about. Waiting for the re-claim first makes it what it
+     * always was — **a fixture**, reported as one, on its own generous budget. What is left is the
+     * question the check is named for: with a hold running under its nose, does a bored cat still
+     * commit? That gets a tight budget, because now nothing arbitrary is inside it.
+     *
+     * This is `CARD_MERCY_BUDGET_MS`'s lesson arriving a second time, from the other direction. There,
+     * a correctly derived number was still modelling a wait the check should not have been doing. Here
+     * a deliberately loose number was covering for two waits that should never have shared a clock.
+     * **A budget is the wrong tool for an event you can observe.**
      */
     const still = await nearSpot(page);
     let answered = false;
+    let cycles = 0;
+    let delay = null;
     if (still) {
       await page.mouse.move(still.x, still.y);
-      answered = await page
-        .waitForFunction(
-          () => document.querySelector('[data-boss]')?.dataset.phase === 'telegraph',
-          undefined,
-          { timeout: 35000 },
-        )
-        .then(() => true)
-        .catch(() => false);
+      /*
+       * **Cycles, not a stopwatch** — and the second budget was wrong for the same reason the first
+       * one was.
+       *
+       * Splitting the regrow out fixed the arbitrary *phase*, and then a 12s answer budget failed
+       * anyway: a hold completes in `SCRUB_MS`, so if the cat is mid-grooming when the re-hold starts,
+       * that hold finishes, reclaims the tile, and the next chance does not come round until the next
+       * regrow. Twelve seconds is not one chance for the cat, it is one-and-a-bit chances chosen by a
+       * clock that cannot see how many it got.
+       *
+       * "Still answers a hold" is a claim about the cat over several offers, so the check gives it
+       * several and stops at the first commitment. Each cycle is bounded by observables — a tile going
+       * `claimed` (the regrow), then the boss telegraphing before that hold has run its course — so
+       * nothing here is a guess about how long a bored cat takes. Only the outer cap is a clock, and
+       * it exists to stop the suite rather than to judge the cat.
+       */
+      const started = Date.now();
+      while (cycles < ANSWER_CYCLES && Date.now() - started < MERCY_CAP_MS) {
+        // **Not `=== 'claimed'`.** The pointer is already parked on the tile, so the frame after the
+        // regrow re-claims it a hold starts and the state moves straight on to `scrubbing` — the
+        // `claimed` state can exist for a single frame, and a poll that wants to see it will
+        // sometimes see nothing at all for forty seconds. One run in three reported `0 cycles` that
+        // way, which reads as "the cat never regrew" and was really "the harness blinked".
+        // Leaving `unclaimed` is the event; what it turns into next is the game's business.
+        const regrew = await page
+          .waitForFunction(
+            ([x, y]) => {
+              const st = document.elementFromPoint(x, y)?.closest('.cat-tile')?.dataset.state;
+              return !!st && st !== 'unclaimed';
+            },
+            [still.x, still.y],
+            { timeout: REGROW_BUDGET_MS },
+          )
+          .then(() => true)
+          .catch(() => false);
+        if (!regrew) break;
+        cycles += 1;
+        const at = Date.now();
+        answered = await page
+          .waitForFunction(
+            () => document.querySelector('[data-boss]')?.dataset.phase === 'telegraph',
+            undefined,
+            // One hold's worth of chance, plus a grooming beat the decision can sit behind.
+            { timeout: SCRUB_MS + GROOM_MS + 1200 },
+          )
+          .then(() => true)
+          .catch(() => false);
+        if (answered) {
+          delay = Date.now() - at;
+          break;
+        }
+      }
     }
+    note(
+      `mercy: ${cycles} regrow-and-hold cycle(s) offered, ` +
+        (answered ? `answered after ${delay}ms of the last one` : 'none answered'),
+    );
+    fixture('a claim regrows under the parked pointer', cycles > 0 || null, `${cycles} of ${ANSWER_CYCLES} cycles reached`);
     ok(
       'mercy, not surrender — a real hold still gets answered',
-      answered,
-      answered ? 'the cat committed' : 'no telegraph in 35s of holding a claim',
+      cycles === 0 || answered,
+      answered ? `the cat committed on cycle ${cycles}` : `silent through ${cycles} regrow-and-hold cycles`,
     );
   }
 

@@ -11,7 +11,16 @@
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { makePrompter, slugify, promptDate, yamlQuote, promptCategory, placeholderSVG } from './lib.mjs';
+import {
+  makePrompter,
+  slugify,
+  promptDate,
+  yamlQuote,
+  promptCategory,
+  placeholderSVG,
+  loadCategories,
+  categoryHue,
+} from './lib.mjs';
 import { photoPlan } from './photo-rules.mjs';
 
 const rl = makePrompter();
@@ -81,7 +90,9 @@ await writeFile(new URL('index.md', dir), md);
 await writeFile(new URL('images/.gitkeep', dir), '');
 await writeFile(
   new URL('images/cover.svg', dir),
-  placeholderSVG({ bottom: slug, seed: slug }),
+  // The cover carries its category's hue, so a new entry looks like the section it joins from
+  // the moment it is created rather than only once a photograph lands.
+  placeholderSVG({ seed: slug, hue: categoryHue((await loadCategories()).cats, category) }),
 );
 
 const plan = photoPlan({ category });

@@ -91,21 +91,47 @@ const xmlEscape = (s) =>
 
 export const yamlQuote = (s) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 
-/** Parse category slugs/labels out of src/data/categories.ts. */
+/**
+ * Parse category slugs, labels and **hues** out of src/data/categories.ts.
+ *
+ * Chunked on `slug:` rather than matched with one cross-property regex. The old
+ * pattern reached from a `slug` to the next `label` with `[\s\S]*?`, which is
+ * fine for two adjacent required fields and wrong the moment an *optional* one
+ * joins them: `hue` is absent on some categories, so a lazy match would happily
+ * skip into the next category's hue and hand this one a colour belonging to a
+ * different section. Splitting first means every field is read from inside the
+ * object it belongs to, which is a property of the parse rather than of the
+ * current contents of the file.
+ */
 export async function loadCategories() {
   const src = await readFile(CATEGORIES_PATH, 'utf8');
   const start = src.indexOf('export const categories');
   const end = src.indexOf('];', start);
   const body = src.slice(start, end);
   const cats = [];
-  const re = /slug:\s*["']([^"']+)["'][\s\S]*?label:\s*["']([^"']+)["']/g;
-  let m;
-  while ((m = re.exec(body)) !== null) cats.push({ slug: m[1], label: m[2] });
+  for (const chunk of body.split(/(?=slug:\s*["'])/).slice(1)) {
+    const slug = chunk.match(/slug:\s*["']([^"']+)["']/)?.[1];
+    const label = chunk.match(/label:\s*["']([^"']+)["']/)?.[1];
+    if (!slug || !label) continue;
+    const hue = chunk.match(/^\s*hue:\s*(\d+)/m)?.[1];
+    cats.push({ slug, label, ...(hue === undefined ? {} : { hue: Number(hue) }) });
+  }
   const reservedMatch = src.match(/RESERVED_SLUGS\s*=\s*\[([^\]]*)\]/);
   const reserved = reservedMatch
     ? [...reservedMatch[1].matchAll(/["']([^"']+)["']/g)].map((x) => x[1])
     : [];
   return { cats, reserved, src };
+}
+
+/**
+ * The hue a category washes its pages with, for anything that has to match it.
+ *
+ * `undefined` rather than a default when the category declares none, so
+ * `placeholderSVG` applies `resolveWash()`'s own fallback (a stable slug hash
+ * across the warm band) instead of two files inventing different defaults.
+ */
+export function categoryHue(cats, slug) {
+  return (Array.isArray(cats) ? cats : (cats?.cats ?? [])).find((c) => c.slug === slug)?.hue;
 }
 
 /** Append a new category object to src/data/categories.ts. */
@@ -154,38 +180,78 @@ export async function promptCategory(rl) {
 }
 
 /**
- * A placeholder cover (SVG) so builds pass before real photos land.
+ * A placeholder cover (SVG) for entries whose photographs have not landed yet.
  *
  * Designed to read as a *deliberately empty contact-sheet cell* rather than a
- * missing image: light warm ground, a faint ledger grid, a sand hairline frame
- * with registration rules, and one small wine crosshair. Colours are the live
- * design tokens (see the @theme block in src/styles/global.css), so a page full
- * of these still looks like the site instead of a wall of dark slabs.
+ * missing image: warm ground, a faint ledger grid, a sand hairline frame with
+ * registration rules, and one small wine crosshair. Colours are the live design
+ * tokens (see the @theme block in src/styles/global.css), so a page full of
+ * these still looks like the site instead of a wall of dark slabs.
  *
- * Tint varies with the seed so grids don't look like wallpaper.
+ * **It used to stamp `COVER · PENDING` across the middle, and that was the whole
+ * problem.** The drawing already said "deliberately empty"; the words said
+ * "unfinished site", in 38px monospace with 10px of letter-spacing, on twenty-four
+ * entries at once — the loudest thing on a portfolio meant to be read by
+ * recruiters. Nobody outside the project needs to be told a photograph is
+ * missing, and the person who does need telling has `npm run photos`, which
+ * exists for exactly that and can say it far more precisely. So the plate keeps
+ * its registration marks and loses its announcement.
+ *
+ * **The tint comes from the entry's own category hue**, which is the second
+ * thing that was wrong: the hue existed in `src/data/categories.ts`, washed every
+ * other surface on the site, and this file ignored it in favour of a private list
+ * of six sands picked by its own hash. So a category page showed a set of covers
+ * with no relationship to the section they belonged to — data that exists and
+ * never reaches the eye, the same fault `--boss-scale` and the tile hues were.
+ *
+ * A category's covers are siblings rather than clones: the hue is shared, and the
+ * slug shifts lightness and the grid's phase a little, so three cards side by side
+ * read as one set without looking like a repeated tile.
+ *
+ * `role="presentation"`, not `role="img"`: the plate carries no information a reader
+ * needs, and every `<img>` that points at it already sets `alt=""` for the same
+ * reason — the card's own heading and summary name the entry. An `aria-label` here
+ * would be a second, worse name for something already named.
+ *
+ * **Known limitation, unchanged by this rewrite:** the plate is one fixed light tone,
+ * so on the dark theme it is a bright rectangle. A static SVG loaded through `<img>`
+ * gets no CSS from the page, and this site's dark mode is class-driven rather than
+ * `prefers-color-scheme`, so an in-SVG media query would desync the moment somebody
+ * used the toggle against their OS setting — brighter *and* wrong. Real photographs
+ * will have the same property, which is the argument for leaving it alone.
+ *
+ * @param hue   the category's hue in degrees. Omitted, it falls back to a stable
+ *              slug hash across the warm band — the same rule `resolveWash()`
+ *              applies in `src/lib/wash.ts`, restated here because a build script
+ *              cannot import the TypeScript module.
  */
-export function placeholderSVG({ top = 'COVER · PENDING', bottom = '', seed = '', width = 1600, height = 1000 }) {
-  // Warm sands, deliberately a step deeper than --color-ground (#f9f4ea): the
-  // panel has to read as a distinct object resting on the page, not dissolve
-  // into it. A static SVG can't follow the class-driven dark theme, so this one
-  // tone is chosen to separate on ivory while staying calm on the dark ground.
-  const tints = ['#ece2d0', '#f0e6dc', '#e6dcc6', '#eee0da', '#e4e0cf', '#f0e4cd'];
+export function placeholderSVG({ seed = '', hue, width = 1600, height = 1000 }) {
+  // Mirrors HUE_WHEEL in src/lib/wash.ts. A literal copy on purpose: drift shows
+  // up as a cover that does not match its section, which is visible, rather than
+  // as a silent import failure in a script that has to run without a build step.
+  const HUE_WHEEL = [32, 20, 12, 44, 26, 350, 38];
   let hash = 0;
   for (const ch of seed) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-  const bg = tints[hash % tints.length];
-  const ink = '#2a241e'; // --color-ink, espresso
-  const muted = '#6e6257'; // --color-muted, warm taupe
-  const lineCol = '#cbbfa8'; // sand hairline, deep enough to draw the frame on the tint
+  const h = typeof hue === 'number' ? hue : HUE_WHEEL[(hash >>> 3) % HUE_WHEEL.length];
+
+  // Sand, not colour: these plates sit behind nothing and must not compete with
+  // the photographs that will replace them. Saturation stays low and lightness
+  // high; the slug moves lightness by a couple of points so siblings differ.
+  const lift = ((hash >>> 7) % 5) - 2; // -2..+2
+  const bg = `hsl(${h} 24% ${88 + lift}%)`;
+  const grid = `hsl(${h} 18% 34%)`;
+  // The frame has to stay *visible*. Tinting it with the hue at 72% lightness made the plate read as
+  // an empty box rather than a drawn cell — the registration marks are the whole reason it looks
+  // deliberate, so they keep roughly the contrast the old sand hairline had against its ground.
+  const lineCol = `hsl(${h} 22% 58%)`;
   const accent = '#8e2f45'; // --color-accent, ledger wine
-  const t = xmlEscape(top.toUpperCase());
-  const b = xmlEscape(bottom.toUpperCase());
+  const phase = (hash >>> 11) % 40; // the grid does not start in the same place twice
   const cx = width / 2;
-  const midY = height / 2;
-  const markY = midY - 96;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Placeholder image">
+  const cy = height / 2;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="presentation">
   <defs>
-    <pattern id="ledger" width="40" height="40" patternUnits="userSpaceOnUse">
-      <path d="M40 0H0v40" fill="none" stroke="${ink}" stroke-opacity="0.085" stroke-width="1.5"/>
+    <pattern id="ledger" width="40" height="40" patternUnits="userSpaceOnUse" patternTransform="translate(${phase} ${phase})">
+      <path d="M40 0H0v40" fill="none" stroke="${grid}" stroke-opacity="0.11" stroke-width="1.5"/>
     </pattern>
   </defs>
   <rect width="${width}" height="${height}" fill="${bg}"/>
@@ -193,9 +259,7 @@ export function placeholderSVG({ top = 'COVER · PENDING', bottom = '', seed = '
   <rect x="28" y="28" width="${width - 56}" height="${height - 56}" fill="none" stroke="${lineCol}" stroke-width="2" rx="18"/>
   <line x1="28" y1="88" x2="${width - 28}" y2="88" stroke="${lineCol}" stroke-width="2" stroke-dasharray="2 26"/>
   <line x1="28" y1="${height - 88}" x2="${width - 28}" y2="${height - 88}" stroke="${lineCol}" stroke-width="2" stroke-dasharray="2 26"/>
-  <path d="M${cx - 13} ${markY}h26M${cx} ${markY - 13}v26" stroke="${accent}" stroke-opacity="0.85" stroke-width="3"/>
-  <text x="${cx}" y="${midY - 14}" text-anchor="middle" font-family="'IBM Plex Mono','Courier New',monospace" font-size="38" letter-spacing="10" fill="${ink}" fill-opacity="0.82">${t}</text>
-  ${b ? `<text x="${cx}" y="${midY + 48}" text-anchor="middle" font-family="'IBM Plex Mono','Courier New',monospace" font-size="22" letter-spacing="6" fill="${muted}">${b}</text>` : ''}
+  <path d="M${cx - 13} ${cy}h26M${cx} ${cy - 13}v26" stroke="${accent}" stroke-opacity="0.7" stroke-width="3"/>
 </svg>
 `;
 }

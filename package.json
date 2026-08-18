@@ -3,7 +3,7 @@
   "type": "module",
   "version": "0.1.0",
   "private": true,
-  "description": "Derek Yung — portfolio & reflections blog. Content-driven: add files, not code.",
+  "description": "Derek Yung \u2014 portfolio & reflections blog. Content-driven: add files, not code.",
   "scripts": {
     "dev": "astro dev",
     "build": "astro check && astro build && pagefind --site dist",
@@ -14,7 +14,8 @@
     "photos": "node scripts/photo-plan.mjs",
     "inbox": "node scripts/inbox.mjs",
     "studio": "node scripts/studio.mjs",
-    "test": "vitest run"
+    "test": "vitest run",
+    "covers": "node scripts/redraw-covers.mjs"
   },
   "dependencies": {
     "@astrojs/mdx": "^4.3.0",

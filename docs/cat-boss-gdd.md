@@ -2650,6 +2650,25 @@ never reaches the eye.** The fleet cannot catch it by construction, because a ch
 DOM *was* correct. What catches it is rendering the thing and looking — which is why 2.3, 2.4 and 2.5
 each began with a screenshot rather than a harness, and why `scratchpad/hand-look.mjs` exists at all.
 
+**2.5.3 closed the fleet's last standing flake, and the lesson is the same one twice.** `arena7` §1's
+mercy check — *does a bored cat still answer a real hold?* — went red about one run in four, measured
+at that rate on both sides of a `git stash`, so it was known not to be a regression and was left with a
+note. Its own note named the fix: **wait on the regrow the telegraph depends on, not on a longer
+stopwatch.** Three things were wrong under one 35s budget. The telegraph cannot arrive until a regrow
+re-claims the tile under the parked pointer, and that cadence's *phase* is arbitrary — so a fixture and
+an assertion were sharing a clock. Splitting them was not enough: a hold lasts `SCRUB_MS`, so each
+regrow buys the cat exactly **one** chance to commit and a grooming beat can eat it, which made a
+12s answer budget "one-and-a-bit chances chosen by a clock that cannot see how many it got". The check
+counts *offers* now — three regrow-and-hold cycles, stopping at the first commitment — and every
+decision inside it is made on an observable. And the detector itself was racing: it waited for the tile
+to read `claimed`, but the pointer is already parked there, so a hold starts on the very next frame and
+`claimed` can exist for one. Watching it *leave* `unclaimed` fixed a failure that read as "the cat never
+regrew" and was really "the harness blinked". Five consecutive green afterwards, each answering on cycle
+two after ~950ms — a number the old pass/fail could never have reported. **A budget is the wrong tool
+for an event you can observe**, which is `CARD_MERCY_BUDGET_MS`'s lesson arriving from the other
+direction: there a correctly derived number modelled a wait that should not have existed, here a
+deliberately loose one covered for two waits that should never have shared a clock.
+
 **The corollary 2.5 added, and it is the sharper half:** output with no state behind it is worse than no
 output. `trySwipe`'s guard was an equality test on a floating-point rejection, so a flick along the cat's
 path flashed the recoil and played the cue for a shove of 1e-14px/s. **An acknowledgement of something

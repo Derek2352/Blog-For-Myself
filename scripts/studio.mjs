@@ -23,7 +23,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
-import { slugify, placeholderSVG, loadCategories, appendCategory } from './lib.mjs';
+import { slugify, placeholderSVG, loadCategories, appendCategory, categoryHue } from './lib.mjs';
 import {
   SECTIONS,
   ENTRY_KEYS,
@@ -161,7 +161,10 @@ async function saveItem(payload) {
     if (!data.cover || data.cover === './images/cover.svg') {
       data.cover = './images/cover.svg';
       if (!existsSync(path.join(imagesDir, 'cover.svg'))) {
-        await writeFile(path.join(imagesDir, 'cover.svg'), placeholderSVG({ bottom: slug, seed: slug }));
+        await writeFile(
+          path.join(imagesDir, 'cover.svg'),
+          placeholderSVG({ seed: slug, hue: categoryHue((await loadCategories()).cats, data.category) }),
+        );
       }
     }
     await writeItemFile(path.join(dir, 'index.md'), true, data, buildEntryBody(payload.sections));
