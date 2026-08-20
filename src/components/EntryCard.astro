@@ -12,6 +12,7 @@ import { entryCode, entryHref } from '@/lib/content';
 import { categoryBySlug } from '@/data/categories';
 import { humanRange } from '@/lib/format';
 import { orientation } from '@/lib/images';
+import { isGeneratedPlate } from '@/lib/cover-plate';
 
 interface Props {
   entry: Entry;
@@ -29,6 +30,8 @@ const category = categoryBySlug(entry.data.category);
 const range = humanRange(entry.data.date, entry.data.endDate);
 // wide covers fill the card frame; tall/square ones sit matted on the surface
 const coverFit = orientation(entry.data.cover) === 'wide' ? 'object-cover' : 'object-contain';
+// A cover still wearing the drawn plate; the dark theme sinks it into the ground (global.css).
+const plate = isGeneratedPlate(entry.id);
 ---
 
 {
@@ -38,6 +41,7 @@ const coverFit = orientation(entry.data.cover) === 'wide' ? 'object-cover' : 'ob
         <div
           class="card-cover h-16 w-24 shrink-0 overflow-hidden rounded-(--radius-chip) border border-line"
           transition:name={`cover-${entry.id}`}
+          data-plate={plate ? '' : undefined}
         >
           <Image
             src={entry.data.cover}
@@ -69,7 +73,11 @@ const coverFit = orientation(entry.data.cover) === 'wide' ? 'object-cover' : 'ob
     // on a phone.
     <article class="card lift group min-w-0">
       <a href={href} class="block">
-        <div class="frame card-cover overflow-hidden" transition:name={`cover-${entry.id}`}>
+        <div
+          class="frame card-cover overflow-hidden"
+          transition:name={`cover-${entry.id}`}
+          data-plate={plate ? '' : undefined}
+        >
           <Image
             src={entry.data.cover}
             alt=""

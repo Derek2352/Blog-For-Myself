@@ -216,12 +216,19 @@ export async function promptCategory(rl) {
  * reason — the card's own heading and summary name the entry. An `aria-label` here
  * would be a second, worse name for something already named.
  *
- * **Known limitation, unchanged by this rewrite:** the plate is one fixed light tone,
- * so on the dark theme it is a bright rectangle. A static SVG loaded through `<img>`
- * gets no CSS from the page, and this site's dark mode is class-driven rather than
- * `prefers-color-scheme`, so an in-SVG media query would desync the moment somebody
- * used the toggle against their OS setting — brighter *and* wrong. Real photographs
- * will have the same property, which is the argument for leaving it alone.
+ * **The plate stays one fixed light tone, and the dark theme is handled outside it.**
+ * A static SVG loaded through `<img>` gets no CSS from the page, and this site's dark
+ * mode is class-driven rather than `prefers-color-scheme`, so an in-SVG media query
+ * would desync the moment somebody used the toggle against their OS setting — a
+ * bright rectangle *and* a wrong one. What ships instead is a filter on the page side:
+ * `html.dark [data-plate] img` in `global.css` reverses the lightness and returns the
+ * hue, which lands the sand on the dark surface token. The one thing the drawing owes
+ * that filter is a way to be recognised, and `PLATE_MARK` in `scripts/cover-plate.mjs`
+ * is it — the `<pattern id="ledger">` below. **A redesign here may change every colour
+ * and every rule, but dropping that pattern un-recognises twenty-four covers**, so
+ * `tests/images.test.ts` fails on it rather than letting the dark theme quietly stop
+ * reaching them. Real photographs are never filtered: they carry no mark, so the
+ * detector says no and the rule never matches.
  *
  * @param hue   the category's hue in degrees. Omitted, it falls back to a stable
  *              slug hash across the warm band — the same rule `resolveWash()`

@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { isPlaceholderCover, orientation } from '@/lib/images';
+// @ts-expect-error — plain .mjs authoring helper
+import { placeholderSVG } from '../scripts/lib.mjs';
+import { isPlateSVG, PLATE_MARK } from '../scripts/cover-plate.mjs';
 
 describe('orientation', () => {
   it('classifies wide / tall / square', () => {
@@ -35,5 +38,37 @@ describe('isPlaceholderCover', () => {
   it('ignores a query string on the built URL', () => {
     expect(isPlaceholderCover({ src: '/_image?href=cover.svg&w=800' })).toBe(false);
     expect(isPlaceholderCover({ src: '/images/cover.svg?v=2' })).toBe(true);
+  });
+});
+
+/**
+ * The generator and the detector, held to each other.
+ *
+ * `redraw-covers.mjs` shipped once with a detector that tested for the caption the same commit was
+ * deleting: it reported "redrew 0, left alone 24" and read as a success. Nothing caught that but a
+ * human re-reading the output. Now the plate the generator draws *today* has to be one the detector
+ * recognises, and a redesign that drops the mark fails here instead of quietly un-recognising
+ * twenty-four covers — which since the dark theme also means twenty-four lightboxes coming back.
+ */
+describe('the plate the generator draws', () => {
+  it('carries the mark the detector looks for', () => {
+    const svg = placeholderSVG({ seed: 'some-entry', hue: 32 });
+    expect(svg).toContain(PLATE_MARK);
+    expect(isPlateSVG(svg)).toBe(true);
+  });
+
+  it('carries it whatever the hue and seed do to the drawing', () => {
+    // Hue and seed move every colour, the grid's phase and the lightness — none of which may take
+    // the mark with them. An omitted hue is the `resolveWash()` fallback path, a different branch.
+    for (const seed of ['a', 'wuyishan-seven-day-exchange', '']) {
+      for (const hue of [0, 350, undefined]) {
+        expect(isPlateSVG(placeholderSVG({ seed, hue }))).toBe(true);
+      }
+    }
+  });
+
+  it('does not answer for something that is not a plate', () => {
+    expect(isPlateSVG('<svg xmlns="http://www.w3.org/2000/svg"><rect width="9" height="9"/></svg>')).toBe(false);
+    expect(isPlateSVG('')).toBe(false);
   });
 });

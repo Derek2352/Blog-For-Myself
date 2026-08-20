@@ -16,6 +16,7 @@ import { join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { placeholderSVG, loadCategories, categoryHue } from './lib.mjs';
+import { isPlateSVG } from './cover-plate.mjs';
 
 const ROOT = fileURLToPath(new URL('../src/content/entries/', import.meta.url));
 const { cats } = await loadCategories();
@@ -28,14 +29,11 @@ for (const slug of dirs) {
   if (!existsSync(cover)) { skipped++; continue; }
   const existing = await readFile(cover, 'utf8');
   /*
-   * The fingerprint has to match what the generator produces *now and before*, not just before.
-   * The first version tested for `COVER · PENDING`, which the new plate does not contain — so the
-   * second run reported "redrew 0, left alone 24" and looked like a no-op success. A detector that
-   * only recognises the output it is replacing can run exactly once.
-   *
-   * `<pattern id="ledger">` is in every generation of this plate and in nothing a camera produces.
+   * The fingerprint moved to `cover-plate.mjs` when the site needed the same answer for its dark
+   * theme. It used to be a regex literal here, and the reason it is not one any more is the reason
+   * the comment beside it gives: a second copy of the string is a second answer to one question.
    */
-  if (!/pattern id="ledger"/.test(existing)) {
+  if (!isPlateSVG(existing)) {
     console.log(`  keep  ${slug} (not a generated placeholder)`);
     skipped++;
     continue;

@@ -556,6 +556,26 @@
   .jump-rail a:hover,
   .jump-rail a.here { color: var(--color-accent); border-color: var(--color-accent); }
 
+  /* ---- the drawn cover plate, on the dark theme ----
+     A plate is a static SVG behind <img>, so no rule in here reaches its ground, its grid or its
+     crosshair — and it is drawn in one fixed light sand. Twenty-four of them on a category page in
+     a candlelit room is twenty-four lightboxes. The plate was left that way once already, recorded
+     as a known limitation with the argument that photographs will have the same property. They
+     will. The difference is that a photograph is *content* and its brightness is the author's; the
+     plate is furniture this site drew, and furniture is allowed to match the room.
+
+     `invert(1) hue-rotate(180deg)` — the pair, not either alone. Inverting reverses lightness and
+     takes the hue with it, so a warm sand becomes a cold slate; the rotation puts the hue back and
+     leaves only the lightness reversed. On the plate's own colours that lands almost exactly where
+     the tokens already are: the hsl(h 24% 88%) ground arrives at rgb(37 29 22) against a surface of
+     #272119, and the wine crosshair (#8e2f45) arrives at rgb(255 164 186) against a dark accent of
+     #efa397 — the same rose, a shade cooler. It reads as the plate redrawn for the dark theme
+     because the dark tokens are themselves close to the light ones inverted.
+
+     Scoped to `[data-plate]`, which src/lib/cover-plate.ts sets only for covers carrying the
+     generator's own mark: a filter this strong across somebody's photograph is a negative. */
+  html.dark [data-plate] img { filter: invert(1) hue-rotate(180deg); }
+
   /* ---- image blur-up: LQIP background, sharp image fades in ---- */
   .blurup { background-size: cover; background-position: center; }
   .blurup img { opacity: 0; transition: opacity 0.35s ease; }

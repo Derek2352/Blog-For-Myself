@@ -25,6 +25,13 @@ export function orientation(img: { width: number; height: number }): Orientation
  * Astro copies SVGs through the build without transforming them, so the
  * extension survives hashing; `format` is checked first for the cases where a
  * loader supplies it.
+ *
+ * **This is a different question from `isGeneratedPlate()` in ./cover-plate.ts**, and the two are
+ * deliberately allowed to disagree. This one asks *does this entry still want a photograph?* — so a
+ * diagram or a hand-drawn cover answers yes, because it is not the photograph the layout is sized
+ * for. That one asks *is this the plate our own generator drew?*, which the dark theme needs before
+ * it inverts anything, and a hand-drawn cover answers no. Today every cover is a plate and both
+ * answers match; the first real drawing to land is when the distinction starts doing work.
  */
 export function isPlaceholderCover(img: { src: string; format?: string }): boolean {
   return img.format === 'svg' || img.src.split('?')[0].endsWith('.svg');
