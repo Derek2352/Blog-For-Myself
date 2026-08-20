@@ -45,12 +45,12 @@
  * - **Every wait is on an observable, never on a stopwatch.** There is a ~1.9s ink curtain between
  *   the toggle and the fight (§13), and `aria-pressed` follows the visitor's *intent* rather than the
  *   arena's state, so "the button says off" and "the page is restored" are different moments.
- * - **Mode is declared before a fight is opened.** Commander mode is 2.0's default; a manual-mode
+ * - **Mode is declared before a fight is opened.** The hand (§16) is 2.6's default; a manual-mode
  *   harness that does not say so is asking a spectator to hold a pointer still.
  * - **Snapshots keep their own exclusion list.** `snapshotOf()` takes one rather than defaulting,
  *   because the list is the load-bearing part of pillar 2's check and the correct list differs per
  *   harness: `#cat-ribbon` legitimately keeps a line after a truce (§8.4), and `#cat-squad` only
- *   exists in commander mode.
+ *   exists where the kittens play — everything except manual.
  */
 import { chromium } from 'playwright-core';
 import { existsSync } from 'node:fs';
@@ -241,11 +241,12 @@ export async function launch(opts = {}) {
 }
 
 /**
- * 2.0: **say which game before opening one.** Commander mode is the default, so a harness measuring
- * §3's manual fight has to press the mode chip first or the pointer is not the verb and half its
- * checks are asking a spectator to hold still. Pressed the way a visitor presses it, and waited on
- * `aria-pressed` rather than on a timeout. 2.2: the chip lives in the card header now
- * (`#cat-card-mode`), not the page HUD.
+ * 2.0: **say which game before opening one.** Manual mode has never been the default — commander
+ * held that slot until 2.6, the hand holds it now — so a harness measuring §3's manual fight has to
+ * press the mode chip first, or the pointer is not the verb and half its checks are asking a
+ * spectator to hold still. Pressed the way a visitor presses it, and waited on `aria-pressed`
+ * rather than on a timeout. 2.2: the chip lives in the card header now (`#cat-card-mode`), not the
+ * page HUD.
  */
 const PICK_MANUAL = () => {
   const pick = () => {
@@ -264,26 +265,15 @@ const PICK_MANUAL = () => {
   });
 };
 
-/**
- * 2.5: **the hand is chosen before the page runs, not clicked afterwards.**
+/*
+ * `PICK_HAND` stood here — an init script that set `localStorage.cat-mode = 'hand'` before the page
+ * ran, because §16 was a prototype behind a flag and there was no chip to press.
  *
- * There is no chip for `hand` mode and deliberately so — §16 is a prototype behind a flag, because
- * three modes on a portfolio is too much game. `CatCard` reads `?cat=hand` first and
- * `localStorage.cat-mode` second, and this uses the storage key rather than the query string for one
- * reason: a harness that navigates (`armAmmo` hops five pages to seed treats) would drop a query
- * param on the first hop and quietly measure commander mode while its name said otherwise. The key
- * survives every navigation in the context.
- *
- * Set at init rather than after load, since `mode` is read once when the card's script runs.
+ * Gone in 2.6: the hand *is* the default game, so reaching it takes nothing at all. The note stays
+ * because its reasoning still applies to whatever comes next — it used the storage key rather than
+ * `?cat=hand` on purpose, since `armAmmo` hops five pages to seed treats and a query parameter would
+ * be dropped on the first hop, quietly measuring the wrong mode while its name said otherwise.
  */
-const PICK_HAND = () => {
-  try {
-    localStorage.setItem('cat-mode', 'hand');
-  } catch {
-    /* DENY_STORAGE is a legitimate combination: the card then stays on commander, which is the
-     * documented fallback, and a harness asserting the hand will fail loudly rather than silently. */
-  }
-};
 
 /** A browser that refuses storage — private mode, a hardened profile, a policy. */
 const DENY_STORAGE = () => {
@@ -340,13 +330,13 @@ const NO_AUDIO = () => {
 /**
  * A context with the welcome dismissed and the mode declared.
  *
- * @param mode     'manual' presses §13.8's chip before any fight; 'hand' sets §16's flag, which has
- *                 no chip to press; 'commander' (default) leaves 2.0's default alone. Passing
- *                 nothing means commander, because that is what a visitor gets.
+ * @param mode     'manual' presses §13.8's chip before any fight; 'hand' (default) leaves the game
+ *                 alone. Passing nothing means the hand, because that is what a visitor gets — the
+ *                 rule has not changed even though 2.6 changed which mode it names.
  * @param storage  false installs a `localStorage` that throws, for §13.4's boundary.
  * @param phone    the 390×844 touch profile `touch-fight` measures on.
  */
-export async function fresh(browser, { mode = 'commander', storage = true, phone = false, welcomed = true, ...ctxOpts } = {}) {
+export async function fresh(browser, { mode = 'hand', storage = true, phone = false, welcomed = true, ...ctxOpts } = {}) {
   const ctx = await browser.newContext({
     viewport: phone ? { width: 390, height: 844 } : { width: 1280, height: 900 },
     ...(phone ? { hasTouch: true, isMobile: true, deviceScaleFactor: 2 } : {}),
@@ -355,7 +345,6 @@ export async function fresh(browser, { mode = 'commander', storage = true, phone
   if (welcomed) await ctx.addInitScript(() => localStorage.setItem('welcomed', '1'));
   await ctx.addInitScript(NO_AUDIO);
   if (mode === 'manual') await ctx.addInitScript(PICK_MANUAL);
-  if (mode === 'hand') await ctx.addInitScript(PICK_HAND);
   if (!storage) await ctx.addInitScript(DENY_STORAGE);
   return ctx;
 }
@@ -610,35 +599,19 @@ export const wants = {
         [at.x ?? 0, at.y ?? 0, tol],
       ),
 
-  /**
-   * A claim a commander can actually give an order about: on the board, hit-testable, and **not
-   * underneath a kitten** (an order aimed at a claim a kitten is already standing on reads as a
-   * no-op to the squad, so the check would be measuring the fixture rather than the mechanic).
+  /*
+   * `orderable` stood here — a claim a commander could give an order about: on the board,
+   * hit-testable, and not underneath a kitten. **Retired in 2.6 along with orders themselves**
+   * (§16 replaced click-to-order with the swipe), and deleted rather than kept "in case".
+   *
+   * Worth a note rather than a silent deletion, because the fixture encoded a finding that outlived
+   * the mechanic: *the thing a check aims at has to be a thing the game can answer.* An order at a
+   * claim a kitten was already standing on read as a no-op, so the check measured the deal instead
+   * of the build — which is the same fault the swipe harnesses hit from the other direction, where a
+   * flick aimed along a mis-modelled heading landed in a dead zone and reported the game broken.
+   * Both are the fixture answering for the build. `swipeCat`'s two-frame velocity sample is that
+   * lesson applied; nothing here needs the old helper to keep it.
    */
-  orderable:
-    ({ awayFrom = '.cat-card-kit' } = {}) =>
-    (page) =>
-      page.evaluate(
-        ([away]) => {
-          const centre = (el) => {
-            const r = el.getBoundingClientRect();
-            return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-          };
-          const others = [...document.querySelectorAll(away)].map(centre);
-          let best = null;
-          for (const el of document.querySelectorAll('.cat-tile[data-state="claimed"]')) {
-            const r = el.getBoundingClientRect();
-            const x = Math.round(r.left + r.width / 2);
-            const y = Math.round(r.top + r.height / 2);
-            const at = document.elementFromPoint(x, y);
-            if (at?.closest('.cat-tile') !== el) continue;
-            const gap = others.length ? Math.min(...others.map((o) => Math.hypot(o.x - x, o.y - y))) : Infinity;
-            if (!best || gap > best.away) best = { x, y, away: Math.round(gap === Infinity ? 0 : gap) };
-          }
-          return best;
-        },
-        [awayFrom],
-      ),
 
   /** A link inside the page (still a thing worth asserting in 2.2 — the card must not eat it). */
   linkInBand:

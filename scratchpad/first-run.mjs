@@ -8,8 +8,12 @@
  * can stop any time." at 8 seconds, and the fight truced at 20.
  *
  * This harness is that visit, automated, on the **card game** (§2.2 — the page-board game is
- * gone; the board is a grid of tiles in the floating card), with two assertions:
+ * gone; the board is a grid of tiles in the floating card), with three assertions:
  *
+ *   0. **The opening is not silent in the default mode either** (2.6). The default mode
+ *      acquired a verb when §16 was promoted, so it acquired a way to leave a visitor
+ *      stranded — and until 2.6 nothing here looked at it, because commander mode had
+ *      nothing to teach.
  *   1. **The opening is not silent.** A cold visitor opens the card and does nothing;
  *      the cat must tell them what to do inside OPENING_GRACE_MS (2.5s), where §5.3
  *      guarantees the cat cannot pounce — the teach line's safe context.
@@ -40,23 +44,9 @@ const check = (name, ok, detail = '') => {
 };
 
 const browser = await launch();
-/*
- * **A cold visitor, in manual mode.** `welcomed: false` is the whole subject of this file —
- * nothing stored, no treats found, the welcome never dismissed. Manual mode is the mode that
- * has a verb to teach: commander mode's promise is that watching is playing, so its gate is
- * commander.mjs's. The mode declaration is `fresh`'s job (it clicks the mode chip the way a
- * visitor presses it).
- */
-const ctx = await fresh(browser, { mode: 'manual', welcomed: false, viewport: { width: 1280, height: 720 } });
-const page = await ctx.newPage();
-
-await page.goto(BASE, { waitUntil: 'networkidle' });
-
-// The card's collapsed icon is the way in.
-await page.waitForSelector('#cat-card-toggle', { timeout: 10_000 });
 
 /** Open the card; returns the timestamp when the board actually appeared. */
-async function openFight() {
+async function openFight(page) {
   await page.click('#cat-card-toggle');
   await page.waitForFunction(
     () => !document.querySelector('#cat-card-panel').hidden,
@@ -73,7 +63,7 @@ async function openFight() {
 }
 
 /** What the ribbon currently says ('' when hidden/empty). */
-const ribbonText = () =>
+const ribbonText = (page) =>
   page
     .evaluate(() => {
       const r = document.querySelector('[data-ribbon]');
@@ -81,25 +71,87 @@ const ribbonText = () =>
     })
     .catch(() => '');
 
+/**
+ * The opening, measured: open the card, do nothing, and report the first thing the cat says.
+ *
+ * Both modes get the same treatment because the question is the same one in both — *does a person
+ * who has never played this find out what to press before anything happens to them?* — and the
+ * answer differs only in which verb the cat names.
+ */
+async function openingLine(mode) {
+  const ctx = await fresh(browser, { mode, welcomed: false, viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  await page.goto(BASE, { waitUntil: 'networkidle' });
+  await page.waitForSelector('#cat-card-toggle', { timeout: 10_000 });
+  const t0 = await openFight(page);
+  const deadline = t0 + OPENING_GRACE_MS;
+  let saw = '';
+  while (Date.now() < deadline && !saw) {
+    saw = await ribbonText(page);
+    if (!saw) await page.waitForTimeout(100);
+  }
+  return { ctx, page, t0, text: await ribbonText(page), at: Date.now() - t0 };
+}
+
+// ---------------------------------------------------------------- check 0
+/*
+ * **The default mode's cold opening**, which had no browser gate until 2.6 gave the default mode a
+ * verb to teach.
+ *
+ * Before 2.6 the default was commander mode, whose whole promise was that watching *is* playing —
+ * there was nothing for a first-time visitor to press, so this file only ever measured manual mode
+ * and said so. §16's promotion changed that: the swipe is now the one thing a visitor can do, and
+ * `teach-swipe` is the only place the game ever names it. `tests/arena.test.ts` proves `pickLine`
+ * returns that id for the opening state. What a unit test cannot prove is that the *string reaches
+ * the ribbon* on a real page, inside the grace, before the cat is allowed to pounce — which is the
+ * gap 1.2 shipped in the first place and the reason this harness exists.
+ */
+const first = await openingLine('hand');
+check(
+  'default: the cat teaches the verb inside the opening grace',
+  first.text.length > 0 && first.at <= OPENING_GRACE_MS,
+  `saw "${first.text}" at ${first.at}ms`,
+);
+check(
+  'default: the verb it teaches is the swipe',
+  /swipe/i.test(first.text),
+  `"${first.text}"`,
+);
+await first.ctx.close();
+
 // ---------------------------------------------------------------- check 1
+/*
+ * **A cold visitor, in manual mode.** `welcomed: false` is the whole subject of this file —
+ * nothing stored, no treats found, the welcome never dismissed. The mode declaration is `fresh`'s
+ * job (it clicks the mode chip the way a visitor presses it), and check 2 below plays this context
+ * to a win, so manual keeps the long-lived page.
+ */
+const ctx = await fresh(browser, { mode: 'manual', welcomed: false, viewport: { width: 1280, height: 720 } });
+const page = await ctx.newPage();
+
+await page.goto(BASE, { waitUntil: 'networkidle' });
+
+// The card's collapsed icon is the way in.
+await page.waitForSelector('#cat-card-toggle', { timeout: 10_000 });
+
 // Open the card and do nothing. The teach line must appear inside the opening grace.
-const t0 = await openFight();
+const t0 = await openFight(page);
 const deadline = t0 + OPENING_GRACE_MS;
 let saw = '';
 while (Date.now() < deadline && !saw) {
-  saw = await ribbonText();
+  saw = await ribbonText(page);
   if (!saw) await page.waitForTimeout(100);
 }
-const graceText = await ribbonText();
+const graceText = await ribbonText(page);
 check(
-  'the cat teaches the verb inside the opening grace',
+  'manual: the cat teaches the verb inside the opening grace',
   graceText.length > 0 && Date.now() - t0 <= OPENING_GRACE_MS,
   `saw "${graceText}" at ${Date.now() - t0}ms`,
 );
 
 // It must be the teach line, not mercy ("you can stop any time").
 check(
-  'the first words are the teach line, not support-idle',
+  'manual: the first words are the teach line, not support-idle',
   /hold still/i.test(graceText),
   `"${graceText}"`,
 );
@@ -153,7 +205,7 @@ for (let fight = 0; fight < FIGHTS && !won; fight++) {
     }
     const on = await page.evaluate(() => !document.querySelector('#cat-card-panel').hidden);
     if (!on) {
-      ribbon = await ribbonText();
+      ribbon = await ribbonText(page);
       break;
     }
     const total = await page.evaluate(() => document.querySelectorAll('.cat-tile[data-state="claimed"]').length);

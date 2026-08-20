@@ -1260,23 +1260,26 @@ export interface FightState {
   /** Which ending, if the fight is ending. */
   ending?: 'win' | 'lose' | 'truce' | 'truce-recover';
   /**
-   * Is this commander mode (§15, 2.0)?
+   * Does the **visitor** hold claims themselves (§3's manual mode)?
    *
    * The dialogue has to know, because two lines in this table teach a *verb* and the two modes have
    * different ones. Nothing else in §8 branches on it: the cat's voice is the cat's voice whoever is
    * holding the claims, and a second script for the same animal would be a worse document as well as
    * a worse fight.
-   */
-  commanding?: boolean;
-  /**
-   * Which game is being played, verbatim — `'commander' | 'manual' | 'hand'`.
    *
-   * `commanding` above is kept because §8's dialogue table branches on it and those two lines mean
-   * exactly "does the visitor hold claims themselves". This is the wider fact, added for §16's
-   * prototype so a harness can tell the third mode from the first without inferring it from a
-   * boolean that was only ever asked one question.
+   * It was called `commanding` and meant the inverse, which stopped being true in 2.6 when the swipe
+   * replaced §15's orders — nobody commands anything now, and a flag named for a retired verb is the
+   * kind of stale name this codebase has spent several commits removing. Undefined reads as the
+   * default game, which is the correct answer for a state nobody bothered to specify.
    */
-  mode?: 'commander' | 'manual' | 'hand';
+  manual?: boolean;
+  /**
+   * Which game is being played, verbatim.
+   *
+   * `manual` above is the one bit §8's dialogue asks for; this is the wider fact, so a harness can
+   * name the mode without inferring it from a boolean that was only ever asked one question.
+   */
+  mode?: 'hand' | 'manual';
   /**
    * Which round beat is playing, in commander mode (§15, 2.0).
    *
@@ -1465,25 +1468,28 @@ export const LINES: readonly { id: string; text: string; when: (s: FightState) =
     // safe context, exactly as §7.4 asks.
     id: 'teach-hold',
     text: 'hold still on it. it comes back.',
-    when: (s) => !s.ending && !s.commanding && s.freed === 0 && s.spent === 0 && s.territory > 0.5,
+    when: (s) => !s.ending && !!s.manual && s.freed === 0 && s.spent === 0 && s.territory > 0.5,
   },
   {
     /*
-     * The same row for the other game (§15, 2.0).
+     * The same row for the other game — the default one (§16).
      *
-     * A commander is never told to hold anything, because holding is not one of their verbs — the
-     * kittens do it. Left ungated, 1.3's teach line taught the wrong game to every visitor who met
-     * the default mode, which a browser run showed it doing over and over while a kitten worked
-     * beside the words.
+     * Nobody is told to hold anything here, because holding is not one of their verbs: the kittens do
+     * it. Left ungated, 1.3's teach line taught the wrong game to every visitor who met the default
+     * mode, which a browser run showed it doing over and over while a kitten worked beside the words.
      *
-     * What it teaches instead is the *only* thing worth knowing: pointing is allowed. Not "you must
-     * point" — the mode's whole promise is that the round resolves either way — so the line names
-     * the option and leaves it there. Same gate as above (the cold opening, inside the grace), so a
-     * visitor who has already given an order never sees it.
+     * Until 2.6 this line read *"point at one. they'll fetch it."* and taught §15's orders. The swipe
+     * replaced that verb, so the line had to move with it or spend the opening seconds instructing
+     * people to do something the game no longer answers — a teach line for a retired mechanic being
+     * about the worst thing this table could contain.
+     *
+     * In the cat's own voice, which §1's third pillar says is bluffing rather than malevolent: it is
+     * daring you, not warning you. Same gate as above (the cold opening, inside the grace), so a
+     * visitor who has already shoved it never sees it.
      */
-    id: 'teach-order',
-    text: 'point at one. they’ll fetch it.',
-    when: (s) => !s.ending && !!s.commanding && s.freed === 0 && s.spent === 0 && s.territory > 0.5,
+    id: 'teach-swipe',
+    text: 'swipe across me. i dare you.',
+    when: (s) => !s.ending && !s.manual && s.freed === 0 && s.spent === 0 && s.territory > 0.5,
   },
   {
     // Re-gated in 1.3: "you can stop any time" must read as mercy to someone who has

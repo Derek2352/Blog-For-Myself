@@ -1,5 +1,9 @@
 /**
- * Card game mechanics — treats, orders, and manual mode inside the card (§2.2).
+ * Card game mechanics — treats and manual mode inside the card (§2.2).
+ *
+ * "Orders" was the third item in that list until 2.6 retired them. What replaced the order check is
+ * documented at its call site below, because the interesting part is not that the check changed —
+ * it is that the old one stayed green through the deletion of the mechanic it named.
  *
  * Uses the fleet's shared reporter so a missing fixture prints FIXTURE rather than FAIL:
  * a claimed tile or a board that failed to appear is a setup problem, not the game
@@ -9,7 +13,7 @@
 // Chromium and the base URL come from the shared strategy (§12.1) — see card-check.mjs for
 // why resolving Chrome privately made this harness exit 2 on every Linux run. This file
 // already borrowed `report()`; it should have borrowed `launch()` in the same import.
-import { launch, BASE, fresh, armAmmo, waitOpen, report } from './lib/fixture.mjs';
+import { launch, BASE, fresh, armAmmo, waitOpen, report, bounded, AMMO } from './lib/fixture.mjs';
 const { ok, fixture, done } = report();
 const browser = await launch();
 
@@ -32,18 +36,36 @@ await page.locator('#cat-card-panel').waitFor({ state: 'visible' });
 await waitOpen(page);
 await page.waitForTimeout(400); // the fight's first beat — stances rolled, squad placed
 
-// Commander mode: click on a claimed tile = order a kitten (free — treats are the throw's).
+/*
+ * **A click over a claimed tile is a throw, the same as a click anywhere else** (§16, 2.6).
+ *
+ * What stood here until 2.6 was `treats: commander click orders a kitten (no ammo spent)`, asserting
+ * that after clicking a claimed tile *some* kitten had a `data-seek` — and that check was green on
+ * the day ordering was deleted. It had to be: kittens pick their own work every frame through
+ * `pickWork`, so a squad on a board with claims on it always has somebody seeking something. The
+ * assertion never depended on the click at all. It would have passed with the click commented out,
+ * and it passed for a mechanic that no longer existed — a check whose subject is gone but whose
+ * evidence is supplied by unrelated machinery is worse than no check, because it reports a green.
+ *
+ * The replacement measures the rule that actually shipped: **the tile under the pointer no longer
+ * changes what a click means.** A throw over a claim costs a treat exactly like a throw over bare
+ * board, which is the whole content of "one job instead of two" — and unlike the old check, it
+ * cannot pass without the click, because the ammo count only moves when a treat leaves the HUD.
+ */
 const claimedTile = page.locator('.cat-tile[data-state="claimed"]').first();
 const box = await claimedTile.boundingBox();
 fixture('treats: a claimed tile is on the board', box ? { value: true, deal: 1, deals: 1 } : null);
-if (box) {
+const ammoBefore = await page.evaluate(AMMO);
+fixture('treats: ammo in hand to spend over the claim', ammoBefore > 0 ? { value: true, deal: 1, deals: 1 } : null, `${ammoBefore} in hand`);
+if (box && ammoBefore > 0) {
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-  await page.waitForTimeout(300);
-  const ordered = await page.evaluate(() => {
-    const kits = [...document.querySelectorAll('.cat-card-kit')];
-    return kits.some((k) => k.dataset.seek !== '-1' && k.dataset.seek !== '');
-  });
-  ok('treats: commander click orders a kitten (no ammo spent)', ordered);
+  const flew = await bounded(page, () => !document.querySelector('[data-treat]')?.hasAttribute('hidden'), 1500);
+  ok('treats: a click over a claim throws, like any other click', flew);
+  const ammoAfter = await page.evaluate(AMMO);
+  ok('treats: and it costs a treat — the claim is not a free zone', ammoAfter === ammoBefore - 1, `${ammoBefore} → ${ammoAfter} in hand`);
+  // Wait for the treat to be *gone*, not for a duration long enough that it probably is. The next
+  // block throws again and reads `[data-treat]`, and a leftover from this throw would answer for it.
+  await bounded(page, () => !!document.querySelector('[data-treat]')?.hasAttribute('hidden'), 6000);
 }
 
 // Throw a treat at empty board space (bottom corner of the board).
@@ -77,7 +99,7 @@ await page.waitForTimeout(400); // the reopened fight's first beat
 // page chip, and `55e9b6a` corrected that wording in `card-check` and `card-fight` but not here.
 // The assertion was already card-only and correct; a green check that misdescribes itself is
 // worse than a red one, because nobody goes back and re-reads it.
-ok('manual: mode chip flips commander→manual', cardMode === 'true', cardMode ?? '');
+ok('manual: mode chip flips hand→manual', cardMode === 'true', cardMode ?? '');
 
 const manClaimed = page.locator('.cat-tile[data-state="claimed"]').first();
 const mbox = await manClaimed.boundingBox();

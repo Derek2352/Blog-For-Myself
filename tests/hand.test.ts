@@ -5,7 +5,6 @@ import {
   IMPULSE_SPEED,
   IMPULSE_TRAVEL_PX,
   GRAZE_MS,
-  HAND_HINT_EVERY_MS,
   HEADING_MIN_SPEED,
   HEADING_TAU_MS,
   IMPULSE_MS,
@@ -402,15 +401,12 @@ describe('SWIPE_TRY_FRACTION — the speed floor stops being silent', () => {
   });
 });
 
-describe('HAND_HINT_EVERY_MS', () => {
-  it('waits long enough between restatements to be a hint rather than a nag', () => {
-    expect(HAND_HINT_EVERY_MS).toBeGreaterThan(3000);
-  });
-
-  it('comes back well within a fight, so a caption lost to the score is not lost for good', () => {
-    expect(HAND_HINT_EVERY_MS).toBeLessThan(15_000);
-  });
-});
+/*
+ * `describe('HAND_HINT_EVERY_MS')` stood here — two checks that the caption's restatement waited long
+ * enough not to nag and came back soon enough to be seen. Deleted in 2.6 with the constant, when the
+ * cat took over teaching the verb. `tests/arena.test.ts` covers the replacement: `teach-swipe` fires at
+ * the cold opening and stops once the player has done anything.
+ */
 
 describe('SHOVE_FOOTING — the shove costs the cat its stride', () => {
   it('leaves the cat moving, because a cat stopped dead reads as paused', () => {

@@ -44,7 +44,6 @@ export type SfxCue =
   | 'reclaim'
   | 'swat'
   | 'laststand'
-  | 'order'
   | 'win'
   | 'lose';
 
@@ -184,18 +183,6 @@ export function playCue(cue: SfxCue): void {
     case 'laststand':
       blip(ac, 110, 130, 0.3, 'sawtooth', 0.05);
       blip(ac, 146, 174, 0.4, 'sawtooth', 0.05, 0.16);
-      break;
-    /*
-     * §15's order landing (2.0). One short, high, quiet tick — the sound of being *acknowledged*
-     * rather than the sound of something happening.
-     *
-     * The quietest cue in the set on purpose. Everything else here belongs to the fight; this one
-     * belongs to the interface, and an interface that chirps as loudly as the game does teaches the
-     * visitor that clicking is the point. It is not: the mode works if they never click at all, so
-     * the confirmation should be the smallest thing that still says "heard you".
-     */
-    case 'order':
-      blip(ac, 1180, 1480, 0.06, 'triangle', 0.03);
       break;
     // lose: two descending notes, no drama
     case 'lose':

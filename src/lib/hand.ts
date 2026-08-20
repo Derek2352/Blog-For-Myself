@@ -94,15 +94,12 @@ export const HEADING_MIN_SPEED = CARD_STALK_SPEED * 0.2;
  */
 export const SWIPE_TRY_FRACTION = 0.5;
 
-/**
- * How often the hand's verb is restated while the player has yet to make contact of any kind.
- *
- * §16 has no chip, so one caption at open is the only thing that names the gesture — and
- * `arenaCaption` overwrites it on the first reclaim, which can happen before anyone has swiped once.
- * Restating it stops permanently at the first contact, shove or graze, so it teaches rather than nags:
- * the moment the player has done the thing, the line has served its purpose.
+/*
+ * `HAND_HINT_EVERY_MS` lived here — how often the card restated §16's verb in its caption while the
+ * player had yet to touch the cat. Added in 2.5.2 because the mode was behind a flag and had no other
+ * way to introduce itself; retired in 2.6 when the cat began teaching it out loud instead
+ * (`teach-swipe`, §8's dialogue table), and two teachers thirty pixels apart read worse than one.
  */
-export const HAND_HINT_EVERY_MS = 6000;
 
 /** How long one shove takes to spend itself. Long enough to read as a push, short enough that the
  *  cat's own intent takes back over quickly — this is interference, not remote control. */

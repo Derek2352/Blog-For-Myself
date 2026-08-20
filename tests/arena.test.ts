@@ -1334,7 +1334,10 @@ describe('the handicap ladder (§9.4)', () => {
     // the verb to someone who has already fought.
     const opening = (rung: number) => ({ ...base, rung, freed: 0, spent: 0, territory: 0.55 });
     expect(pickLine(opening(1))).toBe('rung-open');
-    expect(pickLine(opening(0))).toBe('teach-hold');
+    // Whichever game it is — 2.6 gave the default its own teach line, so the check names both
+    // rather than relying on whatever an unspecified state happens to mean this version.
+    expect(pickLine(opening(0))).toBe('teach-swipe');
+    expect(pickLine({ ...opening(0), manual: true })).toBe('teach-hold');
   });
 
   it('stops explaining the terms once the fight is actually under way', () => {
@@ -1395,18 +1398,26 @@ describe('the cat’s writing (§8)', () => {
      * heard were support-idle's "you can stop any time." at 8 seconds. The opening is no
      * longer silent: the teach line fires there and only there.
      */
-    expect(pickLine(base)).toBe('teach-hold');
+    // Each game teaches its own verb: the default is shoving the cat (§16), manual is holding a
+    // claim (§3). Both are checked, because "the opening is not silent" is the claim and it has to
+    // hold for whichever game the visitor met.
+    expect(pickLine(base)).toBe('teach-swipe');
+    expect(pickLine({ ...base, manual: true })).toBe('teach-hold');
     // ...and only there: once the player has done anything, the tutorial is done.
-    expect(pickLine({ ...base, freed: 1 })).not.toBe('teach-hold');
-    expect(pickLine({ ...base, spent: 1 })).not.toBe('teach-hold');
-    expect(pickLine({ ...base, ending: 'truce' })).not.toBe('teach-hold');
+    for (const teach of ['teach-swipe', 'teach-hold']) {
+      const g = teach === 'teach-hold' ? { manual: true } : {};
+      expect(pickLine({ ...base, ...g, freed: 1 })).not.toBe(teach);
+      expect(pickLine({ ...base, ...g, spent: 1 })).not.toBe(teach);
+      expect(pickLine({ ...base, ...g, ending: 'truce' as const })).not.toBe(teach);
+    }
   });
 
   it('does not hand the opening to support-idle — mercy is for someone who tried', () => {
     // The playtest's exact failure: idle > 8s used to fire "you can stop any time." to a
     // player who had not started. Re-gated so it only reads as mercy after an attempt —
     // and the teach line above it wins the opening even when the clock has run.
-    expect(pickLine({ ...base, idleMs: 9000 })).toBe('teach-hold');
+    expect(pickLine({ ...base, idleMs: 9000 })).toBe('teach-swipe');
+    expect(pickLine({ ...base, idleMs: 9000, manual: true })).toBe('teach-hold');
     expect(pickLine({ ...base, idleMs: 9000, spent: 1, freed: 1 })).toBe('support-idle');
   });
 
@@ -1579,9 +1590,9 @@ describe('the cat’s writing (§8)', () => {
                         // `lastStand` is — a field the sweep never sets is a branch it never
                         // takes, and three lines would have been reported unreachable.
                         for (const round of [undefined, 'clear', 'record', 'again'] as const)
-                    for (const commanding of [false, true])
+                    for (const manual of [false, true])
                         // 2.0: two lines in §8 teach a verb, and the modes have different ones.
-                        for (const commanding of [false, true])
+                        for (const manual of [false, true])
                         for (const [rung, found] of [
                           [0, 0],
                           [0, 3],
@@ -1619,7 +1630,7 @@ describe('the cat’s writing (§8)', () => {
      * this (`lastStand` derived from `interrupts` hid `bluff-misses`), and this is the other half.
      */
     for (const round of [undefined, 'clear', 'record', 'again'] as const)
-      for (const commanding of [false, true])
+      for (const manual of [false, true])
         for (const territory of [0, 0.55, 0.8])
           for (const ending of [undefined, 'win'] as const) {
             const id = pickLine({
@@ -1635,7 +1646,7 @@ describe('the cat’s writing (§8)', () => {
               rung: 0,
               found: 1,
               lastStand: false,
-              commanding,
+              manual,
               ...(round ? { round } : {}),
               ...(ending ? { ending } : {}),
             });
@@ -1718,7 +1729,7 @@ describe('the cat’s writing (§8)', () => {
      * this (`lastStand` derived from `interrupts` hid `bluff-misses`), and this is the other half.
      */
     for (const round of [undefined, 'clear', 'record', 'again'] as const)
-      for (const commanding of [false, true])
+      for (const manual of [false, true])
         for (const territory of [0, 0.55, 0.8])
           for (const ending of [undefined, 'win'] as const) {
             const id = pickLine({
@@ -1734,7 +1745,7 @@ describe('the cat’s writing (§8)', () => {
               rung: 0,
               found: 1,
               lastStand: false,
-              commanding,
+              manual,
               ...(round ? { round } : {}),
               ...(ending ? { ending } : {}),
             });

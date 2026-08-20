@@ -340,31 +340,16 @@ export function pickWork(
   return safe >= 0 ? safe : best;
 }
 
-/**
- * Which kitten answers an order.
+/*
+ * `assignOrder` lived here — §15's rule for which kitten answers a click: an idle one first, because
+ * pulling a kitten off a half-finished hold spends progress the visitor cannot see, then the nearest.
  *
- * The commander points at a claim; somebody has to go. An **idle** kitten goes first, because
- * pulling a kitten off a hold it is halfway through spends progress the visitor cannot see and
- * would make ordering feel like it costs something. Otherwise the nearest one goes, since it
- * arrives soonest and the order was about *that claim*, not about that kitten.
- *
- * Returns -1 if there are no kittens at all, which the caller reads as "nothing to command yet".
+ * Retired in 2.6 with the order itself, when the swipe became how a visitor intervenes. The reasoning
+ * is kept because it is the argument *against* re-adding it: ordering only felt free because this
+ * function worked to hide its cost, and `pickWork` — which compares two clocks per claim and walks
+ * away from work it cannot finish — was always the more interesting half. What the squad does now is
+ * entirely its own.
  */
-export function assignOrder(kittens: readonly Worker[], at: { x: number; y: number }): number {
-  let best = -1;
-  let bestScore = Infinity;
-  for (let i = 0; i < kittens.length; i++) {
-    const k = kittens[i];
-    // An idle kitten wins against any busy one, however far away: the tie-break is a whole
-    // ranking rather than a distance bonus, so "busy but close" can never beat "free".
-    const score = Math.hypot(k.x - at.x, k.y - at.y) + (k.target === null ? 0 : 100_000);
-    if (score < bestScore) {
-      bestScore = score;
-      best = i;
-    }
-  }
-  return best;
-}
 
 /* ------------------------------------------------------------------ *
  * Escalation (§15) — the endless round's shape

@@ -86,8 +86,11 @@ export async function promptDate(rl) {
   }
 }
 
-const xmlEscape = (s) =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/*
+ * `xmlEscape` lived here for `placeholderSVG`'s stamped caption. The caption is gone (it announced
+ * an unfinished site on twenty-four entries) and nothing else in this file emits XML text, so the
+ * helper went with it rather than sitting unused waiting to be rediscovered and misapplied.
+ */
 
 export const yamlQuote = (s) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 

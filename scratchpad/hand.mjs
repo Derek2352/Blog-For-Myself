@@ -4,7 +4,7 @@
  * `hand-look.mjs` answers "does it read", which is a question about pictures. This answers the
  * questions that have right answers: does a flick across the cat's path move it, does a flick *along*
  * its path not, does the cooldown bound how often, does the impulse ever put the sprite off the board,
- * do the two shipped modes stay untouched, and does a kitten that cannot finish actually leave.
+ * does §3's manual mode keep its own verb, and does a kitten that cannot finish actually leave.
  *
  * ## What it deliberately does *not* re-measure
  *
@@ -509,31 +509,37 @@ const WATCH_CONTACTS = ({ tau }) => {
 }
 
 /* ------------------------------------------------------------------ *
- * §4 — the two shipped modes are untouched
+ * §4 — manual mode has its own verb and does not answer this one
  * ------------------------------------------------------------------ */
 
-for (const mode of ['commander', 'manual']) {
-  const f = await fightWith(browser, mode, r, `§4 ${mode}`, { needKitten: mode === 'commander' });
+/*
+ * **This was two modes and is now one, because the hand stopped being an outsider.**
+ *
+ * Until 2.6 §16 was a prototype behind a flag, and the claim worth checking was that neither shipped
+ * mode noticed it existed. The hand is the default game now, so "commander ignores a flick" is not a
+ * property to protect — it is the opposite of the product.
+ *
+ * What survives is the half that is still true and still load-bearing: **§3's manual mode has its own
+ * verb.** There the visitor holds a claim with the pointer and the cat hunts the cursor, so a fast
+ * drag across the board is something a player does *while playing*, and answering it with a shove
+ * would fight the mode's core mechanic. `swats === 0 && grazes === 0` is the strong form — neither
+ * tell fires — and it covers the treat swat too, since no treat is thrown here.
+ */
+{
+  const f = await fightWith(browser, 'manual', r, '§4 manual', { needKitten: false });
   if (f) {
     const before = await f.page.evaluate(() => window.__trail.length);
     const out = await swipeCat(f.page);
     await f.page.waitForTimeout(IMPULSE_MS + 160);
     const swats = await f.page.evaluate(() => window.__swats);
-    const trail = await f.page.evaluate(() => window.__trail);
-    /*
-     * The whole reason §16 is a flag and not a chip: two shipped modes and twelve green harnesses that
-     * assert on them must not notice this exists. `swats === 0` is the strong form — the shove's own
-     * announcement never fires — and it also covers the treat swat, since no treat is thrown here.
-     */
     const grazes = await f.page.evaluate(() => window.__grazes);
-    // Both tells, not just the shove. 2.5.1 gave the dead zone a picture, and a picture is a response —
-    // a shipped mode that grazed would be answering a gesture it does not have.
+    const trail = await f.page.evaluate(() => window.__trail);
     r.ok(
-      `§4 ${mode}: a flick at the cat does nothing`,
+      '§4 manual: a flick at the cat does nothing — the pointer is already the verb',
       swats === 0 && grazes === 0,
       `${swats} shoves, ${grazes} grazes after a ${Math.round(out.len ?? 0)}px flick`,
     );
-    r.note(`§4 ${mode}: travelled ${travelled(trail, out.perf, out.perf + IMPULSE_MS).toFixed(1)}px in the ${IMPULSE_MS}ms after (${trail.length - before} new samples)`);
+    r.note(`§4 manual: travelled ${travelled(trail, out.perf, out.perf + IMPULSE_MS).toFixed(1)}px in the ${IMPULSE_MS}ms after (${trail.length - before} new samples)`);
     await f.ctx.close();
   }
 }

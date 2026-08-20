@@ -21,7 +21,6 @@ import {
   threatTimeMs,
   canFinish,
   shouldFlee,
-  assignOrder,
   ROUND_REGROW_STEP,
   ROUND_AGGRO_CAP,
   ROUND_AGGRO_STEP,
@@ -270,30 +269,16 @@ describe('what a kitten works on next (§15: can I finish before it arrives?)', 
   });
 });
 
-describe('who answers an order', () => {
-  const at = { x: 500, y: 500 };
-
-  it('sends an idle kitten before a busy one, however far away', () => {
-    /*
-     * Pulling a kitten off a half-finished hold spends progress the visitor cannot see, which
-     * would make giving an order feel like it costs something — and the whole promise of the mode
-     * is that orders are free to give and optional to give at all.
-     */
-    const busyAndClose = { x: 490, y: 500, target: 2 };
-    const idleAndFar = { x: 40, y: 60, target: null };
-    expect(assignOrder([busyAndClose, idleAndFar], at)).toBe(1);
-  });
-
-  it('otherwise sends the nearest, because the order was about the claim', () => {
-    const far = { x: 40, y: 60, target: 1 };
-    const near = { x: 480, y: 500, target: 2 };
-    expect(assignOrder([far, near], at)).toBe(1);
-  });
-
-  it('answers -1 when there is no squad yet', () => {
-    expect(assignOrder([], at)).toBe(-1);
-  });
-});
+/*
+ * `describe('who answers an order')` stood here — three checks on `assignOrder`, which chose the
+ * kitten that answered a click: idle before busy however far away, then nearest, and -1 for an empty
+ * squad. All three deleted in 2.6 with the function, when the swipe replaced §15's ordering.
+ *
+ * Noted rather than silently dropped because deleting tests is the easiest way to lose coverage by
+ * accident, and this is the case where it is correct: the checks were sound and the behaviour they
+ * protected no longer exists. `pickWork` below is what decides where a kitten goes now, and it was
+ * always doing the harder half of the job.
+ */
 
 describe('escalation — the endless round has to build (§15)', () => {
   it('leaves round one exactly as 1.4 measured it', () => {

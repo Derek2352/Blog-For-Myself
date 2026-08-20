@@ -8,19 +8,17 @@
  *
  * What it produces, in `scratchpad/out/`:
  *
- * - **A frame strip per mode**, board-only element screenshots at `deviceScaleFactor: 3`, each
+ * - **A frame strip per case**, board-only element screenshots at `deviceScaleFactor: 3`, each
  *   labelled with milliseconds since the flick. Three times is not an upscale — the raster really is
  *   954px wide, so a 25px displacement is 75 honest pixels rather than a blur.
  * - **The cat's own path**, drawn from a `requestAnimationFrame` recorder rather than from the
  *   screenshots. Screenshots cost 20–60ms each and cannot sample a 60Hz walk; the trail can, and it
  *   is the only way to see the *kink* — a deflection is a change of direction, and a direction needs
  *   two samples the eye cannot get from a contact sheet.
- * - **The same flick in commander mode**, where nothing should happen at all. A demo of a new
+ * - **The same flick along the heading**, where nothing should happen at all. A demo of a new
  *   mechanic that does not show the control is a demo of nothing: the cat wanders on its own, and
- *   "it moved after I swiped" has to be distinguished from "it was going there anyway".
- *
- * Both runs flick **across** the cat's measured heading, because that is the gesture the mechanic is
- * about; `hand.mjs` covers the along-the-path control case as arithmetic, where it belongs.
+ *   "it moved after I swiped" has to be distinguished from "it was going there anyway". See `CASES`
+ *   for why 2.6 moved that control from a mode to an axis.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import {
@@ -72,9 +70,9 @@ const PATH_AFTER_MS = 900;
  * **There is no edge-room requirement, and that is the finding.**
  *
  * The first version asked for 44px of clear board on every side, being `SWIPE_RADIUS + 24` so the
- * flick could extend symmetrically around the cat. It timed out in hand mode and *scraped through*
- * in commander mode at y=180, which is the worse of the two outcomes: a fixture that passes half the
- * time is measuring the roll rather than the game.
+ * flick could extend symmetrically around the cat. It timed out in one run and *scraped through* in
+ * the other at y=180, which is the worse of the two outcomes: a fixture that passes half the time is
+ * measuring the roll rather than the game.
  *
  * Instrumenting it showed why, and it is about the cat rather than about the harness: **the cat
  * spends long stretches pinned to the floor.** It spawns at `y = h`, `onBoard` clamps it to its own
@@ -144,11 +142,14 @@ const RECORD = () => {
     /*
      * The cat's **quarry**, reconstructed from the DOM.
      *
-     * `trySwipe` takes the cat's heading as `quarry - boss`, not as its measured velocity, and the
-     * harness has to aim its flick across the *same* heading or it is testing a different
-     * perpendicular than the game computes. Reconstructing `nearestKitten()` from `.cat-card-kit`
-     * positions is the only way in from outside the closure; when there is no kitten the card falls
-     * back to the pointer, and so does this.
+     * This was here to *aim* with, back when `trySwipe` took the heading as `quarry − boss`. 2.5.2
+     * moved the heading to the cat's own smoothed velocity, and `swipeCat` aims from two frames of
+     * measured motion — so nothing steers by this any more, and the comment that said it did was
+     * left standing for a whole version. What the quarry still explains is the *erosion*: the homing
+     * walk cancels a lateral offset at a rate proportional to `1/dist`, so `toQuarryPx` below is the
+     * difference between "the shove is too small" and "the shove was eaten by a cat standing on its
+     * kitten". Kept for that, and only that. When there is no kitten there is nothing to home on and
+     * `q` is null, which is a reading rather than a gap.
      */
     let q = null;
     for (const k of document.querySelectorAll('.cat-card-kit')) {
@@ -274,7 +275,33 @@ const CROP = (jobs) =>
     ),
   );
 
-async function run(browser, mode, r) {
+/**
+ * The two runs the strip compares, and **why the control changed shape in 2.6.**
+ *
+ * Until 2.6 the control was a *mode*: the same flick in commander mode, where the hand was switched
+ * off entirely. Commander mode is gone — §16 is the game — so that control had to be replaced, and
+ * the replacement is deliberately not the nearest survivor. Manual mode switches the hand off the
+ * same way, but it also changes what the cat is doing: it stalks the pointer, and `swipeCat`
+ * dispatches its flick as pointer events on the board, so the control strip would show a cat being
+ * dragged across the frame by the very gesture that is meant to do nothing. A reader comparing two
+ * strips of a moving cat cannot subtract that.
+ *
+ * So the control moves from the mode to the **axis**: same mode, same machinery, same cat behaviour,
+ * and the only difference is the angle of the flick — which is the exact quantity `veer()` is about.
+ * The shove is the perpendicular rejection of the swipe against the heading, so a flick *along* the
+ * heading has nothing to reject and the cat simply keeps walking. That is a stronger control than
+ * the old one: it holds everything constant except the thing being demonstrated, instead of
+ * switching off the whole subsystem and asking the reader to trust that nothing else moved with it.
+ *
+ * `hand.mjs` still owns the along case as arithmetic. What arithmetic cannot do is show it.
+ */
+const CASES = [
+  { id: 'across', mode: 'hand', axis: 'across', registers: true },
+  { id: 'along', mode: 'hand', axis: 'along', registers: false },
+];
+
+async function run(browser, kase, r) {
+  const { id, mode, axis, registers } = kase;
   const ctx = await fresh(browser, { mode, deviceScaleFactor: 3 });
   const page = await ctx.newPage();
   await page.goto(BASE + '/', { waitUntil: 'networkidle' });
@@ -282,13 +309,15 @@ async function run(browser, mode, r) {
   await waitOpen(page);
 
   const armed = await bounded(page, () => !document.querySelector('#cat-card-panel').hidden && document.querySelectorAll('.cat-tile').length > 0, 8000);
-  if (!armed) return r.fixture(`${mode}: a fight to look at`, null, 1);
+  if (!armed) return r.fixture(`${id}: a fight to look at`, null, 1);
 
   // The mode the card thinks it is in, not the mode this script asked for. Worth one assertion
   // rather than a note: the flag goes through `localStorage`, and a run that silently fell back to
-  // commander would still produce a strip, a path and a plausible-looking report of nothing.
+  // the default would still produce a strip, a path and a plausible-looking report of nothing. It
+  // earned that keep in 2.6 — with both cases now asking for `hand`, this is the only line standing
+  // between a mistyped mode and two identical strips presented as a comparison.
   const declared = await page.evaluate(() => document.querySelector('#cat-card-panel')?.dataset.mode ?? '');
-  r.ok(`${mode}: the card agrees it is in ${mode} mode`, declared === mode, `data-mode=${declared || '(unset)'}`);
+  r.ok(`${id}: the card agrees it is in ${mode} mode`, declared === mode, `data-mode=${declared || '(unset)'}`);
 
   await page.evaluate(RECORD);
 
@@ -311,7 +340,7 @@ async function run(browser, mode, r) {
     12_000,
     { win: WALK_WINDOW_MS, floor: WALK_FLOOR_PX_S },
   );
-  if (!placed) return r.fixture(`${mode}: a cat walking faster than ${WALK_FLOOR_PX_S}px/s`, null, 1);
+  if (!placed) return r.fixture(`${id}: a cat walking faster than ${WALK_FLOOR_PX_S}px/s`, null, 1);
 
   const board = await page.locator('[data-board]').boundingBox();
 
@@ -322,15 +351,15 @@ async function run(browser, mode, r) {
   const cdp = await page.context().newCDPSession(page);
   const cast = screencastStart(cdp);
   await page.waitForTimeout(120); // a few frames of the undisturbed walk, for the strip to open on
-  const t0 = await swipeCat(page, { inset: FLICK_INSET });
+  const t0 = await swipeCat(page, { inset: FLICK_INSET, axis });
   await page.waitForTimeout(IMPULSE_MS + 200); // measured from the flick, not from the camera
   const raw = await cast.stop();
   await cdp.detach().catch(() => {});
 
-  if (!t0.aimed) return r.fixture(`${mode}: a kitten on the board to be stalking`, null, 1);
+  if (!t0.aimed) return r.fixture(`${id}: a kitten on the board to be stalking`, null, 1);
   const { from, to, dir } = t0;
   if (t0.len < MIN_FLICK_PX) {
-    return r.fixture(`${mode}: room for a ${MIN_FLICK_PX}px flick across the heading`, null, 1);
+    return r.fixture(`${id}: room for a ${MIN_FLICK_PX}px flick ${axis} the heading`, null, 1);
   }
   const flickLen = t0.len;
 
@@ -349,11 +378,11 @@ async function run(browser, mode, r) {
   const at = (t) => trail.reduce((best, p) => (Math.abs(p.t - t) < Math.abs(best.t - t) ? p : best), trail[0]);
   const before = at(t0.perf);
   const head = headingOver(trail, t0.perf - WALK_WINDOW_MS, t0.perf);
-  if (!head) return r.fixture(`${mode}: a measurable heading at the moment of the flick`, null, 1);
+  if (!head) return r.fixture(`${id}: a measurable heading at the moment of the flick`, null, 1);
 
   const after = headingOver(trail, t0.perf + 40, t0.perf + IMPULSE_MS);
   // `null`, not `0`. The first version collapsed "walked dead straight" and "stood still, nothing to
-  // measure" into the same `0.0°`, and commander mode's 0.0° was in fact the second — a report that
+  // measure" into the same `0.0°`, and the control run's 0.0° was in fact the second — a report that
   // cannot tell a measurement from a missing one is the fault this whole session has been chasing.
   const turned =
     after === null
@@ -366,8 +395,8 @@ async function run(browser, mode, r) {
    * Heading angle alone is a poor witness — the cat turns on its own whenever its quarry moves. This
    * takes where the cat would have been had it simply kept walking (its pre-flick heading, at its
    * measured pre-flick speed) and measures the gap to where it really is when the impulse expires.
-   * In commander mode the gap is whatever the cat's own steering did; in hand mode it should carry
-   * roughly `IMPULSE_TRAVEL_PX` on top of that.
+   * In the along run the gap is whatever the cat's own steering did; in the across run it should
+   * carry roughly `IMPULSE_TRAVEL_PX` on top of that.
    */
   const end = at(t0.perf + IMPULSE_MS);
   const coast = (end.t - before.t) / 1000;
@@ -443,10 +472,10 @@ async function run(browser, mode, r) {
   /*
    * **Path length over the impulse window** — the one figure that assumes nothing.
    *
-   * Every directional measure above depends on knowing which way the shove pushed, and the two modes
+   * Every directional measure above depends on knowing which way the shove pushed, and the two runs
    * disagreed on that in ways that took several rewrites to pin down. Distance travelled needs no
    * direction at all: `IMPULSE_TRAVEL_PX` is 25px of extra travel, so if the impulse reaches the cat
-   * its path over those 420ms must be about 25px longer than the same window in commander mode, no
+   * its path over those 420ms must be about 25px longer than the same window in the along run, no
    * matter where the homing walk aims it. If the two are equal, the shove is not being applied and
    * every offset figure is beside the point.
    */
@@ -476,23 +505,23 @@ async function run(browser, mode, r) {
   const w = board.width;
   const h = board.height;
   const off = trail.filter((p) => p.x < 0 || p.y < 0 || p.x > w || p.y > h);
-  r.ok(`${mode}: the shove never puts the cat off the board`, off.length === 0, `${off.length} of ${trail.length} samples outside 0..${Math.round(w)}×${Math.round(h)}`);
+  r.ok(`${id}: the shove never puts the cat off the board`, off.length === 0, `${off.length} of ${trail.length} samples outside 0..${Math.round(w)}×${Math.round(h)}`);
 
-  const reg = mode === 'hand';
+  const reg = registers;
   r.ok(
-    `${mode}: the flick ${reg ? 'registers' : 'does nothing'}`,
+    `${id}: the flick ${reg ? 'registers' : 'does nothing'}`,
     reg ? hits > 0 : hits === 0,
     `${hits} swatted frames`,
   );
 
-  r.note(`${mode}: heading turned ${turned === null ? '(not measurable — the cat stood)' : turned.toFixed(1) + '°'}`);
-  r.note(`${mode}: strayed ${strayed.toFixed(1)}px from its own course, peaking at ${peak.toFixed(1)}px along the shove (nominal ${IMPULSE_TRAVEL_PX.toFixed(1)}px)`);
-  r.note(`${mode}: ${(stalkShare * 100).toFixed(0)}% of the impulse window was spent stalking — ${JSON.stringify(phases)}`);
-  r.note(`${mode}: top frame-to-frame speed ${topBefore.toFixed(0)}px/s before → ${topDuring.toFixed(0)}px/s during (a landed shove peaks near ${IMPULSE_SPEED}px/s on top of the walk)`);
-  r.note(`${mode}: travelled ${walkedBefore.toFixed(1)}px in the ${IMPULSE_MS}ms before the flick → ${walkedDuring.toFixed(1)}px in the ${IMPULSE_MS}ms after (a landed shove adds ~${IMPULSE_TRAVEL_PX.toFixed(0)}px)`);
-  r.note(`${mode}: ${toQuarryPx === null ? 'no kitten to chase' : `${toQuarryPx.toFixed(0)}px from its quarry when the flick landed — the homing correction scales as 1/dist`}`);
-  r.note(`${mode}: board ${Math.round(w)}×${Math.round(h)}, cat at ${Math.round(before.x)},${Math.round(before.y)} walking ${head.speed.toFixed(0)}px/s, flick ${Math.round(flickLen)}px`);
-  r.note(`${mode}: ${trail.length} trail samples over ${((trail[trail.length - 1].t - trail[0].t) / 1000).toFixed(1)}s = ${((trail.length / (trail[trail.length - 1].t - trail[0].t)) * 1000).toFixed(0)}fps at 3×`);
+  r.note(`${id}: heading turned ${turned === null ? '(not measurable — the cat stood)' : turned.toFixed(1) + '°'}`);
+  r.note(`${id}: strayed ${strayed.toFixed(1)}px from its own course, peaking at ${peak.toFixed(1)}px along the shove (nominal ${IMPULSE_TRAVEL_PX.toFixed(1)}px)`);
+  r.note(`${id}: ${(stalkShare * 100).toFixed(0)}% of the impulse window was spent stalking — ${JSON.stringify(phases)}`);
+  r.note(`${id}: top frame-to-frame speed ${topBefore.toFixed(0)}px/s before → ${topDuring.toFixed(0)}px/s during (a landed shove peaks near ${IMPULSE_SPEED}px/s on top of the walk)`);
+  r.note(`${id}: travelled ${walkedBefore.toFixed(1)}px in the ${IMPULSE_MS}ms before the flick → ${walkedDuring.toFixed(1)}px in the ${IMPULSE_MS}ms after (a landed shove adds ~${IMPULSE_TRAVEL_PX.toFixed(0)}px)`);
+  r.note(`${id}: ${toQuarryPx === null ? 'no kitten to chase' : `${toQuarryPx.toFixed(0)}px from its quarry when the flick landed — the homing correction scales as 1/dist`}`);
+  r.note(`${id}: board ${Math.round(w)}×${Math.round(h)}, cat at ${Math.round(before.x)},${Math.round(before.y)} walking ${head.speed.toFixed(0)}px/s, flick ${Math.round(flickLen)}px`);
+  r.note(`${id}: ${trail.length} trail samples over ${((trail[trail.length - 1].t - trail[0].t) / 1000).toFixed(1)}s = ${((trail.length / (trail[trail.length - 1].t - trail[0].t)) * 1000).toFixed(0)}fps at 3×`);
 
   /*
    * Turn the screencast into a strip.
@@ -505,7 +534,7 @@ async function run(browser, mode, r) {
    */
   const skew = t0.epoch - t0.perf; // add to a perf time to get an epoch time
   const rel = raw.map((f) => ({ ...f, rel: f.at - t0.epoch }));
-  r.note(`${mode}: screencast delivered ${raw.length} frames, ${Math.round(rel[0]?.rel ?? 0)}ms … ${Math.round(rel[rel.length - 1]?.rel ?? 0)}ms relative to the flick`);
+  r.note(`${id}: screencast delivered ${raw.length} frames, ${Math.round(rel[0]?.rel ?? 0)}ms … ${Math.round(rel[rel.length - 1]?.rel ?? 0)}ms relative to the flick`);
   const kept = rel.filter((f) => f.rel >= -140 && f.rel <= IMPULSE_MS + 200);
 
   const marks = kept.map((f) => ({ p: at(f.at - skew), g: ghostAt(f.at - skew), rel: f.rel, data: f.data }));
@@ -536,9 +565,9 @@ async function run(browser, mode, r) {
     phase: m.p.phase,
     hit: m.p.hit,
   }));
-  r.ok(`${mode}: the recording covers the shove`, frames.some((f) => f.at <= 20) && frames.some((f) => f.at >= IMPULSE_MS - 60), `${frames.length} frames, ${frames[0]?.at}ms … ${frames[frames.length - 1]?.at}ms`);
+  r.ok(`${id}: the recording covers the shove`, frames.some((f) => f.at <= 20) && frames.some((f) => f.at >= IMPULSE_MS - 60), `${frames.length} frames, ${frames[0]?.at}ms … ${frames[frames.length - 1]?.at}ms`);
 
-  const out = { mode, board: { w, h }, before, head, dir, from, to, t0: t0.perf, turned, strayed, peak, stalkShare, hits, frames, trail };
+  const out = { id, mode, axis, board: { w, h }, before, head, dir, from, to, t0: t0.perf, turned, strayed, peak, stalkShare, hits, frames, trail };
   await ctx.close();
   return out;
 }
@@ -561,7 +590,7 @@ async function run(browser, mode, r) {
 function html(runs) {
   const path = (t) => t.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
   const panel = (d) => {
-    if (!d || !d.trail) return `<section><h2>${d?.mode ?? '?'}</h2><p class="miss">no run</p></section>`;
+    if (!d || !d.trail) return `<section><h2>${d?.id ?? '?'}</h2><p class="miss">no run</p></section>`;
     // A window around the flick, not the whole fight: the trail can run to 10s of ordinary walking,
     // and drawn end to end it zooms the one 420ms event down to four pixels of ink.
     const pre = d.trail.filter((p) => p.t <= d.t0 && p.t >= d.t0 - PATH_BEFORE_MS);
@@ -592,7 +621,7 @@ function html(runs) {
     </figure>`;
 
     return `<section>
-  <h2>${d.mode}<small>${d.turned === null ? 'no heading to measure' : `turned ${d.turned.toFixed(1)}°`}
+  <h2>${d.id}<small>${d.turned === null ? 'no heading to measure' : `turned ${d.turned.toFixed(1)}°`}
     · peak ${d.peak.toFixed(1)}px off its own course (nominal ${IMPULSE_TRAVEL_PX.toFixed(1)})
     · ${(d.stalkShare * 100).toFixed(0)}% stalking · ${d.hits} swat frame${d.hits === 1 ? '' : 's'}</small></h2>
   <div class="strip">${d.frames.filter((_, i) => i % STRIP_EVERY === 0).map(shot).join('')}</div>
@@ -612,7 +641,7 @@ function html(runs) {
       <li><i class="k-post"></i>during the ${IMPULSE_MS}ms impulse</li>
       <li><i class="k-rest"></i>after it is spent — it recovers its own line</li>
       <li><i class="k-ghost"></i>where it was going: the undisturbed walk</li>
-      <li><i class="k-swipe"></i>the flick, across the heading</li>
+      <li><i class="k-swipe"></i>the flick, ${d.axis} the heading</li>
       <li><i class="k-radius"></i>${SWIPE_RADIUS}px hit radius</li>
     </ul>
   </div>
@@ -661,8 +690,9 @@ function html(runs) {
   .miss { color:var(--accent); }
 </style>
 <h1>§16 — the invisible hand, looked at</h1>
-<p class="lede">The same flick across the cat's measured heading, in <b>hand</b> mode and in
-<b>commander</b> mode. One shove is ${IMPULSE_TRAVEL_PX.toFixed(1)}px of travel on a
+<p class="lede">The same flick, at the same length, in the same mode — <b>across</b> the cat's measured
+heading and then <b>along</b> it. Across is the gesture; along is the control, and the only thing
+that differs between the two panels is the angle. One shove is ${IMPULSE_TRAVEL_PX.toFixed(1)}px of travel on a
 ${runs[0]?.board ? Math.round(runs[0].board.w) + '×' + Math.round(runs[0].board.h) : '318×225'}px board,
 decaying over ${IMPULSE_MS}ms. Frames come from a CDP screencast rather than from screenshots — a
 screenshot costs ~330ms here, which is most of the shove. The solid ring is the cat; the hollow one is
@@ -674,12 +704,12 @@ ${runs.map(panel).join('\n')}`;
 const browser = await launch();
 const r = report();
 const runs = [];
-for (const mode of ['hand', 'commander']) {
+for (const kase of CASES) {
   try {
-    const out = await run(browser, mode, r);
+    const out = await run(browser, kase, r);
     if (out && out.trail) runs.push(out);
   } catch (e) {
-    r.ok(`${mode}: the run completed`, false, String(e).slice(0, 160));
+    r.ok(`${kase.id}: the run completed`, false, String(e).slice(0, 160));
   }
 }
 await browser.close();

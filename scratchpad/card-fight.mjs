@@ -29,9 +29,9 @@ const bossStance = await page.locator('[data-boss]').getAttribute('data-stance')
 ok('fight: boss phase published', !!bossPhase, bossPhase);
 ok('fight: boss stance published', ['ambush', 'siege', 'trickster', 'sleepy'].includes(bossStance ?? ''), bossStance);
 
-// Commander mode is default: kittens present.
+// The default mode deals a squad — the kittens do the holding in every mode but manual.
 const kits = await page.locator('.cat-card-kit').count();
-ok('fight: commander mode deals kittens', kits >= 1, `${kits}`);
+ok('fight: the default mode deals kittens', kits >= 1, `${kits}`);
 
 // The loop is alive: the boss moves (position changes over time).
 const pos1 = await page.locator('[data-boss]').evaluate((el) => el.style.transform);
@@ -73,7 +73,7 @@ for (let i = 0; i < 40 && !freed; i++) {
 }
 ok('fight: a claim comes back', freed);
 
-// Wait for a full clear or several rounds; commander mode should escalate the round number.
+// Wait for a full clear or several rounds; an autonomous squad should escalate the round number.
 // Round 1 clears at ~12s once the kitten is holding, but the first hold needs travel time —
 // measured: round 1 cleared at t=36s in a fresh visit, so give the window room.
 let roundUp = false;
@@ -84,14 +84,14 @@ for (let i = 0; i < 90 && !roundUp; i++) {
   const n = parseInt((txt ?? '1').replace(/\D/g, ''), 10);
   if (n > roundStart) roundUp = true;
 }
-ok('fight: rounds escalate (commander)', roundUp, `round ${roundStart} → later`);
+ok('fight: rounds escalate without being told to', roundUp, `round ${roundStart} → later`);
 
 // Manual mode switch flips the card's mode chip. This used to also read `#cat-manual-toggle`
 // and assert the two agreed; 2.2 moved that chip into the card and deleted the page one, so
 // the mirror half was measuring 2.1 behaviour that no longer exists.
 await page.locator('#cat-card-mode').click();
 const cardMode = await page.locator('#cat-card-mode').getAttribute('aria-pressed');
-ok('mode: card chip flips commander→manual', cardMode === 'true', cardMode);
+ok('mode: card chip flips hand→manual', cardMode === 'true', cardMode);
 
 // Escape closes the card; the page game is untouched throughout.
 await page.keyboard.press('Escape');

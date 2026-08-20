@@ -123,11 +123,11 @@ const ok = (name, pass, detail = '') => {
   await page.locator('#cat-card-sound').click();
   const soundAfter = await page.locator('#cat-card-sound').getAttribute('aria-pressed');
   ok('sound: card chip toggles (on by default, tap mutes)', soundBefore === 'true' && soundAfter === 'false', `${soundBefore}→${soundAfter}`);
-  // Commander is the default, so this chip starts unpressed and opts into manual.
+  // The hand (§16) is the default since 2.6, so this chip starts unpressed and opts into manual.
   const modeBefore = await page.locator('#cat-card-mode').getAttribute('aria-pressed');
   await page.locator('#cat-card-mode').click();
   const modeAfter = await page.locator('#cat-card-mode').getAttribute('aria-pressed');
-  ok('mode: card chip flips commander→manual', modeBefore === 'false' && modeAfter === 'true', `${modeBefore}→${modeAfter}`);
+  ok('mode: card chip flips hand→manual', modeBefore === 'false' && modeAfter === 'true', `${modeBefore}→${modeAfter}`);
   // The page pair is gone, not hidden — a leftover chip would be a second way to set this.
   const strays = await page.locator('#cat-sound-toggle, #cat-manual-toggle, #cat-arena-toggle').count();
   ok('mode: no 2.1 page chips left behind', strays === 0, `${strays} found`);

@@ -953,7 +953,6 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     shouldFlee,
     kittensFor,
     pickWork,
-    assignOrder,
     roundOutcome,
     roundRegrowMs,
     roundAggro,
@@ -972,7 +971,6 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     swipeReady,
     contactFor,
     GRAZE_MS,
-    HAND_HINT_EVERY_MS,
     HEADING_MIN_SPEED,
     HEADING_TAU_MS,
     SHOVE_FOOTING,
@@ -1034,27 +1032,34 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     // much game, and the point of building it is to look at it beside commander mode before
     // choosing. Reachable with `?cat=hand` (or `localStorage.cat-mode = 'hand'`) so the two shipped
     // modes, and the twelve harnesses that assert on them, are untouched.
-    let mode: 'commander' | 'manual' | 'hand' = 'commander';
-    try {
-      const wanted = new URLSearchParams(location.search).get('cat') ?? localStorage.getItem('cat-mode');
-      if (wanted === 'hand') mode = 'hand';
-    } catch {
-      /* no storage, no query — stay on commander */
-    }
-    const commanding = () => mode === 'commander';
-    /**
-     * §16's mode: the squad is autonomous and the player's only verb is shoving the cat.
+    /*
+     * Which game this is. **Two modes, and the default is the hand** (§16).
      *
-     * Named `swiping`, not `handing`, deliberately — `stepHold(hand, …)` and `dropHold(hand)`
-     * already use `hand` as the parameter for *whoever is holding a tile*, which is a kitten as
-     * often as it is the player. A `handing()` beside those would read as though it were about them.
+     * 2.6 retired a third value and a whole verb. `hand` was a prototype behind `?cat=hand`, built to
+     * be judged beside `commander` and never judged; `commander` gave the visitor two optional clicks,
+     * one of which — point at a claim, send a kitten — is the one §16 exists to replace. The decision
+     * was that **the swipe is how a visitor intervenes while the kittens and the cat run themselves**,
+     * which is §16's founding argument ("one job instead of two") rather than a new idea.
+     *
+     * The default is named `hand` rather than keeping `commander` with different behaviour. A mode
+     * called commander that you cannot command with is precisely the lying-name fault 2.5.2 spent a
+     * commit removing from three comments; the fleet's setup calls are cheaper to update than the
+     * confusion would be to live with.
      */
-    const swiping = () => mode === 'hand';
+    let mode: 'hand' | 'manual' = 'hand';
+    /**
+     * §16's verb: the squad is autonomous and the player's way in is shoving the cat.
+     *
+     * Named `swiping`, not `handing`, deliberately — `stepHold(hand, …)` and `dropHold(hand)` already
+     * use `hand` as the parameter for *whoever is holding a tile*, which is a kitten as often as it is
+     * the player. A `handing()` beside those would read as though it were about them.
+     *
+     * Identical to `autonomous()` today, and kept separate on purpose: one asks *who does the work*
+     * and the other asks *what the player's verb is*, and a future mode could answer them differently.
+     */
+    const swiping = () => mode !== 'manual';
     /** Both modes where the *kittens* do the holding — everything except manual. */
     const autonomous = () => mode !== 'manual';
-    /** One copy of the verb line, because it is said in two places and they must not drift apart. */
-    const HAND_VERB = 'swipe across the cat to shove it off course';
-    let handHintAt = 0;
 
     /* ---------------------------------------------------------------- *
      * State — the same shape as CatArena's, on tile elements.
@@ -1174,7 +1179,6 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       inside: boolean;
       target: HTMLElement | null;
       seek: HTMLElement | null;
-      ordered: boolean;
       flinchUntil: number;
       facing: number;
     }
@@ -1516,7 +1520,7 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
         mood: boss.mood,
         rung: arena.rung,
         found: arena.ammoWas.filter(Boolean).length,
-        commanding: commanding(),
+        manual: mode === 'manual',
         mode,
         lastStand: (() => {
           const raised = boss.lastStand;
@@ -1676,7 +1680,6 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
         inside: true,
         target: null,
         seek: null,
-        ordered: false,
         flinchUntil: 0,
         facing: 1,
       };
@@ -1729,20 +1732,15 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       return best;
     }
 
-    /** §15's order: send somebody to that tile. */
-    function order(tile: HTMLElement, x: number, y: number): void {
-      if (!arena.claimed.includes(tile)) return;
-      const who = assignOrder(
-        squad.map((k) => ({ x: k.x, y: k.y, target: k.seek ? arena.order.indexOf(k.seek) : null })),
-        { x, y },
-      );
-      const k = who >= 0 ? squad[who] : undefined;
-      if (!k) return;
-      dropHold(k);
-      k.seek = tile;
-      k.ordered = true;
-      playCue('order');
-    }
+    /*
+     * `order()` lived here — §15's verb, which picked the nearest free kitten with `assignOrder` and
+     * sent it to a clicked tile. Retired in 2.6 along with `Kitten.ordered` and the `'order'` cue when
+     * the swipe became the way a visitor intervenes.
+     *
+     * Kept as a note because the deletion is the point: `pickWork` was always doing the interesting
+     * half of this, comparing two clocks per claim and walking away from work it could not finish, and
+     * an order was a way to *overrule* that. What the squad does now is entirely its own.
+     */
 
     function stepSquad(t: number, dt: number): void {
       if (!autonomous() || arena.ending) return;
@@ -1757,10 +1755,7 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
 
       for (const k of squad) {
         k.el.dataset.hit = t < k.flinchUntil ? '1' : '';
-        if (k.seek && (!k.seek.isConnected || !arena.claimed.includes(k.seek))) {
-          k.seek = null;
-          k.ordered = false;
-        }
+        if (k.seek && (!k.seek.isConnected || !arena.claimed.includes(k.seek))) k.seek = null;
         const slot = squad.indexOf(k);
         const seekIndex = k.seek ? arena.order.indexOf(k.seek) : -1;
         // §16: a kitten abandons a hold the cat has walked onto. Until now `k.target === k.seek`
@@ -1772,11 +1767,13 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
         const fleeing =
           k.seek !== null &&
           candidates.some((c) => c.index === seekIndex && shouldFlee(k, c, at, { ...scale, safePx: CARD_SAFE_FLEE_PX }));
+        // `k.ordered ||` led this test until 2.6: §15 promised a bad order was honoured, so an ordered
+        // kitten kept its errand whatever `pickWork` thought. With no orders to honour, the squad's own
+        // judgement is the only judgement, and the term goes rather than sitting here always false.
         const stillWorth =
           k.seek !== null &&
           !fleeing &&
-          (k.ordered ||
-            k.target === k.seek ||
+          (k.target === k.seek ||
             candidates.some((c) => c.index === seekIndex && canFinish(k, c, at, scale)));
         if (!stillWorth) {
           const mine = pickWork(
@@ -1792,7 +1789,6 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
             if (!k.seek || worth) {
               dropHold(k);
               k.seek = chosen;
-              k.ordered = false;
               taken[slot] = mine;
             }
           }
@@ -2429,18 +2425,9 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       boss.vy = 0;
       boss.swipedAt = 0;
       boss.grazedAt = 0;
-      handHintAt = 0;
       rollStance(arena.seed);
       if (autonomous()) dealSquad(t);
       syncAmmo();
-      // §16 has no chip, so the caption is the only place its verb can be stated. A prototype that
-      // never tells you what your hands are for gets judged as a broken version of the mode it
-      // replaced. Overwritten by `arenaCaption` on the first reclaim, which is the right lifetime
-      // for an instruction: it is there until you have done the thing once.
-      if (swiping()) {
-        caption(HAND_VERB);
-        handHintAt = t;
-      }
       now = t;
       arena.raf = requestAnimationFrame(tick);
     }
@@ -2580,13 +2567,16 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
         boss.vx += ((boss.x - wasX) / dt - boss.vx) * k;
         boss.vy += ((boss.y - wasY) / dt - boss.vy) * k;
       }
-      // §16 has no chip, so the caption is the only thing that names the verb — and `arenaCaption`
-      // overwrites it on the first reclaim, which can happen before anyone has swiped once. Restated
-      // until the player has made contact of either kind, then never again: it teaches, it does not nag.
-      if (swiping() && !boss.swipedAt && !boss.grazedAt && t - handHintAt > HAND_HINT_EVERY_MS) {
-        handHintAt = t;
-        caption(HAND_VERB);
-      }
+      /*
+       * A caption restatement of §16's verb lived here, added in 2.5.2 on the stated premise that
+       * "§16 has no chip, so the caption is the only thing that names the verb". 2.6 made that false:
+       * the cat teaches it out loud now (`teach-swipe` in §8's table), gated to the same cold opening.
+       *
+       * Two teachers is worse than either. Rendered, the ribbon said *"swipe across me. i dare you."*
+       * and the caption said "SWIPE ACROSS THE CAT TO SHOVE IT OFF COURSE" thirty pixels below it, in
+       * a different type style — the same fault as 2.2.1's `treats: 0 / 7 treats`, which was one number
+       * drawn twice in two corners. The caption is the score line again, and the cat does the talking.
+       */
       holdCaption();
       if (!arena.ending) stepTalk(t);
     }
@@ -2649,18 +2639,18 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
      *    person reading the DOM — to tell which game is running. `data-mode` on the panel is that
      *    observable. On the panel and not on `<html>`: pillar 2 is about the card never writing to
      *    the *page*, and this is the card's own element, the same one that already carries `hidden`.
-     * 2. **The chip cannot lie.** In `hand` mode it read "play it yourself" un-pressed — which
-     *    states commander — and pressing it set `mode = 'manual'`, so the one control on screen
-     *    quietly destroyed the prototype with no way back but a reload. While the flag is on, the
-     *    two-way switch has nothing true to say, so it is not shown.
+     * 2. **The chip cannot lie**, which in 2.5.1 meant hiding it. `hand` was then a third mode the
+     *    two-state switch could not describe: it read "play it yourself" un-pressed — which states
+     *    commander — and pressing it set `mode = 'manual'`, quietly destroying the prototype with no
+     *    way back but a reload. 2.6 removed the third mode instead of the control. There are two
+     *    games again, the chip names one of them, and it is always visible.
      */
     const syncMode = () => {
       panelEl.dataset.mode = mode;
       modeBtn?.setAttribute('aria-pressed', mode === 'manual' ? 'true' : 'false');
-      if (modeBtn) modeBtn.hidden = swiping();
     };
     modeBtn?.addEventListener('click', () => {
-      mode = mode === 'manual' ? 'commander' : 'manual';
+      mode = mode === 'manual' ? 'hand' : 'manual';
       syncMode();
       if (arena.on) {
         // §15: mode takes effect on the next round — say what it will do.
@@ -2737,24 +2727,14 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     boardEl.addEventListener('pointercancel', liftFinger, { passive: true });
 
     // Click on the board: in commander mode, a claimed tile is an order; anything
-    // else is a throw (§15). In manual mode, a tap on empty space throws.
+    // A click throws a treat, wherever it lands.
     boardEl.addEventListener('click', (e) => {
       if (!arena.on) return;
       const c = boardCoords(e.clientX, e.clientY);
       if (touch.at && !isTap(performance.now() - touch.at)) return;
-      const tile = tileUnder(c.x, c.y);
-      if (commanding()) {
-        if (tile && arena.claimed.includes(tile)) {
-          order(tile, c.x, c.y);
-          touch.at = 0;
-          return;
-        }
-      } else if (tile && arena.claimed.includes(tile)) {
-        // manual mode: a tap on a claimed tile is a throw at it, like the page game
-        throwTreat(c.x, c.y);
-        touch.at = 0;
-        return;
-      }
+      // Every click is a throw now, in both modes. §15's "point at a claim to send somebody" is gone
+      // with the ordering it drove — the tile under the pointer no longer changes what a click means,
+      // which is one fewer thing a visitor has to know before the game answers them.
       throwTreat(c.x, c.y);
       touch.at = 0;
     });

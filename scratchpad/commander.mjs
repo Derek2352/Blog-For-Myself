@@ -1,12 +1,19 @@
 /**
- * §15's ship gate — commander mode, measured in a real browser, on the card game (2.2).
+ * The default game's ship gate — the autonomous squad, measured in a real browser, on the card (2.2).
+ *
+ * **The filename is historical and stays.** This was §15's gate when the default mode was called
+ * commander and a click sent a kitten somewhere. 2.6 retired that verb — the swipe (§16) is how a
+ * visitor intervenes now — and it turned out **not one check here was about ordering**: the promise
+ * this file measures is *"open the fight, touch nothing, and watch the page come back"*, which the
+ * change to the player's verb does not affect at all. So the checks are untouched and only the words
+ * moved. Renaming the file would churn every citation of it in the GDD to say nothing new.
  *
  * **The promise this file exists to check is one sentence: a visitor can open the fight, touch
  * nothing, and watch the page come back.** Everything else 2.2 claims is decoration if that is
  * false, so check 1 is that and nothing else, and it is deliberately the longest-running check
  * here.
  *
- * On the card, commander mode is the **default** — there is no mode chip to press. The fight opens
+ * The autonomous squad is the **default**, so no mode is declared. The fight opens
  * from the collapsed icon (`#cat-card-toggle`), and `#cat-card-panel` deals a mini board of
  * `.cat-tile[data-state="claimed"]` tiles. The squad (`.cat-card-kit`) holds tiles on its own:
  * kittens appear from round 1, and `[data-round]` ("round N") climbs as rounds clear with zero
@@ -55,7 +62,7 @@ import {
 const browser = await launch();
 const { ok, note, fixture, done } = report();
 
-/** This harness measures commander mode, which is the default — so no mode is declared. */
+/** This harness measures the default game — the kittens play — so no mode is declared. */
 const fresh = (opts = {}) => context(browser, opts);
 
 /** One read of everything the gate cares about, on the card's own DOM. */
@@ -99,7 +106,7 @@ async function openArena(page) {
   await openArena(page);
 
   const first = await state(page);
-  ok('a commander fight opens with a squad and a round', first.kits > 0 && first.round === 1, JSON.stringify(first));
+  ok('a fight opens with a squad and a round', first.kits > 0 && first.round === 1, JSON.stringify(first));
   ok('and one kitten, because round one is one animal', first.kits === 1, `${first.kits} kittens`);
 
   /*

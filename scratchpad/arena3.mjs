@@ -33,7 +33,7 @@ const browser = await launch();
 const { ok, note, fixture, done } = report();
 
 /**
- * A desktop context playing **manual mode** — commander mode is 2.0's default, and every check
+ * A desktop context playing **manual mode** — it is not the default, and every check
  * here is about a pointer and a treat, so the mode is declared before any fight opens.
  */
 const fresh = (opts = {}) => context(browser, { mode: 'manual', ...opts });
