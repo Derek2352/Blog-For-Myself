@@ -559,10 +559,10 @@ describe('voidAt — 留白', () => {
   });
 
   it('stays in range', () => {
-    for (const v of cells) {
-      expect(v).toBeGreaterThanOrEqual(0);
-      expect(v).toBeLessThanOrEqual(1);
-    }
+    // The sheet's two extremes are the whole claim: min ≥ 0 and max ≤ 1 is
+    // exactly "every cell is in range", and it is the extreme a failure names.
+    expect(Math.min(...cells)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...cells)).toBeLessThanOrEqual(1);
   });
 
   it('varies at a long wavelength, so voids are shapes and not holes', () => {
