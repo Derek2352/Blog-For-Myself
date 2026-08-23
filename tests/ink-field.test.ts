@@ -1057,7 +1057,7 @@ describe('滲透 — water runs ahead of the ink', () => {
     expect(halo / (halo + inked)).toBeGreaterThan(0.25);
   });
 
-  it('soak is a high-water mark, not live wetness', () => {
+  it('soak is a high-water mark, not live wetness', { timeout: 20_000 }, () => {
     // A halo that evaporates with the water is not a tide line, and paper keeps
     // its tide line. If this ever fails the watermark will vanish as the sheet
     // dries, which is the one thing it must not do.

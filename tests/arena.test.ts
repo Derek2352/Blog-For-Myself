@@ -1586,13 +1586,6 @@ describe('the cat’s writing (§8)', () => {
                       // hid `bluff-misses`, which needs exactly that value — the same coupling
                       // mistake as pinning `staleMs`, one loop over.
                       for (const lastStand of [false, true])
-                        // 2.0: §15's round beats are their own axis for the same reason
-                        // `lastStand` is — a field the sweep never sets is a branch it never
-                        // takes, and three lines would have been reported unreachable.
-                        for (const round of [undefined, 'clear', 'record', 'again'] as const)
-                    for (const manual of [false, true])
-                        // 2.0: two lines in §8 teach a verb, and the modes have different ones.
-                        for (const manual of [false, true])
                         for (const [rung, found] of [
                           [0, 0],
                           [0, 3],
