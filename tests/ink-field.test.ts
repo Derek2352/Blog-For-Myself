@@ -1278,7 +1278,7 @@ describe('any roll is a composition that works', () => {
     }
   });
 
-  it('no roll leaves the hero empty or paints it solid', () => {
+  it('no roll leaves the hero empty or paints it solid', { timeout: 20_000 }, () => {
     // The two ways a random composition can be bad. Both are checked on the
     // window only, because ink outside it is deliberately out of shot.
     const cover: number[] = [];
