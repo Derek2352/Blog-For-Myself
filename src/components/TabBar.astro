@@ -130,6 +130,11 @@ const rows = [
     if (!bar || !wrap) return;
     const more = bar.scrollWidth - bar.clientWidth - bar.scrollLeft > 8;
     wrap.toggleAttribute('data-more', more);
+    // Both edges, because the fade is on the strip's own content now (see the mask in
+    // global.css) and a strip scrolled to the end with a hard left edge is the same fault
+    // mirrored. 8px of slack on each side so a rubber-band overscroll does not flicker it.
+    bar.toggleAttribute('data-more-right', more);
+    bar.toggleAttribute('data-more-left', bar.scrollLeft > 8);
   }
   window.addEventListener('resize', updateScrollHint);
 

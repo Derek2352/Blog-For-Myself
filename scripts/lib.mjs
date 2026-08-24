@@ -260,16 +260,48 @@ export function placeholderSVG({ seed = '', hue, width = 1600, height = 1000 }) 
   // Sand, not colour: these plates sit behind nothing and must not compete with
   // the photographs that will replace them. Saturation stays low and lightness high.
   //
-  // Axis 1 — the ground. ±4 points around 88%, in five steps. The span is bounded on
-  // both sides by something real rather than by taste: the page ground is 96% lightness,
-  // so a plate above ~93% stops being a rectangle and becomes a hole in the page; and
-  // the dark theme's filter reverses lightness about the midpoint, so a plate below
-  // ~83% inverts past the dark surface token and reads as a light patch there instead.
-  // 84–92 is the whole of the room between those two walls, and five steps across it
-  // put neighbouring values two points apart — the smallest step that survives being
-  // seen through the card's frame and shadow.
-  const lift = ((hash >>> 7) % 5) * 2 - 4; // -4, -2, 0, +2, +4
-  const bg = `hsl(${h} 24% ${88 + lift}%)`;
+  // **There used to be a third axis here and the measurement killed it.** The ground's
+  // lightness varied ±4 points around 88% in five seeded steps, on the argument that the
+  // page ground is 96% (so above ~93% the plate becomes a hole) and the dark theme's filter
+  // reverses lightness about the midpoint (so below ~83% it inverts past the dark surface
+  // and reads as a light patch). Both walls were reasoned, and the second one was reasoned
+  // in the wrong place.
+  //
+  // `scratchpad/plate-sink.mjs` measured all twenty-one built plates against the dark
+  // surface token rgb(39 33 25), which is what "sinks into the ground" means and what 2.6.1
+  // checked on exactly one plate. **Eleven of twenty-one were off by more than 8 points on
+  // some channel, and the worst by 23.** The pattern follows the lift almost exactly: at 88%
+  // the spread is 3–9, at 90% it is 7–8, at 92% the plate lands 15–16 points *darker* than
+  // the card it sits in, and at 84% it lands 11–23 points *lighter*. The low wall is real
+  // and it is at about 87, not 83.
+  //
+  // That leaves 87–90 as the honest band, which is 3 points for five steps — and this
+  // comment's own rule is that neighbours under two points apart cannot be told apart
+  // through the card's frame and shadow. An axis that has to become invisible to be correct
+  // is not an axis, so it is gone rather than squeezed. The two remaining axes vary the
+  // *drawing* — grid pitch and rule inset — which is the stronger signal anyway, by the same
+  // argument already written below: the eye reads texture as a ratio.
+  //
+  // **Saturation is 18%, and that number is measured too.** With the lift axis gone the whole
+  // remaining error is hue: `hue-rotate` is a fixed linear matrix, not a perceptual operation,
+  // so how far a plate lands from the dark surface depends on where on the wheel it started —
+  // and the two ends of the site's warm band miss in opposite directions. At 24% the pinks
+  // (340, 350) landed +11 on blue, reading violet and *above* their card, while 44 landed −9
+  // and read olive, *below* it. Ten of twenty-one plates were out by more than 8.
+  //
+  // Swept 24 → 18 → 14 → 10 and re-measured every plate at each (`plate-sink.mjs`): the count
+  // over 8 goes 10 → 3 → 3 → 2 while the median goes 5 → 5 → 6 → 7. Desaturating past 18 stops
+  // buying outliers and starts costing the middle, because the dark surface token is itself a
+  // warm colour and a neutral plate has to travel to reach it. 18% is where the curve turns.
+  //
+  // The grid and frame keep their own saturations (18% and 22%) — they are hairlines, so their
+  // contribution to the plate's overall colour is small and their job is to be *seen*.
+  //
+  // This also settles the page audit's finding #6, which named "the `experience` hue (44)
+  // inverts to olive rgb(31 27 16)" off a screenshot. It was right about the hue and could not
+  // see why: 44 is one of the two ends of the band, and the plate it spotted was one of the
+  // ones the lift axis had pushed furthest.
+  const bg = `hsl(${h} 18% 88%)`;
   const grid = `hsl(${h} 18% 34%)`;
   // The frame has to stay *visible*. Tinting it with the hue at 72% lightness made the plate read as
   // an empty box rather than a drawn cell — the registration marks are the whole reason it looks

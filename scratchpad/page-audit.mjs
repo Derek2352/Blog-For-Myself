@@ -27,6 +27,9 @@ const PAGES = [
   { name: 'about', path: '/about/' },
   { name: 'colophon', path: '/colophon/' },
   { name: 'category', path: '/competitions/' },
+  // The one category with nothing filed under it — the site's shortest page, and the only place
+  // the "nothing here yet" state can actually be looked at.
+  { name: 'cat-empty', path: '/leisure-time/' },
   { name: 'entry', path: '/entry/nextgen-video-challenge-2025/' },
   // No `/log/…` here on purpose: `getStaticPaths` only builds a log detail page for a log with a
   // body, and the one published log has none. The log *card* is the shape that ships, and monthly

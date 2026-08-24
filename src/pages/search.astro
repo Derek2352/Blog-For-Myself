@@ -5,6 +5,36 @@
  * script), so in `npm run dev` this page shows a friendly fallback instead.
  */
 import Base from '@/layouts/Base.astro';
+import TagChip from '@/components/TagChip.astro';
+import { getCategoryIndex, getEntries, getLogs, tagCounts } from '@/lib/content';
+
+/**
+ * What a searcher needs before they can search: what is in here, and a thread to pull.
+ *
+ * Measured, this page was a heading, a box and **327px of nothing** above the footer at 1280 —
+ * the only page on the site that does not fill its own viewport (`scratchpad/tail-gap.mjs`; every
+ * other page's gap is the footer's own `mt-24` and nothing more). A void is a fair design for a
+ * search page that has a corpus the visitor already knows. This one is a stranger's first stop
+ * from a CV, and it asked them to guess a word.
+ *
+ * The counts are read rather than written down, so the sentence cannot go stale the day an entry
+ * is filed — the same rule `cover-plate.ts` follows for the plates. The starting threads come
+ * from `tagCounts()` busiest-first, which is a different question from `/tags/`'s alphabetical
+ * index and therefore not a second copy of it: that page is for finding a word you have, this
+ * row is for being handed one.
+ */
+const [entries, logs, tags, cats] = await Promise.all([
+  getEntries(),
+  getLogs(),
+  tagCounts(),
+  getCategoryIndex(),
+]);
+const liveCats = cats.filter((c) => c.entryCount + c.logCount > 0);
+/** `[PH 10]` threads. Two rows at 1280 and about four on a 390px phone — enough that the row
+    reads as a sample of a larger set rather than as the whole of it, and few enough that it is
+    scanned rather than read. The full index is one link away and says so. */
+const STARTERS = 10;
+const starters = tags.slice(0, STARTERS);
 ---
 
 <Base
@@ -22,6 +52,26 @@ import Base from '@/layouts/Base.astro';
     </header>
 
     <div id="search" class="mt-8"></div>
+
+    {/* Static, so it is there for a reader with no JavaScript too — the `<noscript>` below used
+        to be the only place on this page that said where else to go, which meant the help was
+        visible exactly to the people whose search box worked. It hides itself once something is
+        typed, because at that point the visitor has said what they want and a list of other
+        things to want is in the way. */}
+    <section id="search-start" class="mt-10" aria-labelledby="search-start-h">
+      <h2 id="search-start-h" class="kicker">or start from a thread</h2>
+      <div class="mt-3 flex flex-wrap gap-2" data-io-stagger>
+        {starters.map(({ tag }) => <TagChip tag={tag} />)}
+      </div>
+      <p class="mt-5 text-sm leading-relaxed text-muted">
+        {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
+        {logs.length > 0 && ` and ${logs.length} ${logs.length === 1 ? 'log' : 'logs'}`} across{' '}
+        {liveCats.length} categories, under {tags.length} tags. The{' '}
+        <a href="/timeline/" class="text-accent hover:underline">timeline</a> lists every one in
+        date order, and <a href="/tags/" class="text-accent hover:underline">tags</a> has the full
+        index.
+      </p>
+    </section>
 
     {/* Without JavaScript, none of the below can run — including the very script that
         unhides the fallback underneath. Measured: this page rendered a heading, the promise
@@ -91,6 +141,18 @@ import Base from '@/layouts/Base.astro';
       const searchEl = document.getElementById('search');
       if (searchEl) new MutationObserver(nameInput).observe(searchEl, { childList: true, subtree: true });
       requestAnimationFrame(nameInput);
+
+      // Stand the starting threads down while a query is live. Keyed on the input's value rather
+      // than on Pagefind's results markup: a query with no matches still means the visitor has
+      // told us what they want, and the suggestions would be sitting under "no results for X"
+      // pretending to be them. Restored on clearing the box, because that is the visitor asking
+      // the original question again.
+      const starters = document.getElementById('search-start');
+      const syncStarters = () => {
+        const inp = document.querySelector('#search input[type="text"]');
+        if (starters) starters.hidden = !!inp && inp.value.trim().length > 0;
+      };
+      searchEl?.addEventListener('input', syncStarters);
     } catch {
       document.getElementById('search-fallback').hidden = false;
     }

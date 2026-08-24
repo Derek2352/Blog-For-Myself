@@ -29,6 +29,11 @@ yarn-error.log*
 _inbox/*
 !_inbox/README.md
 
-# harness output — frame strips and report pages the cat harnesses render (scratchpad/hand-look.mjs).
+# harness output — frame strips, report pages and page shots the harnesses render
+# (scratchpad/hand-look.mjs, page-audit.mjs, plate-look.mjs, hud-corner.mjs, tab-edge.mjs).
 # Regenerated on every run and measured in megabytes; the findings they produced live in the GDD.
+# The 2.6.3 audit alone left ~50 shots in scratchpad/audit, every one of them true only of the
+# build that produced it — evidence, read once, superseded by the next run.
 scratchpad/out/
+scratchpad/audit/
+scratchpad/*.png

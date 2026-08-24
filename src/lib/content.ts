@@ -206,6 +206,29 @@ export async function allTags(): Promise<string[]> {
   return [...tags].sort((a, b) => a.localeCompare(b));
 }
 
+/**
+ * The same tags, carrying how often each is used, busiest first.
+ *
+ * `/tags/` wants them alphabetical because it is an *index* — you arrive knowing the word and
+ * need to find it. `/search/` wants them by weight because you arrive knowing nothing and need
+ * somewhere to start, and the busiest thread is the likeliest to have what a stranger came for.
+ * Same data, two orders, one source — which is why this returns counts rather than a second
+ * hand-kept list of "featured" tags that would go stale the first time an entry is filed.
+ *
+ * Ties break alphabetically so the order is stable across builds: a run of tags used once each
+ * would otherwise shuffle with `Set` insertion order, and a page that reorders itself for no
+ * visible reason is a diff nobody can review.
+ */
+export async function tagCounts(): Promise<{ tag: string; count: number }[]> {
+  const [entries, logs] = await Promise.all([getEntries(), getLogs()]);
+  const counts = new Map<string, number>();
+  for (const e of entries) e.data.tags.forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1));
+  for (const l of logs) l.data.tags.forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1));
+  return [...counts.entries()]
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+}
+
 /* ------------------------------------------------------------------ *
  * Hrefs. A log with no body is a terminal card — no dead detail page.
  * ------------------------------------------------------------------ */

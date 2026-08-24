@@ -4,7 +4,7 @@
       <path d="M88 0H0v88" fill="none" stroke="hsl(32 18% 34%)" stroke-opacity="0.11" stroke-width="1.5"/>
     </pattern>
   </defs>
-  <rect width="900" height="1125" fill="hsl(32 24% 92%)"/>
+  <rect width="900" height="1125" fill="hsl(32 18% 88%)"/>
   <rect width="900" height="1125" fill="url(#ledger)"/>
   <rect x="28" y="28" width="844" height="1069" fill="none" stroke="hsl(32 22% 58%)" stroke-width="2" rx="18"/>
   <line x1="28" y1="129" x2="872" y2="129" stroke="hsl(32 22% 58%)" stroke-width="2" stroke-dasharray="2 26"/>
