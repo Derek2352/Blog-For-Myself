@@ -55,6 +55,22 @@ const wash = resolveWash(category);
  * decision. If the site ever grows enough categories for that to stop being true, the row will
  * look wrong long before anyone has to reason about it.
  */
+/**
+ * Nothing filed here at all — the state that decides both the recovery row below and whether
+ * this page is a search result.
+ *
+ * `/leisure-time/` was in the sitemap with no `robots` meta, so a page whose entire content is
+ * *"Nothing here yet."* was being offered to search engines, while being unreachable by
+ * clicking — `getNavCategories()` correctly keeps empty categories out of the tab bar. The URL
+ * still builds, because the author needs somewhere to look and `npm run new-entry` needs a page
+ * to put an entry on; it just stops being advertised.
+ *
+ * Read off the page's own contents rather than kept in a list of exceptions, so the flag lifts
+ * by itself the day something lands here — the same bargain `cover-plate.ts` makes for the
+ * plates. (The sitemap still lists the URL: `@astrojs/sitemap`'s filter sees a path and has no
+ * access to content counts. `noindex` is the authoritative signal and a crawler honours it.)
+ */
+const empty = entries.length === 0 && logs.length === 0;
 const siblings =
   entries.length > 0
     ? []
@@ -69,6 +85,7 @@ const siblings =
   ogImage={new URL(`/og/category/${category.slug}.png`, Astro.site).toString()}
   hue={wash.hue}
   tab={category.slug}
+  noindex={empty}
 >
   <div class="wrap py-10">
     <header class="max-w-3xl">

@@ -37,6 +37,23 @@ interface Props {
    * count towards its section.
    */
   tab?: string;
+  /**
+   * Keep this page out of search results, while still letting a crawler follow its links.
+   *
+   * For pages that exist for a good reason and have nothing on them yet — today that is a
+   * category with no entries and no logs. `/leisure-time/` was in the sitemap with no `robots`
+   * meta at all, so a page whose entire content is *"Nothing here yet."* was being submitted
+   * to search engines as a result someone might want. It is also unreachable by clicking, since
+   * `getNavCategories()` correctly drops empty categories from the tab bar.
+   *
+   * `follow` rather than `nofollow`: the page is thin, not untrusted, and 2.6.3 gave it a row
+   * of links to the categories that do have things in them — the one useful thing on it.
+   *
+   * Passed by the page from its own contents, never stored: the day an entry is filed under
+   * that category the flag is gone without anybody remembering it existed, the same bargain
+   * `cover-plate.ts` makes for the plates.
+   */
+  noindex?: boolean;
   /** Optional JSON-LD structured data — one object or several. */
   schema?: Record<string, unknown> | Record<string, unknown>[];
 }
@@ -49,6 +66,7 @@ const {
   ogType = 'website',
   hue = 32,
   tab,
+  noindex = false,
   schema,
 } = Astro.props;
 const schemas = schema ? (Array.isArray(schema) ? schema : [schema]) : [];
@@ -85,8 +103,15 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
       href={new URL('rss.xml', Astro.site)}
     />
     <meta name="color-scheme" content="light dark" />
-    {/* Draft-preview deploys must never be indexed if the URL leaks */}
-    {isDraftPreviewBuild && <meta name="robots" content="noindex, nofollow" />}
+    {/* Draft-preview deploys must never be indexed if the URL leaks. A page that opted out on
+        its own account (see `noindex` above) is thin rather than secret, so it keeps `follow`
+        — one tag either way, because two `robots` metas on one page is undefined behaviour. */}
+    {(isDraftPreviewBuild || noindex) && (
+      <meta
+        name="robots"
+        content={isDraftPreviewBuild ? 'noindex, nofollow' : 'noindex, follow'}
+      />
+    )}
 
     <meta property="og:title" content={title ?? pageTitle} />
     <meta property="og:description" content={description} />
