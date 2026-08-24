@@ -207,9 +207,22 @@ export async function promptCategory(rl) {
  * with no relationship to the section they belonged to — data that exists and
  * never reaches the eye, the same fault `--boss-scale` and the tile hues were.
  *
- * A category's covers are siblings rather than clones: the hue is shared, and the
- * slug shifts lightness and the grid's phase a little, so three cards side by side
- * read as one set without looking like a repeated tile.
+ * A category's covers are siblings rather than clones: the hue is shared, and three
+ * properties of the drawing move with the slug, so a set of cards reads as sheets
+ * from one pad rather than one tile printed three times.
+ *
+ * **Which three, and why those, is the part that had to be redone.** The first version
+ * varied lightness by ±2 points and slid the grid's phase within its own cell, and the
+ * comment here said siblings differ — but a category page renders every plate at the
+ * same hue, and a screenshot of `/competitions/` showed three rectangles no eye could
+ * tell apart. Both axes were real in the file and invisible on the page: two points on
+ * an 88% ground is nothing, and a phase shift moves 0.11-opacity hairlines by at most a
+ * cell. So the rule is now that **an axis earns its place by being legible at card
+ * size**, which is where these are actually seen — a cover is drawn 1600px wide and
+ * shown about 360px wide, a 4.4× reduction that swallows any small mark. The three that
+ * survive that reduction are the ground's lightness, the grid's *pitch* (not its phase),
+ * and how far the dashed rules sit from the edge; each is commented with the span it
+ * moves through and why that span and not a wider one.
  *
  * `role="presentation"`, not `role="img"`: the plate carries no information a reader
  * needs, and every `<img>` that points at it already sets `alt=""` for the same
@@ -245,9 +258,17 @@ export function placeholderSVG({ seed = '', hue, width = 1600, height = 1000 }) 
   const h = typeof hue === 'number' ? hue : HUE_WHEEL[(hash >>> 3) % HUE_WHEEL.length];
 
   // Sand, not colour: these plates sit behind nothing and must not compete with
-  // the photographs that will replace them. Saturation stays low and lightness
-  // high; the slug moves lightness by a couple of points so siblings differ.
-  const lift = ((hash >>> 7) % 5) - 2; // -2..+2
+  // the photographs that will replace them. Saturation stays low and lightness high.
+  //
+  // Axis 1 — the ground. ±4 points around 88%, in five steps. The span is bounded on
+  // both sides by something real rather than by taste: the page ground is 96% lightness,
+  // so a plate above ~93% stops being a rectangle and becomes a hole in the page; and
+  // the dark theme's filter reverses lightness about the midpoint, so a plate below
+  // ~83% inverts past the dark surface token and reads as a light patch there instead.
+  // 84–92 is the whole of the room between those two walls, and five steps across it
+  // put neighbouring values two points apart — the smallest step that survives being
+  // seen through the card's frame and shadow.
+  const lift = ((hash >>> 7) % 5) * 2 - 4; // -4, -2, 0, +2, +4
   const bg = `hsl(${h} 24% ${88 + lift}%)`;
   const grid = `hsl(${h} 18% 34%)`;
   // The frame has to stay *visible*. Tinting it with the hue at 72% lightness made the plate read as
@@ -255,20 +276,41 @@ export function placeholderSVG({ seed = '', hue, width = 1600, height = 1000 }) 
   // deliberate, so they keep roughly the contrast the old sand hairline had against its ground.
   const lineCol = `hsl(${h} 22% 58%)`;
   const accent = '#8e2f45'; // --color-accent, ledger wine
-  const phase = (hash >>> 11) % 40; // the grid does not start in the same place twice
+  // Axis 2 — the grid's pitch, which replaced its phase. Phase slid the lines inside
+  // their own cell and changed nothing anyone could see; pitch changes the texture of
+  // the entire field. The four values are geometric rather than evenly spaced because
+  // the eye reads texture as a ratio: each is 30% coarser than the last, and 30% is
+  // about the smallest difference in line density that registers as *a different
+  // drawing* rather than as the same drawing rendered imprecisely. At the card's 4.4×
+  // reduction these land at roughly 9, 12, 15 and 19 CSS px — four distinguishable
+  // weaves, none of which closes up into flat tone at the compact card's 96px wide
+  // thumbnail. They divide the plate unevenly on purpose: a pitch that tiled exactly
+  // would put a line on the frame and read as a table.
+  const PITCH = [40, 52, 68, 88];
+  const pitch = PITCH[(hash >>> 11) % PITCH.length];
+  // Axis 3 — where the two dashed cross-rules sit, as a *fraction of the height*
+  // rather than the flat 88px this used to be. Proportional matters now the generator
+  // draws more than one aspect: the same 88px is 8.8% of a 1000px cover and 7.8% of a
+  // 1125px portrait plate, so an absolute inset quietly redrew the composition every
+  // time the shape changed. The three fractions put the rule at roughly a twelfth, a
+  // ninth and a seventh of the way in — near enough to the edge to read as a header
+  // rule on a form, far enough apart to be told apart, and all three clear of the 28px
+  // frame at every size this draws.
+  const RULE = [0.088, 0.115, 0.145];
+  const inset = Math.round(height * RULE[(hash >>> 17) % RULE.length]);
   const cx = width / 2;
   const cy = height / 2;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="presentation">
   <defs>
-    <pattern id="ledger" width="40" height="40" patternUnits="userSpaceOnUse" patternTransform="translate(${phase} ${phase})">
-      <path d="M40 0H0v40" fill="none" stroke="${grid}" stroke-opacity="0.11" stroke-width="1.5"/>
+    <pattern id="ledger" width="${pitch}" height="${pitch}" patternUnits="userSpaceOnUse">
+      <path d="M${pitch} 0H0v${pitch}" fill="none" stroke="${grid}" stroke-opacity="0.11" stroke-width="1.5"/>
     </pattern>
   </defs>
   <rect width="${width}" height="${height}" fill="${bg}"/>
   <rect width="${width}" height="${height}" fill="url(#ledger)"/>
   <rect x="28" y="28" width="${width - 56}" height="${height - 56}" fill="none" stroke="${lineCol}" stroke-width="2" rx="18"/>
-  <line x1="28" y1="88" x2="${width - 28}" y2="88" stroke="${lineCol}" stroke-width="2" stroke-dasharray="2 26"/>
-  <line x1="28" y1="${height - 88}" x2="${width - 28}" y2="${height - 88}" stroke="${lineCol}" stroke-width="2" stroke-dasharray="2 26"/>
+  <line x1="28" y1="${inset}" x2="${width - 28}" y2="${inset}" stroke="${lineCol}" stroke-width="2" stroke-dasharray="2 26"/>
+  <line x1="28" y1="${height - inset}" x2="${width - 28}" y2="${height - inset}" stroke="${lineCol}" stroke-width="2" stroke-dasharray="2 26"/>
   <path d="M${cx - 13} ${cy}h26M${cx} ${cy - 13}v26" stroke="${accent}" stroke-opacity="0.7" stroke-width="3"/>
 </svg>
 `;

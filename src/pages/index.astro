@@ -8,6 +8,7 @@ import { categoryBySlug } from '@/data/categories';
 import { orientation } from '@/lib/images';
 import { personSchema } from '@/lib/schema';
 import { lqipStyle } from '@/lib/lqip';
+import { isGeneratedPlate } from '@/lib/cover-plate';
 import { monthKey } from '@/lib/format';
 import { balancedCols } from '@/lib/layout';
 import InkWash from '@/components/InkWash.astro';
@@ -20,7 +21,14 @@ const entries = await getEntries();
 const featured = entries.filter((e) => e.data.featured).sort(byPinnedOrder);
 const hero = featured[0] ?? entries[0];
 const heroCode = hero ? await entryCode(hero) : '';
-const heroLqip = hero ? await lqipStyle("entries", hero.id, "cover") : undefined;
+// The same plate handling as `EntryCard.astro` and the entry page, and this is the copy that got
+// missed: the hero is the largest cover on the site and the first one anyone sees, so a plate here
+// unfiltered was a pale rectangle glowing out of the dark theme while every card below it sat
+// correctly sunk into the ground. `data-plate` is what `global.css` filters on; the LQIP and
+// `blurup` come off with it, because a flat drawn plate has nothing to preview and the light blur
+// would paint first and flash before the filtered plate arrived over it.
+const heroPlate = hero ? isGeneratedPlate(hero.id) : false;
+const heroLqip = hero && !heroPlate ? await lqipStyle('entries', hero.id, 'cover') : undefined;
 const strip = (featured.length > 1 ? featured : entries).filter((e) => e !== hero).slice(0, 3);
 
 const catIndex = (await getCategoryIndex()).filter((c) => c.entryCount + c.logCount > 0);
@@ -93,7 +101,11 @@ const browseCols = BROWSE_COLS[balancedCols(browseCats.length)] ?? BROWSE_COLS[3
       hero && (
         <figure class="reveal-2">
           <a href={entryHref(hero)} class="card group block">
-            <div class="frame card-cover blurup overflow-hidden" style={heroLqip}>
+            <div
+              class:list={['frame card-cover overflow-hidden', !heroPlate && 'blurup']}
+              style={heroLqip}
+              data-plate={heroPlate ? '' : undefined}
+            >
               <Image
                 src={hero.data.cover}
                 alt=""
@@ -152,9 +164,15 @@ const browseCols = BROWSE_COLS[balancedCols(browseCats.length)] ?? BROWSE_COLS[3
               href={categoryHref(c.slug)}
               class="panel lift group block h-full p-5 transition-colors hover:border-accent"
             >
+              {/* The log count only appears when there is one. Every category on the site
+                  currently has zero, so this line read "3 entries · 0 logs" eight times over —
+                  a card whose second fact is always the same nothing, advertising a feature
+                  the visitor cannot use. `TabBar.astro` already guards its own log line this
+                  way; this is the same rule, and the counts start showing themselves again
+                  the moment there is something to count. */}
               <p class="rail">
-                {c.entryCount} {c.entryCount === 1 ? 'entry' : 'entries'} · {c.logCount}
-                {c.logCount === 1 ? ' log' : ' logs'}
+                {c.entryCount} {c.entryCount === 1 ? 'entry' : 'entries'}
+                {c.logCount > 0 && ` · ${c.logCount} ${c.logCount === 1 ? 'log' : 'logs'}`}
               </p>
               <h3 class="mt-2 font-display text-2xl transition-colors group-hover:text-accent">
                 {c.label}

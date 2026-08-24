@@ -228,8 +228,8 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
   #cat-hud {
     position: fixed;
     left: 1rem;
-    /* clear of the cat's own 30px band, and far from the back-to-top corner */
-    bottom: 2.75rem;
+    /* clear of the cat's own 30px band, and far from the back-to-top corner. */
+    bottom: var(--cat-hud-bottom);
     z-index: 39;
     display: flex;
     flex-direction: column;
@@ -241,13 +241,46 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
     max-width: calc(100vw - 2rem);
   }
 
-  /* ---- progress: a row of paws, low and quiet ---- */
+  /* ---- progress: a row of paws that speaks up, then gets out of the way ----
+
+     The chip needs its own paper — seven 9px dots and a grey line, laid straight over prose,
+     read as debris rather than as a readout. But opaque paper is exactly why it could not stay
+     on screen permanently. `#cat-hud` is fixed at `left: 1rem` and the chip measures 111px wide
+     at rest (172px on "1 / 7 · watching you", 263px on the longest phrase the game can produce),
+     while `.wrap`'s content column starts at 88px @1280 and 24px @1024 — so there is no gutter
+     to sit in below about 1374px, and the chip was landing *on the writing*. Measured with
+     `scratchpad/hud-overlap.mjs`, sampling `elementsFromPoint` across the chip at three scroll
+     positions × two widths: `h2 "Education"` and `p "A post-payment ledger…"` on /about/ and
+     /competitions/ at scroll-top, `li "Korean — basic"` and `h2 "Or wander by subject"`
+     mid-page, at both widths.
+
+     The previous pass read that as a footer problem and reserved room at the foot of the page
+     (`--cat-hud-clear`). It closed the one instance of the fault that had been screenshotted,
+     and only that one: padding cannot move the middle of a page out from under a fixed element.
+     So the reserve is gone, and the readout moves out from under the page instead.
+
+     It is transient now: the chip is invisible at rest and rises for a dwell (`HUD_DWELL_MS`)
+     whenever it has something to say — once on arrival, naming the treats, and on every find
+     thereafter. The arrival greeting is what preserves the reason the caption was made
+     permanent in the first place (`1806e94`, pre-GDD, and documented on `tallyFor` rather than
+     in the GDD): the row used to be paws alone between finds, which left a visitor looking at
+     seven 9px dots with nothing anywhere saying what they were. **Not** §9.4, which this comment
+     used to credit — that is the handicap ladder, and all it puts in this row is a withheld paw. The seconds it covers a word
+     are the seconds it is asking to be read; the rest of the time the writing is unobstructed,
+     which is the whole premise of the site.
+
+     Re-measured after the change, and the honest reading is *not* "no overlap": at rest all 24
+     rows (4 pages × 2 widths × 3 scroll positions) report the chip absent, and every one of the
+     16 speaking rows still lands on prose — the footer's tagline at the foot, a heading or a
+     paragraph at the top, at 1280 as well as 1024. That is the trade, stated plainly rather than
+     rounded off: the overlap is not gone, it is bounded to the moment the chip is the thing
+     worth reading. What was unacceptable was a box parked on a paragraph for the length of a
+     visit; three seconds of it is a notification.
+
+     The cat itself stays permanently visible and remains the standing invitation — it is a small
+     transparent sprite, so it can walk over a line without erasing it, and this chip cannot. */
   #cat-score {
     opacity: 0;
-    /* On a phone the viewport is full of text, so a permanent overlay in the
-       corner sat on top of paragraphs. Give it the same paper it would have on
-       the desktop's empty margin: a small chip that reads as furniture rather
-       than something tangled in the prose. */
     background: var(--color-ground);
     border: 1px solid var(--color-line);
     border-radius: var(--radius-chip);
@@ -258,7 +291,12 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
   #cat-score[data-empty] {
     display: none;
   }
-  #cat-score:not([data-empty]) {
+  /* `.speaking` is *visibility*; `.announce` is *which caption* (the level phrase rather than
+     the tally). They were one thing while the chip was permanent and are two now, because the
+     greeting shows the tally — "0 / 7 treats", the line that says what the dots are — and only
+     a find shows the flavour. Welding them together again would mean a visitor's first sight of
+     the row never contains the word "treats". */
+  #cat-score.speaking:not([data-empty]) {
     opacity: 1;
   }
   /* On a phone the open card physically covers this corner, so the row stands down while the
@@ -530,6 +568,7 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
     levelFor,
     isComplete,
     isTopState,
+    HUD_DWELL_MS,
     PERCH_STILL_MS,
     PERCH_SNAP_PX,
     PERCH_BREAK_PX,
@@ -789,18 +828,58 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
       scoreEl.removeAttribute('data-empty');
     };
 
+    /**
+     * Raise the paw row for a dwell, then let it retire.
+     *
+     * Visibility is this function's business and *only* this function's: `speak` decides that
+     * the row is on screen, `announce` below decides which caption it carries. They were one
+     * concept while the row was permanent — see the `#cat-score` rules for why it no longer is.
+     *
+     * The timer re-reads `scoreBox()` rather than closing over the element. `#cat-hud` is
+     * `transition:persist` chrome, but a persisted node is still replaceable, and a callback
+     * holding a detached one would clear `.speaking` on a node nobody can see while the live
+     * chip stayed up forever — the failure state being guarded is a readout that never retires.
+     */
+    let speakTimer: number | undefined;
+    const speak = () => {
+      const scoreEl = scoreBox();
+      if (!scoreEl) return;
+      scoreEl.classList.add('speaking');
+      clearTimeout(speakTimer);
+      speakTimer = window.setTimeout(() => {
+        scoreBox()?.classList.remove('speaking');
+      }, HUD_DWELL_MS);
+    };
+
+    /**
+     * Say it once, on arrival: the tally, so the first thing a visitor sees of the row contains
+     * the word that explains it. The row was made permanent to issue that invitation; the
+     * invitation is the part worth keeping, and it is issued by showing up, not by staying.
+     *
+     * Once per session, not once per navigation — `#cat-hud` persists across page changes, so
+     * this module does too, and a greeting on every click would be the same box interrupting
+     * the same reader on every page of the site.
+     */
+    let greeted = false;
+    const greet = () => {
+      if (greeted) return;
+      greeted = true;
+      speak();
+    };
+
     /** Swap the tally for the level phrase for a beat, then put it back. */
     let announceTimer: number | undefined;
     const announce = () => {
       const scoreEl = scoreBox();
       if (!scoreEl) return;
       scoreEl.classList.add('announce');
+      speak();
       renderScore();
       clearTimeout(announceTimer);
       announceTimer = window.setTimeout(() => {
-        scoreEl.classList.remove('announce');
+        scoreBox()?.classList.remove('announce');
         renderScore();
-      }, 3200);
+      }, HUD_DWELL_MS);
     };
 
     /**
@@ -1391,6 +1470,9 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
       if (pending) collect(pending);
       game.level = levelFor(game.found.size, game.tabs.length);
       renderScore();
+      // After `renderScore`, so the row that rises is already painted with this page's tally
+      // rather than flashing the previous one. No-op on every navigation after the first.
+      greet();
       const tab = currentTab(game.tabs);
       if (!tab || game.found.has(tab)) {
         hideTreat();

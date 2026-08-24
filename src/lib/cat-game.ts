@@ -82,6 +82,24 @@ export function tallyFor(found: number, total: number): string {
   return `${clamped} / ${cap} treats`;
 }
 
+/**
+ * `[PH 3200]` ms the paw row stays up before retiring.
+ *
+ * The row is not a permanent readout. `#cat-hud` is fixed at the viewport's bottom-left and the
+ * chip is 111–263px wide depending on the caption, while the page's content column starts at 88px
+ * @1280 and 24px @1024 — so a chip that never leaves is a chip parked on the writing, which
+ * `scratchpad/hud-overlap.mjs` measured landing on headings, body prose and the footer's tagline
+ * at every scroll position it sampled. It rises when it has something to say, and then gets out
+ * of the way — which is what this number is the length of.
+ *
+ * The number is the read, not the animation: long enough for a glance down, five words, and a
+ * glance back — the caption is at most `"7 / 7 · all found — good hunting"` — and short enough
+ * that a visitor who ignores it is not reading around a box for very long. It covers both the
+ * arrival greeting and a find, deliberately: two dwells would be two numbers to keep in step for
+ * a difference nobody can perceive.
+ */
+export const HUD_DWELL_MS = 3200;
+
 /** True once every tab's treat has been found (and there was anything to find). */
 export function isComplete(found: number, total: number): boolean {
   return total > 0 && found >= total;

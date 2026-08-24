@@ -30,6 +30,25 @@
   /* shape — soft, unhurried corners */
   --radius-card: 0.875rem;
   --radius-chip: 0.5rem;
+
+  /* ---- the treats HUD's offset from the bottom edge ----
+     `#cat-hud` in SiteCat.astro is fixed to the bottom-left corner; this clears the cat's
+     own 30px band so the chip never sits on the animal.
+
+     This pass wrote two more tokens here — `--cat-hud-height` and `--cat-hud-clear`, with
+     the footer padding itself by the latter so the chip would never cover it — and then
+     deleted them again before committing, so they exist only in 2.6.2's account of why.
+     The reserve treated the chip as permanent furniture the page had to accommodate. That
+     was true when it was written, and its measurements were right: 111px wide from `left: 1rem` against a content column starting at 88px @1280
+     and 24px @1024, landing on the footer's first column. What it got wrong was the
+     scope. `scratchpad/hud-overlap.mjs` found the chip on `h2 "Education"` and on body
+     prose at scroll-top and mid-page too, and no amount of footer padding reaches the
+     middle of a page. The chip is transient now — it rises when it has something to say
+     and retires — so a permanent reserve buys nothing, and every page gets the 104px at
+     its foot back. The re-measured cost of dropping it, since "nothing to keep out of the
+     way of" would be too tidy: while the chip is speaking it does cover the footer's
+     tagline, on every page at both widths. For the three seconds it is speaking. */
+  --cat-hud-bottom: 2.75rem;
 }
 
 /* Dark theme: candlelit versions of the same tokens. */

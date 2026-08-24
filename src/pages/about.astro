@@ -4,9 +4,15 @@ import Base from '@/layouts/Base.astro';
 import { site, resume } from '@/data/site';
 import { personSchema } from '@/lib/schema';
 import portrait from '@/assets/portrait.svg';
+import { isPlateAsset } from '@/lib/cover-plate';
 
 const linkedin: string = site.linkedin;
 const { education, certifications, languages, tools } = resume;
+// The portrait slot is a drawn plate until a photograph lands in it, and `npm run covers` keeps it
+// drawn — so it takes the dark theme's filter the same way twenty-four covers do. Asked of the file
+// rather than asserted here: swap the import to a `.jpg` and this goes false on its own, which
+// matters more than usual because the thing being filtered would be a photograph of a person.
+const portraitPlate = isPlateAsset('portrait.svg');
 ---
 
 <Base
@@ -78,7 +84,7 @@ const { education, certifications, languages, tools } = resume;
       </div>
 
       <aside class="self-start lg:sticky lg:top-6">
-        <figure class="frame overflow-hidden">
+        <figure class="frame overflow-hidden" data-plate={portraitPlate ? '' : undefined}>
           <Image
             src={portrait}
             alt="Portrait of Derek Yung (placeholder — photo coming)"

@@ -49,3 +49,36 @@ const plates = new Set(
 export function isGeneratedPlate(entryId: string): boolean {
   return plates.has(entryId);
 }
+
+// The same question for the loose assets outside the content collections. Only `/about/`'s portrait
+// asks it today, and it asks for the same reason an entry does: `npm run covers` draws that plate,
+// so on the dark theme it needs the filter, and on the day a real portrait replaces it the filter
+// must stop — inverting a photograph of a person is the worst version of this bug on the site.
+//
+// Globbing `*.svg` and nothing else is the whole guard. A photograph arrives as `portrait.jpg` (or
+// `.webp`, or `.avif`), `about.astro`'s import moves to it, and this map simply has no entry under
+// that name — so the answer is already `false` before anyone remembers there was a flag to clear.
+// Reading a JPEG as `?raw` to ask it whether it is an SVG would be the drift this file exists to
+// avoid, in a more expensive form.
+const assets = import.meta.glob('/src/assets/*.svg', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>;
+
+const assetPlates = new Set(
+  Object.entries(assets)
+    .filter(([, svg]) => isPlateSVG(svg))
+    .map(([path]) => path.slice(path.lastIndexOf('/') + 1)),
+);
+
+/**
+ * True when `src/assets/<file>` is a plate the generator drew.
+ *
+ * @param file the asset's bare filename, e.g. `portrait.svg`. Bare rather than a path because the
+ *             caller has already imported the asset by name and a second, longer spelling of the
+ *             same name is a second thing to keep in step.
+ */
+export function isPlateAsset(file: string): boolean {
+  return assetPlates.has(file);
+}
