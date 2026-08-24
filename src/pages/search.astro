@@ -63,7 +63,12 @@ const starters = tags.slice(0, STARTERS);
       <div class="mt-3 flex flex-wrap gap-2" data-io-stagger>
         {starters.map(({ tag }) => <TagChip tag={tag} />)}
       </div>
-      <p class="mt-5 text-sm leading-relaxed text-muted">
+      {/* `max-w-prose` because this is running text, not a caption. Measured at `max-w-3xl`
+          it ran to **82 characters** a line (`scratchpad/measure.mjs`) — the page's own prose
+          elsewhere sits at 65–68, and past about 85 the eye starts losing the start of the
+          next line. Small type in a wide container is the usual way this happens: the 3xl cap
+          was set for the search results, which are a list. */}
+      <p class="mt-5 max-w-prose text-sm leading-relaxed text-muted">
         {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
         {logs.length > 0 && ` and ${logs.length} ${logs.length === 1 ? 'log' : 'logs'}`} across{' '}
         {liveCats.length} categories, under {tags.length} tags. The{' '}
