@@ -57,6 +57,14 @@ const WIDTHS = [
  * reporting the state its own capture created.** Playwright will not tell you; the number and the
  * picture both look like answers.
  *
+ * **The other thing a `fullPage` shot does to this site, which no walk can fix.** Fixed elements
+ * are painted once, where they sat during capture — so the cat (`#site-cat`, `position: fixed;
+ * bottom: 0`) and the treats chip land at the bottom of *one* viewport inside an image several
+ * viewports tall, and read as hovering in the middle of the page. Measured on `/monthly/` with
+ * `scratchpad/fixed-in-shot.mjs`: the cat is at y 871 in a 900px viewport shot (97% down it) and
+ * at y 856 in the 4461px fullPage shot (19% down it) — **the same y, a taller image.** When
+ * reading these shots, everything fixed is at a scroll position you are not looking at.
+ *
  * **`behavior: 'instant'` is the whole of the second version.** The first walk scrolled and still
  * came back fifteen entries short, which read as confirmation that the reveals were broken. They
  * are not: the site sets `scroll-behavior: smooth`, so each `scrollTo` *starts an animation* and
