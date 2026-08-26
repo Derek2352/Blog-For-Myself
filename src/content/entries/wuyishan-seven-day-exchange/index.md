@@ -1,10 +1,15 @@
 ---
-# Written Aug 2026 from the research report Derek produced for the programme —
-# 《印象大紅袍》: the show's staging, eleven segment breakdowns, an ink-wash art
-# direction, a 4 × 30s storyboard with per-beat prompts, a narration script, the
-# allusions, a sixteen-year timeline, and the company's filings. Every figure below
-# is quoted from that document; nothing here is researched independently, the same
-# rule the Vincent Tam and Teddy Liu entries set.
+# Written Aug 2026 from two documents Derek supplied, and nothing else — the same
+# rule the Vincent Tam and Teddy Liu entries set: biography comes from what he
+# provides, never from research.
+#
+#  1. The programme's briefing booklet for the trip (9 pages, Cantonese), which is
+#     where the itinerary, the five threads and the place details come from.
+#     Authorship is not stated in it, so this entry does not say who made it.
+#  2. His own research report on 《印象大紅袍》 — the show's staging, eleven segment
+#     breakdowns, an ink-wash art direction, a 4 × 30s storyboard with per-beat
+#     prompts, a narration script, the allusions, a sixteen-year timeline and the
+#     operating company's filings. Every figure in "What I did" is quoted from it.
 #
 # STILL DRAFT ON PURPOSE. The exchange has not happened yet, so "What I learned"
 # and "How it felt" are unwritten — they cannot be written in advance, and a
@@ -18,7 +23,7 @@ title: "Wuyishan 7-Day Exchange"
 category: "study-trips"
 role: "Group leader (組長)"
 location: "Wuyishan, Fujian"
-summary: "A seven-day youth cultural exchange in Wuyishan, and the group-leader role that came with a film to make. Before leaving I wrote the research behind it: a full study of 《印象大紅袍》 and an ink-wash storyboard built from it."
+summary: "A seven-day youth cultural exchange in Wuyishan — rafts, tea, Zhu Xi's academy, and one evening at 《印象大紅袍》. I am going as group leader, and the trip owes a film; before leaving I wrote the study and the ink-wash storyboard it gets built from."
 note: "The show ends by asking the audience three times what they have put down. I have been thinking about that question longer than I expected to."
 cover: "./images/cover.svg"
 gallery: []
@@ -34,25 +39,40 @@ A seven-day youth cultural exchange in **Wuyishan, Fujian**, and I am going as
 **組長** — group leader. The trip produces a retrospective short film, and the part
 I took on is the two-minute animated section at its centre.
 
-The subject chose itself once we knew where we were going. **《印象大紅袍》** —
-*Impression Dahongpao* — is an outdoor performance staged nightly at the foot of
-Dawang Peak, on the bank of the Nine-Bend River. It is the fifth in Zhang Yimou,
-Wang Chaoge and Fan Yue's *Impression* series, it opened on **29 March 2010**, and
-by May 2025 it had run about **6,900 times** for roughly **ten million people**.
-Seventy minutes, at night, with two real mountains as the backdrop.
+Wuyishan sits in Nanping, in the north of Fujian, and is one of only four places in
+China listed as **both** a cultural and a natural World Heritage site. The
+programme's booklet runs on five threads — Zhu Xi's neo-Confucianism, tea, the
+landscape, the old towns, and art. In practice that means a bamboo raft down the
+**Nine-Bend River**, fifteen *li* of it, past the two peaks the local legend is
+named for; the climb up **Tianyou Peak**, 408.8m and "the finest sight in Wuyi",
+which is where you can see all thirty-six peaks at once; a tea plantation, where
+you pick to the *one bud, two leaves* standard and then follow the leaf through the
+shaking sieve, the pan and the rolling; **Zhu Xi's academy**, founded in 1183, where
+he taught for about a decade and wrote the commentary that became the standard answer
+in the imperial examinations for centuries afterwards; **Wufu town**, where he
+arrived at fourteen and stayed for most of fifty years; and the national park's
+museums, down to a hall holding several hundred butterfly species.
+
+And one evening at **《印象大紅袍》** — *Impression Dahongpao* — which is the stop
+this entry is really about, because it is the one I did homework for. It is an
+outdoor performance staged nightly at the foot of Dawang Peak, the fifth in Zhang
+Yimou, Wang Chaoge and Fan Yue's *Impression* series; it opened on **29 March 2010**
+and by May 2025 had run about **6,900 times** for roughly **ten million people**.
 
 The thing that makes it worth studying is structural rather than decorative. The
 auditorium is a 1,988-seat steel disc that **rotates through 360°**, about five
-minutes per turn and roughly thirteen turns in a show, ringed by four performance
-areas — teahouse, terraced fields, flat ground, water — with fifteen screens set
-into the real landscape. **The scenery never changes. The audience does.** The
-official description of the venue is "the world's largest teahouse", which sounds
+minutes per turn and roughly thirteen turns across the seventy minutes, ringed by
+four performance areas — teahouse, terraced fields, flat ground, water — with fifteen
+screens set into the real landscape. **The scenery never changes. The audience does.**
+The official description of the venue is "the world's largest teahouse", which sounds
 like marketing until you are sitting in it being handed a cup of rock tea.
 
 ## What I did
 
 I wrote the research and the brief the animation gets built from, before the trip
-rather than after it, so that the group arrives knowing what it is looking for.
+rather than after it, so that the group arrives knowing what it is looking for. A
+show you have already taken apart is a show you can film; a show you see cold is
+seventy minutes of being impressed, and then nothing to cut.
 
 **The show, taken apart.** A scene-by-scene account of all seventy minutes, then
 eleven segments broken down shot by shot — the Tang banquet on the three-tier
