@@ -21,8 +21,20 @@
 # forward migration plans, the site-by-site division of labour, and every named
 # individual. None of that is his to publish, and none of it makes the entry better.
 #
-# What is still missing is his own account of how the placement ended. That cannot
-# come from a briefing deck, and it is not invented here.
+# Closed 1 Sep 2026. Derek then supplied his own end-of-placement reflection, which
+# is where the second half of What I learned and the whole of How it felt now come
+# from. It arrived written in the second person — "you learnt", "you spent" — and is
+# rendered here in his own voice, which is a translation and not an embellishment:
+# nothing is claimed that the draft did not say.
+#
+# It also arrived carrying the figures withheld above — the process count, the
+# monthly volume, the three sites and nine offices, the productivity percentage, and
+# the internal name for per-step timing. Those are stripped again rather than
+# reinstated, because supplying a reflection is not the same as authorising a
+# disclosure, and every one of those lessons survives without its number. The one
+# figure kept is the count of workflows he mapped himself: that is his own work
+# product rather than the bank's data, and his notes' own advice is that a vague
+# contribution claim does not survive an interview follow-up.
 title: "Bank of China (Hong Kong) — Summer Internship"
 category: "experience"
 date: 2026-07-01
@@ -104,8 +116,8 @@ and is, by some distance, the place where the manual volume sits.
 
 ## What I learned
 
-*Written four weeks in. Two more went on the end on 1 September; the closing
-reflection is still owed.*
+*The first three were written four weeks in; the rest on 1 September, after it
+ended.*
 
 **How much is still done by hand.** This is the thing I'd tell a friend first. My
 assumption walking in was that a bank this size would be more automated than it is,
@@ -131,8 +143,23 @@ had to do it inside an institution before.
 
 ---
 
-*The two below are from the end, and they are the ones I expect to still be using in
-five years.*
+*The rest are from the end.*
+
+**The back office is where the cost and the risk actually live.** A finance degree
+teaches the front — pricing, markets, valuation — and I arrived thinking that was
+where the interesting problems were. Two months at the other end of the building
+rearranged that. Processing is not the plumbing beneath the real work; it *is* a
+large part of where an institution's money goes and where its mistakes happen, and
+every step of it has a measured time and a measured risk attached. That is not
+obvious from the outside, and I do not think I would have believed it if someone had
+told me rather than shown me.
+
+**Where AI actually gets applied, as opposed to where it gets talked about.** I spent
+the summer at the unglamorous end: document verification in a loans division. Not a
+chatbot, not a trading model, nothing anyone would put in a launch video. High volume,
+structured inputs, expensive mistakes — that is the shape where automation genuinely
+pays, and it is a shape I can now recognise somewhere else when I see it. Most of the
+attention goes to the other kind, which is roughly the opposite of where the value is.
 
 **A proposal has to be priced in the department's own currency, and it is not
 novelty.** I arrived assuming the way to argue for automation was to show that it was
@@ -146,16 +173,28 @@ generalises well past banking: every operating function I am likely to work in w
 have its own two currencies, and the first job is to find out what they are rather
 than assuming mine transfer.
 
-**And the part I did not expect to be the interesting one.** My standing question
-about automation in financial services is not whether it works — it plainly does —
-but what happens to the people whose work it changes. I went in braced to watch that
-go badly. What I actually saw was an institution putting real weight behind training,
+**That I can do professional work in Traditional Chinese.** Not conversational
+fluency — drafting internal communications for a formal Chinese-corporate setting,
+for readers whose job is reading carefully. I had no proof of that before and I do
+now, and it is the kind of thing that is very hard to claim on a CV without having
+done it.
+
+**And where my own contribution stops.** I mapped about seventeen workflows and wrote
+a proposal. I did not build it. I may never find out whether it was taken up. That
+was uncomfortable at first and I have come round to thinking it is simply what
+contributing to an institution looks like — your part is a part, it gets handed on,
+and the thing you would most like to know is not yours to know.
+
+**The part I did not expect to be the interesting one.** My standing question about
+automation in financial services is not whether it works — it plainly does — but what
+happens to the people whose work it changes. I went in braced to watch that go badly.
+What I actually saw was an institution putting real weight behind training,
 multi-skilling and formal professional qualification for the same staff whose
 processes were being automated: the answer to "the machine now does the step you used
 to do" was, structurally, "so you should be qualified to do the harder thing". I am
 not naive enough to call that settled, and two months is not long enough to see where
-it lands. But it is the first time I have seen the humane version attempted at scale
-rather than described in a lecture, and it moved my prior.
+it lands. But whether it is *sufficient* is now a question I am qualified to have an
+opinion about, and I was not in June.
 
 ## How it felt
 
@@ -170,7 +209,30 @@ one, and I think it's genuinely both. New enough to see the manual steps as stra
 rather than normal, and far too new to know which of them are load-bearing. I've tried
 to hold both of those at once and ask more questions than I answer.
 
-*Four weeks left*, I wrote, and then it ended — 31 August. The closing version of
-this section is the one thing on this page I have not written yet, and I would rather
-leave the gap visible than fill it with something composed a week later for the sake
-of a tidy ending. It is coming.
+*Four weeks left*, I wrote. Then it ended — 31 August — and here is the rest of it.
+
+**Real, and I was slightly surprised by that.** The survey I was handed was not
+busywork invented to keep an intern occupied; it was something the department had
+already decided it needed that year, and I was doing a piece of it. There is a
+particular feeling in working that out, and it is not pride exactly. It is more like
+the floor being further down than you had assumed.
+
+**Small.** The volume that moves through that operation in a month is not a number a
+person can stand next to. One summer against it is a rounding error, and depending on
+the day that reads as humbling or as slightly deflating. I have decided it is mostly
+the first. The work still has to be done by somebody, and being one of the somebodies
+for two months is how anyone starts.
+
+**Unfinished.** I handed over a proposal and walked out. No launch, no result, no
+closure — the internship ended mid-sentence, which I gather is how most of them end.
+The anticlimax is real even when the work was good, and I would rather write that down
+than pretend the last day had a shape it did not have.
+
+**And the one worth sitting with.** What I say I care about is whether the people
+affected by financial automation get brought along. What I actually did all summer was
+document where human work in a loans division could be handed to a model. That is not
+hypocrisy — somebody has to do the mapping, and doing it carelessly is worse than
+doing it carefully — but it is a tension, and I did feel some discomfort about which
+side of it I was standing on. That discomfort is the most useful thing I brought home.
+It is also the honest answer if anyone asks me what I found difficult, and I would
+rather give that answer than a smoother one.
