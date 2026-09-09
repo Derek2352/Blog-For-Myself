@@ -8,7 +8,7 @@
     "dev": "astro dev",
     "build": "astro check && astro build && pagefind --site dist",
     "stage:images": "node scripts/stage-content-images.mjs",
-    "build:next": "npm run stage:images && next build && pagefind --site out",
+    "build:next": "npm run stage:images && next build && npx tsx scripts/build-static-artifacts.ts && pagefind --site out",
     "dev:next": "npm run stage:images && next dev",
     "start:next": "npx serve out",
     "build:drafts": "SHOW_DRAFTS=1 npm run build",
@@ -59,6 +59,7 @@
     "pagefind": "^1.5.2",
     "playwright-core": "^1.61.1",
     "postcss": "^8.5.28",
+    "tsx": "^4.23.13",
     "typescript": "^5.7.0",
     "vitest": "^4.1.10"
   }
