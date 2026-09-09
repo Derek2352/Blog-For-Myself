@@ -86,6 +86,15 @@ export async function getLogs(): Promise<Log[]> {
 let codesP: Promise<Map<string, string>> | null = null;
 const codes = () => (codesP ??= (async () => indexCodes(await allEntries(), await allLogs()))());
 
+/**
+ * The whole code map, for pages that render many cards.
+ *
+ * `entryCode`/`logCode` remain for single lookups, but a React card cannot await, so a page
+ * rendering fifty cards resolves the map once and threads it down rather than making each card
+ * ask. Same map, same numbers — this only moves where it is read.
+ */
+export const getCodes = (): Promise<Map<string, string>> => codes();
+
 export async function entryCode(entry: Entry): Promise<string> {
   return (await codes()).get(`entries:${entry.id}`) ?? 'E-000';
 }
