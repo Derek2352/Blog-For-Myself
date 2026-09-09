@@ -63,10 +63,12 @@ const readGaze = (page) =>
     const root = document.getElementById('site-cat');
     if (!root) return null;
     const g = root.querySelector('.cat-gaze');
-    const eye = root.querySelector('.cat-eye');
-    // The skull is the only other circle in the head group; it carries no class because
-    // nothing needed to address it until now.
-    const skull = [...(g?.querySelectorAll('circle') ?? [])].find((c) => c !== eye);
+    // The pupil is what moves now: the eye was redrawn as a socket with a pupil inside it, so
+    // the gaze translates the pupil rather than sliding the whole eye across the skull. The
+    // skull carries a class for the same reason — it stopped being "the only other circle" when
+    // it stopped being a circle.
+    const eye = root.querySelector('.cat-pupil');
+    const skull = root.querySelector('.cat-skull');
     if (!g || !eye || !skull) return null;
     const er = eye.getBoundingClientRect();
     const sr = skull.getBoundingClientRect();
@@ -77,7 +79,7 @@ const readGaze = (page) =>
       eyeVsSkull: +(er.x + er.width / 2 - (sr.x + sr.width / 2)).toFixed(2),
       rotate: getComputedStyle(g).rotate,
       translate: cs.translate,
-      blink: cs.animationName,
+      blink: getComputedStyle(root.querySelector('.cat-eye')).animationName,
       faceLeft: root.classList.contains('face-left'),
       cls: root.className,
     };
@@ -186,8 +188,13 @@ const browser = await launch();
   await page.waitForFunction(
     () => {
       const root = document.getElementById('site-cat');
-      const eye = root?.querySelector('.cat-eye');
-      return !!root?.classList.contains('idle') && !!eye && getComputedStyle(eye).translate !== 'none';
+      // The offset lives on the pupil now, not on the eye — the eye is the socket it moves in.
+      const pupil = root?.querySelector('.cat-pupil');
+      return (
+        !!root?.classList.contains('idle') &&
+        !!pupil &&
+        getComputedStyle(pupil).translate !== 'none'
+      );
     },
     null,
     { timeout: 15000, polling: 150 },

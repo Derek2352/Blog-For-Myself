@@ -171,13 +171,22 @@ export const PERCH_BREAK_PX = 22;
 export const GAZE_YAW_DEG = 9;
 
 /**
- * `[PH 1.2]` user units the eye slides inside the head, at full deflection.
+ * `[PH 0.55]` user units the **pupil** travels inside the eye, at full deflection.
  *
- * Bounded by the art again: the eye is r=1.15 centred at (57.5, 11.5), inside a skull centred
- * (55, 13) with r=7.6. Beyond roughly 1.3 units the eye's edge reaches the skull's outline, and
- * an eye touching the edge of a head is not a glance — it is a mistake in the drawing.
+ * Bounded by the art, and the bound got tighter and more honest when the eye was redrawn. It used
+ * to be the whole eye sliding across the skull, capped at 1.2 by the distance to the skull's
+ * outline. The eye is now a socket with a pupil in it (`CAT_EYE`, `CAT_PUPIL` in `cat-art.ts`),
+ * so the real limit is `rx 1.15 − rx 0.5 = 0.65` — the point at which the pupil's edge reaches the
+ * socket's. 0.55 leaves a hair of white on the far side, which is what stops a full deflection
+ * reading as a defect. (It was 0.9 against a larger eye, until the eye was halved to stop the cat
+ * looking like a mascot; the constant followed the drawing, which is the point of deriving it
+ * from the drawing.)
+ *
+ * The vertical falls out of the same geometry: `0.55 × GAZE_NOD_RATIO` is 0.17, comfortably inside
+ * the socket's own 0.95 − 0.72 = 0.23 of vertical room. The two axes are bounded by two different
+ * numbers and neither had to be guessed.
  */
-export const GAZE_EYE_UNITS = 1.2;
+export const GAZE_EYE_UNITS = 0.55;
 
 /**
  * `[PH 0.3]` — vertical deflection as a fraction of horizontal.

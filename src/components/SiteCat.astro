@@ -22,55 +22,46 @@ import { getNavCategories } from '@/lib/content';
  * Rendering them also keeps the collection content-driven from the same source
  * the tab bar uses — publish a category and its paw appears by itself.
  */
+import {
+  CAT_TAIL_D,
+  CAT_BODY_D,
+  CAT_HEAD_D,
+  CAT_EAR_FAR_D,
+  CAT_EAR_NEAR_D,
+  CAT_LEGS,
+  catLegD,
+  CAT_EYE,
+  CAT_PUPIL,
+  CAT_COLLAR_D,
+  CAT_NOTCH_D,
+} from '@/lib/cat-art';
+
 const tabs = (await getNavCategories()).map((c) => c.slug);
 ---
 
 <div id="site-cat" transition:persist="site-cat" aria-hidden="true">
   <span class="cat-flip">
     <svg viewBox="0 0 64 40" width="48" height="30" fill="currentColor" class="cat-svg">
-      <g class="cat-tail">
-        <path
-          d="M11 23 C4 21 1.5 13 7 7"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="3.4"
-          stroke-linecap="round"></path>
-      </g>
+      <g class="cat-tail"><path d={CAT_TAIL_D}></path></g>
       <g class="cat-legs">
-        <rect class="cat-leg leg-a" x="16" y="27" width="3.6" height="11" rx="1.8"></rect>
-        <rect class="cat-leg leg-b" x="23" y="27" width="3.6" height="11" rx="1.8"></rect>
-        <rect class="cat-leg leg-a" x="38" y="27" width="3.6" height="11" rx="1.8"></rect>
-        <rect class="cat-leg leg-b" x="45" y="27" width="3.6" height="11" rx="1.8"></rect>
+        {CAT_LEGS.map((l) => (
+          <path class:list={['cat-leg', `leg-${l.phase}`]} d={catLegD(l.x, l.lean)} />
+        ))}
       </g>
-      <path
-        class="cat-body"
-        d="M14 29.5 C10 28.5 9.5 20 16 16.4 C18.5 15.3 21 15 24 15 L45 15 C52 15.5 55 19 55 23.5 L55 26.5 C55 28.5 53.5 29.5 51.5 29.5 Z">
-      </path>
-      {/* Earned, not decorative: this only appears once every treat is found.
-          The affection tiers otherwise only widen an idle animation repertoire,
-          which is close to invisible — a collar is a change to the cat you can
-          actually point at. */}
-      <path
-        class="cat-collar"
-        d="M47.5 15.5 C48.5 19.5 49 21 49.5 22.5"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2.6"
-        stroke-linecap="round"></path>
+      <path class="cat-body" d={CAT_BODY_D}></path>
       {/* `.cat-gaze` exists only to own the yaw's rotation origin (§17). It wraps the head
           rather than replacing it because `.cat-head` already carries two animations of its
           own — `cat-groom` and `cat-munch` — and both rotate or translate about the default
           origin. Giving *that* element a neck origin would silently redraw two shipped poses;
-          giving the yaw its own group changes nothing that already works. Same reasoning as
-          the near ear's group below, one level up. */}
+          giving the yaw its own group changes nothing that already works. */}
       <g class="cat-gaze">
       <g class="cat-head">
-        <path class="cat-ear ear-far" d="M48 9 L49.5 1.5 L54 6.5 Z"></path>
+        <path class="cat-ear ear-far" d={CAT_EAR_FAR_D}></path>
         {/* The near ear is a group so the notch can ride with it: the arena rotates
             `.cat-ear` during a pounce's wind-up, and a notch drawn as a sibling would
             detach from the ear it belongs to. */}
         <g class="cat-ear ear-near">
-          <path d="M56.5 6.5 L61 1.5 L62.5 9 Z"></path>
+          <path d={CAT_EAR_NEAR_D}></path>
           {/* The notch — the confrontation path's proof, the collar's opposite number
               (docs/cat-boss-gdd.md §7.1). Earned by winning a fight, session-only, and
               the one piece of new art the design allows itself.
@@ -82,14 +73,44 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
               this size and speaks the language the collar already established. */}
           <path
             class="cat-notch"
-            d="M59.6 4.4 L62.3 5.9"
+            d={CAT_NOTCH_D}
             fill="none"
             stroke="currentColor"
-            stroke-width="2.2"
+            stroke-width="1.5"
             stroke-linecap="round"></path>
         </g>
-        <circle cx="55" cy="13" r="7.6"></circle>
-        <circle class="cat-eye" cx="57.5" cy="11.5" r="1.15"></circle>
+        <path class="cat-skull" d={CAT_HEAD_D}></path>
+        {/* Earned, not decorative: this only appears once every treat is found. The affection
+            tiers otherwise only widen an idle animation repertoire, which is close to invisible —
+            a collar is a change to the cat you can actually point at.
+
+            **Inside the head, after the skull.** Two orderings are load-bearing here and they are
+            different questions. *After the skull* is what makes it visible at all: placed before,
+            the skull paints over the throat and the only part left showing is the inch escaping
+            below the chin, which reads as a tongue. *Inside `.cat-head`* is what keeps it on the
+            cat: as a sibling it stayed in the root frame while §17's gaze turned the head out from
+            under it, and `scratchpad/marks.mjs` measured it sliding off the throat at full
+            deflection. This is the same argument the notch makes one level down — a mark belongs
+            to the part it is a mark *on* — and it is why containment is now a property of the
+            drawing rather than of the pose. */}
+        <path
+          class="cat-collar"
+          d={CAT_COLLAR_D}
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.0"
+          stroke-linecap="round"></path>
+        {/* A group, so the blink squashes the eye *and* what is inside it. `.cat-eye` used to
+            be the whole eye; now it is the socket, and `.cat-pupil` is the part §17 moves. */}
+        <g class="cat-eye">
+          <ellipse cx={CAT_EYE.cx} cy={CAT_EYE.cy} rx={CAT_EYE.rx} ry={CAT_EYE.ry}></ellipse>
+          <ellipse
+            class="cat-pupil"
+            cx={CAT_EYE.cx}
+            cy={CAT_EYE.cy}
+            rx={CAT_PUPIL.rx}
+            ry={CAT_PUPIL.ry}></ellipse>
+        </g>
       </g>
       </g>
     </svg>
@@ -214,8 +235,13 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
     transform-box: view-box;
     transform-origin: 50px 19px;
   }
+  /* The socket is knocked out of the silhouette; the pupil puts the ink back inside it. Both
+     follow the page's own tokens, so the eye keeps working when the theme flips. */
   .cat-eye {
     fill: var(--color-ground);
+  }
+  .cat-pupil {
+    fill: var(--color-ink);
   }
 
   /* ---- the treat hiding in a tab ---- */
@@ -679,7 +705,7 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
     // (see the observers at the end), so flipping the accessibility control
     // starts or stops the cat without a reload.
     const gazeEl = root.querySelector<SVGGElement>('.cat-gaze');
-    const gazeEye = root.querySelector<SVGCircleElement>('.cat-eye');
+    const gazeEye = root.querySelector<SVGEllipseElement>('.cat-pupil');
     /** Where the gaze is *now*, in the same units as its targets, so it can be eased. */
     const gaze = { yaw: 0, ex: 0, ey: 0, t: performance.now() };
 
@@ -1220,7 +1246,7 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
        sighting held 5200ms because a tap reports once. So "look at where I touch" needed
        nothing built; it needed the gaze to read a record that was already there.
 
-       Outputs: `rotate:` on `.cat-gaze` and `translate:` on `.cat-eye` — the *independent*
+       Outputs: `rotate:` on `.cat-gaze` and `translate:` on `.cat-pupil` — the *independent*
        transform properties, never `transform:`. That is not stylistic. `cat-blink` on the eye,
        and `cat-groom` and `cat-munch` on the head, all animate `transform`, so writing
        `transform` here would fight three shipped animations and the cat would stop blinking

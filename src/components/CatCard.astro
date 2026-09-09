@@ -24,6 +24,17 @@
  * `role="dialog"` labelled region; Escape closes and returns focus. The fight itself is
  * `aria-hidden` when it runs (the arena already is) — the game is decoration, not content.
  */
+import {
+  CAT_TAIL_D,
+  CAT_BODY_D,
+  CAT_HEAD_D,
+  CAT_EAR_FAR_D,
+  CAT_EAR_NEAR_D,
+  CAT_LEGS,
+  catLegD,
+  CAT_EYE,
+  CAT_PUPIL,
+} from '@/lib/cat-art';
 import { getNavTree } from '@/lib/content';
 import { resolveWash } from '@/lib/wash';
 
@@ -69,29 +80,24 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
     aria-label="Open the cat card game"
   >
     <svg viewBox="0 0 64 40" class="cat-card-icon-svg" aria-hidden="true">
-      <g class="cat-card-tail">
-        <path d="M11 23 C4 21 1.5 13 7 7" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"></path>
-      </g>
-      {/* Byte-for-byte `#site-cat`'s silhouette: legs, body, ears, head, one knocked-out eye.
-          §0 says nothing new is drawn, and the card's copy had quietly broken that — it dropped
-          the legs and the head circle, so the cat was a floating loaf. An attempt to patch it
-          with a bigger dome and a two-eyed smile made it worse: that is a cartoon, and this site
-          draws ink silhouettes. The fix is not a better invention, it is the drawing that
-          already exists. */}
+      {/* One drawing, three copies — see `src/lib/cat-art.ts`. This used to be the path data
+          pasted in by hand, on the reasoning that a byte-for-byte copy of `#site-cat` was the
+          fix for a copy that had drifted (it had dropped the legs and the head, so the cat was
+          a floating loaf). Agreeing by hand is not a guarantee; it is a coincidence that had
+          already failed once. Now they cannot drift. */}
+      <g class="cat-card-tail"><path d={CAT_TAIL_D}></path></g>
       <g class="cat-card-legs">
-        <rect x="16" y="27" width="3.6" height="11" rx="1.8"></rect>
-        <rect x="23" y="27" width="3.6" height="11" rx="1.8"></rect>
-        <rect x="38" y="27" width="3.6" height="11" rx="1.8"></rect>
-        <rect x="45" y="27" width="3.6" height="11" rx="1.8"></rect>
+        {CAT_LEGS.map((l) => <path d={catLegD(l.x, l.lean)} />)}
       </g>
-      <path class="cat-card-body" d="M14 29.5 C10 28.5 9.5 20 16 16.4 C18.5 15.3 21 15 24 15 L45 15 C52 15.5 55 19 55 23.5 L55 26.5 C55 28.5 53.5 29.5 51.5 29.5 Z"></path>
+      <path class="cat-card-body" d={CAT_BODY_D}></path>
       <g class="cat-card-head">
-        <path class="cat-card-ear cat-card-ear-far" d="M48 9 L49.5 1.5 L54 6.5 Z"></path>
-        <g class="cat-card-ear cat-card-ear-near">
-          <path d="M56.5 6.5 L61 1.5 L62.5 9 Z"></path>
+        <path class="cat-card-ear cat-card-ear-far" d={CAT_EAR_FAR_D}></path>
+        <path class="cat-card-ear cat-card-ear-near" d={CAT_EAR_NEAR_D}></path>
+        <path d={CAT_HEAD_D}></path>
+        <g class="cat-card-eye">
+          <ellipse cx={CAT_EYE.cx} cy={CAT_EYE.cy} rx={CAT_EYE.rx} ry={CAT_EYE.ry}></ellipse>
+          <ellipse class="cat-card-pupil" cx={CAT_EYE.cx} cy={CAT_EYE.cy} rx={CAT_PUPIL.rx} ry={CAT_PUPIL.ry}></ellipse>
         </g>
-        <circle cx="55" cy="13" r="7.6"></circle>
-        <circle class="cat-card-eye" cx="57.5" cy="11.5" r="1.15"></circle>
       </g>
     </svg>
     <!-- Treats collected from browsing, shown on the collapsed icon: the ammo display
@@ -154,22 +160,22 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
       <!-- The boss, a small sprite in the same drawing as the icon (§0). -->
       <div class="cat-card-boss" data-boss aria-hidden="true">
         <svg viewBox="0 0 64 40" class="cat-card-boss-svg">
-          <path class="cat-card-boss-tail" d="M11 23 C4 21 1.5 13 7 7" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"></path>
+          <path class="cat-card-boss-tail" d={CAT_TAIL_D}></path>
           <g class="cat-card-legs">
-            <rect x="16" y="27" width="3.6" height="11" rx="1.8"></rect>
-            <rect x="23" y="27" width="3.6" height="11" rx="1.8"></rect>
-            <rect x="38" y="27" width="3.6" height="11" rx="1.8"></rect>
-            <rect x="45" y="27" width="3.6" height="11" rx="1.8"></rect>
+            {CAT_LEGS.map((l) => <path d={catLegD(l.x, l.lean)} />)}
           </g>
-          <path class="cat-card-boss-body" d="M14 29.5 C10 28.5 9.5 20 16 16.4 C18.5 15.3 21 15 24 15 L45 15 C52 15.5 55 19 55 23.5 L55 26.5 C55 28.5 53.5 29.5 51.5 29.5 Z"></path>
+          <path class="cat-card-boss-body" d={CAT_BODY_D}></path>
           {/* The head is a group so it can move as one. It was not, and `[data-phase='eat']
               .cat-card-boss-head` had been styling a class no element carried — the cat's dip
               to its treat has never once played. */}
           <g class="cat-card-boss-head">
-            <path class="cat-card-boss-ear cat-card-boss-ear-far" d="M48 9 L49.5 1.5 L54 6.5 Z"></path>
-            <path class="cat-card-boss-ear cat-card-boss-ear-near" d="M56.5 6.5 L61 1.5 L62.5 9 Z"></path>
-            <circle cx="55" cy="13" r="7.6"></circle>
-            <circle class="cat-card-eye" cx="57.5" cy="11.5" r="1.15"></circle>
+            <path class="cat-card-boss-ear cat-card-boss-ear-far" d={CAT_EAR_FAR_D}></path>
+            <path class="cat-card-boss-ear cat-card-boss-ear-near" d={CAT_EAR_NEAR_D}></path>
+            <path d={CAT_HEAD_D}></path>
+            <g class="cat-card-eye">
+              <ellipse cx={CAT_EYE.cx} cy={CAT_EYE.cy} rx={CAT_EYE.rx} ry={CAT_EYE.ry}></ellipse>
+              <ellipse class="cat-card-pupil" cx={CAT_EYE.cx} cy={CAT_EYE.cy} rx={CAT_PUPIL.rx} ry={CAT_PUPIL.ry}></ellipse>
+            </g>
           </g>
         </svg>
       </div>
@@ -247,6 +253,11 @@ const POOL_JSON = JSON.stringify(TILE_POOL);
      the cat is drawn in profile. */
   :global(.cat-card-eye) {
     fill: var(--color-ground);
+  }
+  /* `.cat-card-eye` is a group now, so its ground fill inherits to everything inside it — which
+     would paint the pupil out. The pupil puts the ink back. */
+  :global(.cat-card-pupil) {
+    fill: var(--color-ink);
   }
 
   /* Treats found from browsing, on the collapsed icon — the ammo display (§2.2). */
