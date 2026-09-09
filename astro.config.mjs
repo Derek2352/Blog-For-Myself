@@ -4,15 +4,15 @@ import mdx from '@astrojs/mdx';
 import sitemap from '@astrojs/sitemap';
 import tailwindcss from '@tailwindcss/vite';
 import remarkStripComments from './plugins/remark-strip-comments.mjs';
+import { SITE_URL } from './src/lib/site-url.ts';
 import { paperLight, paperDark } from './plugins/shiki-paper-theme.mjs';
 
-// The live origin. Astro bakes this into every absolute URL it generates —
-// canonical links, og:image and twitter:image, og:url, the JSON-LD `url`, the
-// sitemap and the RSS feed. If it doesn't match where the site is actually
-// served, all of those point at a host that doesn't resolve and the build says
-// nothing. Change it here and in public/robots.txt together.
+// The live origin now lives in src/lib/site-url.ts, so the Astro and Next builds cannot
+// disagree about it — the failure if they did is the quiet one: every canonical link, og:image,
+// og:url, JSON-LD url, sitemap entry and RSS link points at a host that doesn't resolve, and the
+// build says nothing. Change it there and in public/robots.txt together.
 export default defineConfig({
-  site: 'https://derekyung.ai.studio',
+  site: SITE_URL,
   output: 'static',
   /**
    * Preload internal pages before they're clicked, so browsing feels instant.

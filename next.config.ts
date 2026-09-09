@@ -22,6 +22,23 @@ const nextConfig: NextConfig = {
   distDir: '.next',
 
   /**
+   * **`src/pages/` belongs to Astro, and Next also claims it.**
+   *
+   * Next's Pages Router reads `src/pages/` when it exists, alongside the App Router — so the first
+   * `next build` walked straight into Astro's routes and tried to bundle `src/pages/rss.xml.js`,
+   * which imports Astro's container API, which pulls in esbuild, which requires `os` and
+   * `worker_threads` in a browser bundle. The error it produced named `resvg` and `module-not-found`
+   * and said nothing about the actual cause.
+   *
+   * Restricting page extensions to `.tsx` resolves it exactly: every App Router file this build
+   * owns is a `.tsx`, and nothing in Astro's `src/pages/` is — they are `.astro`, `.ts` and `.js`.
+   * So the two routers cannot see each other's files even while sharing a parent directory. This
+   * stops mattering at the cutover, when `src/pages/` goes away; until then it is what lets both
+   * builds run from one tree.
+   */
+  pageExtensions: ['tsx'],
+
+  /**
    * Trailing slashes, because the Astro site has them and links are forever. Astro's default
    * `build.format: 'directory'` emits `/about/index.html`, so every internal link, every canonical
    * URL, the sitemap and every share card already say `/about/`. Turning this off would silently
@@ -36,9 +53,9 @@ const nextConfig: NextConfig = {
    */
   images: { unoptimized: true },
 
-  /* The build is the gate. A type error must stop it, exactly as `astro check` did. */
+  /* The build is the gate. A type error must stop it, exactly as `astro check` did — and it
+     already has, twice, which is the argument for leaving it this way. */
   typescript: { ignoreBuildErrors: false },
-  eslint: { ignoreDuringBuilds: true },
 };
 
 export default nextConfig;
