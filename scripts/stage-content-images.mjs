@@ -36,4 +36,16 @@ for (const collection of ['entries', 'logs']) {
     copied++;
   }
 }
-console.log(`staged images for ${copied} item(s) → public/content/`);
+/* `src/assets/` too — the portrait on /about/. Astro imported it as a module and let its asset
+   pipeline hash and emit it; a static export has no such pipeline for a path that arrives as an
+   import, so it is staged exactly like a cover and referenced by URL. */
+const ASSETS_SRC = path.join(ROOT, 'src', 'assets');
+const ASSETS_DEST = path.join(ROOT, 'public', 'assets');
+await rm(ASSETS_DEST, { recursive: true, force: true });
+let assets = 0;
+if (existsSync(ASSETS_SRC)) {
+  await cp(ASSETS_SRC, ASSETS_DEST, { recursive: true });
+  assets = (await readdir(ASSETS_SRC)).length;
+}
+
+console.log(`staged images for ${copied} item(s) → public/content/, ${assets} asset(s) → public/assets/`);

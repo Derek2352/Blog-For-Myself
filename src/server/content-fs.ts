@@ -93,6 +93,19 @@ async function measure(file: string): Promise<Omit<StaticImage, 'src'>> {
   return { width: meta.width, height: meta.height, format: meta.format ?? 'unknown' };
 }
 
+/**
+ * Measure a file staged under `public/`, for the handful of images that are not content.
+ *
+ * `/about/`'s portrait is the only one today. Astro imported it as a module and its asset pipeline
+ * supplied the dimensions; here it is staged by the same script as the covers and measured by the
+ * same function, so the page keeps emitting width and height and keeps not reflowing.
+ */
+export async function stagedImage(publicPath: string): Promise<StaticImage> {
+  const abs = path.join(process.cwd(), 'public', publicPath.replace(/^\//, ''));
+  const { width, height, format } = await measure(abs);
+  return { src: publicPath, width, height, format };
+}
+
 /** `./images/cover.svg` in `entries/foo/` → the staged public URL, measured. */
 async function resolveImage(collection: string, slug: string, ref: string): Promise<StaticImage> {
   const rel = ref.replace(/^\.\//, '');
