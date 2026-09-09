@@ -1,0 +1,705 @@
+/*
+ * The arena card's stylesheet.
+ *
+ * **The `:global()` wrappers are gone, and that was a real bug for one build.** In an Astro
+ * `<style>` block, `:global(.cat-tile)` is how you reach a node the component creates at runtime
+ * — the compiler strips the wrapper and leaves the bare selector. In a plain CSS file `:global()`
+ * is not valid CSS, so the browser discards the entire rule. Copying the file across therefore
+ * silently dropped thirteen rules here and one in cat.css: `arena` went from 55/55 to 53/55,
+ * reporting a tile with `touch-action: auto` that should refuse panning, and a claimed tile whose
+ * text contrast fell to 1.33 because its wash never applied. Nothing errored; two checks noticed.
+ *
+ * Lifted out of `CatCard.astro`'s scoped `<style>` so both builds share one copy. Global here
+ * rather than scoped, and safe by inspection: every selector is anchored to `#cat-card-*`,
+ * `.cat-card-*` or a `data-` attribute the card owns — there is no bare element selector.
+ *
+ * Imported from `global.css`, beside `cat.css`.
+ */
+
+.cat-card-root {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 50; /* above the page, below nothing the page needs; card chrome is deliberate */
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+/* ---- collapsed icon ---- */
+/* 3px of padding, not 6px. The silhouette was being drawn at 32px inside a 44px button, and
+   at that size the ears stop reading as ears and start reading as sparkles — the icon did not
+   say "cat". Nothing is redrawn (§0); it simply stops being shrunk. */
+.cat-card-icon {
+  display: block;
+  width: 44px;
+  height: 44px;
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--color-ink) 25%, transparent);
+  border-radius: 50%;
+  background: var(--color-ground);
+  color: var(--color-ink);
+  cursor: pointer;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-ink) 18%, transparent);
+}
+.cat-card-icon:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.cat-card-icon[aria-expanded='true'] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-ground));
+}
+/* `fill: currentColor` is load-bearing, not decoration: the sprite paths carry no `fill`
+   attribute, so without it they take SVG's initial value — pure black — and the cat
+   disappears into a dark-theme card instead of following `--color-ink`. */
+.cat-card-icon-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+}
+
+/* The eye is *knocked out* of the silhouette in the ground colour, exactly as `#site-cat`'s
+   `.cat-eye` is. The card's copy left it at `currentColor`, painting ink on ink, which is why
+   the cat looked eyeless and invited the cartoon face that had to be undone. One eye, because
+   the cat is drawn in profile. */
+.cat-card-eye {
+  fill: var(--color-ground);
+}
+/* `.cat-card-eye` is a group now, so its ground fill inherits to everything inside it — which
+   would paint the pupil out. The pupil puts the ink back. */
+.cat-card-pupil {
+  fill: var(--color-ink);
+}
+
+/* Treats found from browsing, on the collapsed icon — the ammo display (§2.2). */
+.cat-card-badge {
+  position: absolute;
+  right: -3px;
+  top: -3px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 17px;
+  text-align: center;
+}
+/* A visitor with treats to spend gets a gentle "come play" beat — the tap-to-play cue.
+   The beat only fires while collapsed, so it never competes with the game's own motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .cat-card-icon[aria-expanded='false'][data-cue] {
+    animation: cat-card-cue 2.6s ease-in-out infinite;
+  }
+}
+@keyframes cat-card-cue {
+  0%, 72%, 100% { transform: translateY(0); }
+  76%, 84% { transform: translateY(-3px); }
+  80% { transform: translateY(-5px); }
+}
+
+/* Idle animation beats — stretch, yawn, blink — signalling "I'm interactive" (§2.2). */
+@media (prefers-reduced-motion: no-preference) {
+  .cat-card-icon .cat-card-tail {
+    transform-origin: 7px 7px;
+    animation: cat-card-tail-wag 3.2s ease-in-out infinite;
+  }
+  .cat-card-icon .cat-card-ear-near {
+    animation: cat-card-ear-twitch 6s ease-in-out infinite;
+  }
+  .cat-card-icon .cat-card-eye {
+    animation: cat-card-blink 4.4s ease-in-out infinite;
+  }
+  .cat-card-icon[aria-expanded='false']:hover .cat-card-body {
+    animation: cat-card-stretch 0.9s ease-in-out;
+  }
+}
+@keyframes cat-card-tail-wag {
+  0%, 82%, 100% { transform: rotate(0deg); }
+  88%, 94% { transform: rotate(-14deg); }
+}
+@keyframes cat-card-ear-twitch {
+  0%, 96%, 100% { transform: rotate(0deg); }
+  97.5% { transform: rotate(8deg); }
+  99% { transform: rotate(-6deg); }
+}
+@keyframes cat-card-blink {
+  0%, 90%, 96%, 100% { transform: scaleY(1); }
+  93% { transform: scaleY(0.15); }
+}
+@keyframes cat-card-stretch {
+  0%, 100% { transform: scale(1); }
+  45% { transform: scale(1.12, 0.9); }
+}
+
+/* ---- expanded card ---- */
+.cat-card-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.6rem);
+  width: min(320px, calc(100vw - 2rem));
+  min-height: 240px;
+  background: var(--color-ground);
+  color: var(--color-ink);
+  border: 1px solid color-mix(in srgb, var(--color-ink) 22%, transparent);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--color-ink) 28%, transparent);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transform-origin: 100% 100%;
+}
+/* Near-full-width on a phone (§2.2): the card IS the game surface on a small screen. */
+@media (max-width: 480px) {
+  .cat-card-panel {
+    width: calc(100vw - 2rem);
+  }
+}
+.cat-card-panel[hidden] {
+  display: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cat-card-root[data-open] .cat-card-panel {
+    animation: cat-card-open 0.18s ease-out;
+  }
+  .cat-card-root[data-closing] .cat-card-panel {
+    animation: cat-card-close 0.14s ease-in forwards;
+  }
+}
+@keyframes cat-card-open {
+  from { opacity: 0; transform: scale(0.86); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes cat-card-close {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.86); }
+}
+
+/* Territory — a gauge, sitting directly above the board it describes.
+   It used to be a 3px bar *above the header*, where the card's own border-radius clipped its
+   left end and it stopped in mid-air with no track behind it: it read as a rendering glitch
+   rather than a measure of anything. Inset to the header's padding, with a visible track and
+   rounded caps, it reads as what it is. */
+/* This bar is the entire stakes of the fight, and at 2px it was a hairline nobody would
+   look at — quieting the chrome had quieted the one thing that should not be quiet. It is
+   the drama, so it gets weight: tall enough to see move, and a fill that goes from wine to
+   a warm amber as you take the board, so *winning changes colour*, not just length. */
+.cat-card-territory {
+  height: 5px;
+  margin: 0 0.6rem 0.5rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-ink) 12%, transparent);
+  overflow: hidden;
+}
+.cat-card-territory-fill {
+  height: 100%;
+  width: calc(100% * var(--territory, 0.55));
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    var(--color-accent),
+    hsl(calc(20 + 24 * var(--territory, 0.55)) 62% 48%)
+  );
+  transition: width 0.3s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/* Header — a caption, not a toolbar.
+   The chrome used to outshout the game: `sound` rendered as a filled wine lozenge, which made
+   the *mute button* the highest-contrast object on the card, above the board it sits on. The
+   rule now is that the chip is always neutral and **the pip carries the state** — a filled dot
+   for on, a hollow ring for off. The markup already had the pip; it was doing nothing. */
+.cat-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.42rem 0.6rem 0.36rem;
+}
+.cat-card-title {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: color-mix(in srgb, var(--color-muted) 80%, transparent);
+}
+.cat-card-controls {
+  display: flex;
+  gap: 0.26rem;
+}
+.cat-card-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.16rem 0.42rem;
+  font-size: 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--color-ink) 18%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: border-color 0.12s ease, color 0.12s ease;
+}
+.cat-card-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+/* Pressed moves the *text* to ink and the pip to accent — deliberately not a fill. A chip that
+   is on should read as settled, not as an alarm. */
+.cat-card-btn[aria-pressed='true'] {
+  color: var(--color-ink);
+  border-color: color-mix(in srgb, var(--color-ink) 28%, transparent);
+}
+.cat-card-pip {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border: 1px solid color-mix(in srgb, var(--color-muted) 70%, transparent);
+  border-radius: 50%;
+}
+.cat-card-btn[aria-pressed='true'] .cat-card-pip {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+/* ---- the board (the coordinate space) ---- */
+.cat-card-board {
+  position: relative;
+  flex: 1;
+  min-height: 180px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.45rem;
+  padding: 0.6rem;
+  align-content: start;
+  overflow: hidden;
+}
+
+/* Tiles are created by the script (`document.createElement`), so they never carry Astro's
+   scoping attribute — every rule that targets them must be ``, or the board renders
+   unstyled. This was a live bug: the harness's computed-style checks read `touch-action:
+   auto` and an empty box-shadow while the data-state attributes were working fine. */
+.cat-tile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  /* Labels sit at the top, not the middle. The board is where the cats walk, and centred
+     text put the labels exactly where the sprites are — "AI & Creative Projects" was being
+     read through a boss, a kitten and a speech bubble at once. Top-aligning gives every tile
+     a clear lower band to be walked across, and it gives the board the sky/ground structure
+     a playing surface wants. */
+  align-items: flex-start;
+  min-height: 46px;
+  padding: 0.28rem 0.35rem;
+  border: 1px solid color-mix(in srgb, var(--color-ink) 16%, transparent);
+  border-radius: 8px;
+  /* Its category's own hue. Eleven identical grey boxes read as a form; a warm mosaic reads
+     as a board, and it is the same hue the section's page is washed with, so the game looks
+     made of the portfolio rather than placed on top of it.
+     18%, not the 9% this was first tried at — at 9% the tiles were still visibly grey and the
+     idea did not earn its own complexity. A tint you have to look for is not a tint.
+     `background-color` stays a *solid* colour on purpose: `arena.mjs` reads it to recompute
+     label contrast against the claimed wash, and a gradient there would hand it `transparent`.
+     The sheen goes in `background-image`, where it costs that check nothing and gives the tile
+     enough curvature to read as a chip rather than an input field. */
+  background-color: color-mix(
+    in srgb,
+    hsl(var(--tile-hue, 30) 58% 50%) 18%,
+    var(--color-ground)
+  );
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-ground) 55%, transparent),
+    transparent 62%
+  );
+  /* 0.62rem, not 0.72. Four of eleven labels wrapped to two lines and nearly touched their
+     edges — the type was fighting the box. The box may not shrink (44px is the touch target),
+     so the type gives way, and the board gets its air back. */
+  font-size: 0.62rem;
+  line-height: 1.2;
+  text-align: center;
+  text-wrap: balance;
+  color: var(--color-ink);
+  /* §5.1's claim language: painted only, never laid out. */
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+  cursor: crosshair;
+}
+@media (hover: none), (pointer: coarse) {
+  .cat-tile {
+    -webkit-touch-callout: none;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: pinch-zoom;
+    cursor: auto;
+  }
+}
+
+/* unclaimed → neutral. claimed → wash + a tinted edge + tilt.
+   The edge was `2px dashed` at 62% accent. Six of those at once made the board read as an
+   error state or a cut-here template, and they were the busiest thing on a card whose busiest
+   thing should be the cat. A claim should feel *occupied*, not outlined: the tile's own border
+   goes accent-tinted and the wash does the rest.
+   The wash itself is untouchable — `touch-fight` parses this box-shadow's alpha and requires
+   `0.07 + 0.19 × --scrub`, and `arena` recomputes text contrast against exactly 7%. */
+.cat-tile[data-state='claimed'] {
+  box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--color-accent) 7%, transparent);
+  /* The cat's colour takes the tile over. Now that unclaimed tiles carry their category's own
+     hue, a 7% wash alone no longer separates the two states — one warm tint on another warm
+     tint. Claimed overrides the *base* colour so the board reads at a glance as "mine / its",
+     and the category hue disappears under it, which is exactly the fiction: the cat has taken
+     that square. The wash above is untouched — `touch-fight` parses its alpha. */
+  background-color: color-mix(in srgb, var(--color-accent) 22%, var(--color-ground));
+  border-color: color-mix(in srgb, var(--color-accent) 58%, transparent);
+  transform: rotate(var(--tile-tilt, 0deg)) scale(0.99);
+}
+
+/* being-scrubbed → the wash deepens toward the freed tint (§5.2's in-claim progress), and the
+   edge firms up with it, so a tile being taken is legible at a glance and not only by tint. */
+.cat-tile[data-state='scrubbing'] {
+  box-shadow: inset 0 0 0 100vmax
+    color-mix(in srgb, var(--color-accent) calc(7% + 19% * var(--scrub, 0)), transparent);
+  border-color: color-mix(in srgb, var(--color-accent) 72%, transparent);
+}
+
+/* freed → the flash, then back to neutral. Same 0.42s ease as the page game. */
+@media (prefers-reduced-motion: no-preference) {
+  .cat-tile[data-state='freed'] {
+    animation: cat-tile-freed 0.42s ease-out;
+  }
+}
+@keyframes cat-tile-freed {
+  0% { box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--color-accent) 26%, transparent); }
+  100% { box-shadow: inset 0 0 0 100vmax transparent; }
+}
+
+/* ---- the game layer (boss, kittens, treat, ribbon) ---- */
+/* 28×18, up from 24×15. On a 318×217 board carrying eleven labelled tiles, a 24px cat was the
+   least visible thing on screen — in a game about a cat. The sprite is presentation only; the
+   fight's geometry comes from `card.ts`'s constants, not from how big the drawing is. */
+.cat-card-boss {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 28px;
+  height: 18px;
+  pointer-events: none;
+  color: var(--color-ink);
+  z-index: 3;
+  /* Doubled halo. The sprites cross tinted tiles and their labels, and a single 2px ground
+     shadow was not enough separation once the tiles gained colour — the cat has to stay the
+     most legible thing on the board. */
+  filter: drop-shadow(0 0 2px var(--color-ground)) drop-shadow(0 0 3px var(--color-ground));
+}
+.cat-card-boss-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: currentColor; /* same reason as the icon above — no `fill` attribute on the paths */
+  /* The cat swells with the ground it holds (§7.3's characterisation, and the page game's own
+     `--boss-scale`). `paintTerritory` has been *setting* this custom property since 2.2 and
+     nothing ever read it — the boss never actually grew. Applied with the `scale` property
+     rather than `transform`, so it composes with the facing flip below and, more importantly,
+     leaves `[data-boss]`'s layout box at 28×18: the fleet measures the boss's rect for every
+     distance check, and a cosmetic swell must not move a measurement. */
+  scale: var(--boss-scale, 1);
+  transform-origin: 50% 60%;
+  transition: scale 0.4s ease-out;
+}
+.cat-card-boss[data-facing='-1'] .cat-card-boss-svg {
+  transform: scaleX(-1);
+}
+
+/* ---- posture: the states the model already knows, made visible ----
+   The boss has carried `data-stance`, `data-mood` and `data-groom` since 2.2 and **nothing
+   read any of them** — four stances and three moods rendered the same picture, and the only
+   consumers were harness assertions. §7.3's claim is that difficulty scales *as behaviour you
+   can read*; movement alone was carrying that, so a sleepy cat and an ambush cat differed
+   only in speed, which reads as lag rather than character.
+
+   Drawn with the parts already in the silhouette — a tail angle, an ear rotation, a head dip.
+   No new art, and SVG children need an explicit `transform-origin` because theirs is `0 0`
+   rather than the box centre. Mood and stance come *before* the phase rules below on purpose:
+   a telegraph or a landing is momentary and must override the standing posture. */
+.cat-card-boss-tail {
+  transform-origin: 11px 23px;
+}
+.cat-card-boss-head {
+  transform-origin: 52px 13px;
+}
+.cat-card-boss-ear {
+  transform-origin: 55px 9px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cat-card-boss-tail,
+  .cat-card-boss-head,
+  .cat-card-boss-ear {
+    transition: transform 0.45s ease;
+  }
+}
+
+/* Mood — the rubber band, on the tail. A bored cat lets it fall; a desperate one carries it
+   up and stiff. `even` is deliberately unstyled: the neutral state should look like nothing.
+
+   Signs matter and were wrong on the first pass. The tail is drawn curving *up and back* from
+   its base at (11,23), so a positive (clockwise) rotation **raises** it and a negative one
+   drops it — rendering all seven postures side by side showed "bored" standing to attention
+   and "desperate" slouching, the exact opposite of the intent. Angles are generous because
+   this is read at 28px, not at the size it was authored. */
+.cat-card-boss[data-mood='bored'] .cat-card-boss-tail {
+  transform: rotate(-32deg);
+}
+.cat-card-boss[data-mood='desperate'] .cat-card-boss-tail {
+  transform: rotate(20deg);
+}
+/* …and on the ears, which pin back when it means it. */
+.cat-card-boss[data-mood='desperate'] .cat-card-boss-ear {
+  transform: rotate(-22deg);
+}
+
+/* Stance — only `sleepy` gets a tell, and it needs one most: its 0.55× stalk otherwise looks
+   like the game has stalled rather than like a cat that cannot be bothered. Ears droop
+   forward, tail hangs. */
+.cat-card-boss[data-stance='sleepy'] .cat-card-boss-ear {
+  transform: rotate(17deg);
+}
+.cat-card-boss[data-stance='sleepy'] .cat-card-boss-tail {
+  transform: rotate(-38deg);
+}
+
+/* Grooming — §7.3's tell, which the harness has been asserting on an attribute the player
+   could not see. The cat stops and washes: head down, tail tucked in along the body. */
+.cat-card-boss[data-groom='1'] .cat-card-boss-head {
+  transform: translate(-2px, 4px) rotate(-16deg);
+}
+.cat-card-boss[data-groom='1'] .cat-card-boss-tail {
+  transform: rotate(-42deg);
+}
+
+/* A landed swat. `SWAT_STUN_MS` (900) of stillness the player bought by hitting a recovering
+   cat with a treat — and until now it looked exactly like an ordinary recovery, because this
+   class was added by the script and styled nowhere. The cat rocks back once and wears the
+   accent while it is stunned, so the reward for a well-timed throw is visible. */
+.cat-card-boss.boss-swatted {
+  color: var(--color-accent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cat-card-boss.boss-swatted .cat-card-boss-svg {
+    animation: cat-card-swat 0.34s cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+}
+/* Animates the independent `translate` and `rotate` properties, **not** `transform`. This
+   element's `transform` already carries the facing flip (`scaleX(-1)`), and a keyframe writing
+   `transform` would drop the flip for the animation's duration — the cat would spin round to
+   face right mid-swat. The individual properties compose with it instead. */
+@keyframes cat-card-swat {
+  0% { translate: 0; rotate: 0deg; }
+  35% { translate: 3px; rotate: 7deg; }
+  70% { translate: -1.5px; rotate: -3deg; }
+  100% { translate: 0; rotate: 0deg; }
+}
+
+/* A graze — §16's dead zone, made visible. The swipe crossed the cat but ran along its line, so
+   `veer` rejected it and nothing moved. Until 2.5.1 that looked exactly like missing the cat
+   altogether, which leaves a player unable to tell "you were nowhere near it" from "you were on it
+   and pushed the wrong way" — and only the second tells them what to change.
+
+   Deliberately the *opposite* half of the swat's vocabulary, so the two can never be confused: the
+   swat moves the whole body and wears the accent, while a graze moves one extremity and keeps the
+   cat's colour. Annoyed, not displaced. No cue either — this is feedback about aim that a learning
+   player will trigger constantly, and a sound on a mistake you are about to repeat is how a mechanic
+   becomes irritating.
+
+   **The tail alone, swept forward over the back**, chosen by rendering seven candidates at 28px
+   rather than at the size they were authored. Two findings from that sheet:
+
+   - **The ear does nothing here.** Pinned at -18° on its own it is indistinguishable from neutral at
+     true size, and the ears already carry `desperate` mood, `sleepy` stance and the telegraph charge —
+     a fourth meaning would muddy three existing tells to add nothing.
+   - **The obvious pose was the forbidden one.** Rotating the tail *negative* raises it into a near
+     vertical stroke, which reads beautifully and is exactly the kitten's signature: §0 and 2.3 make "a
+     tail carried straight up" the one shape the boss never makes, because it is what tells your side
+     from its side at 16px. So the flick goes the other way, sweeping the tail forward across the back
+     — clear of every standing posture (`bored` -32°, `desperate` +20°, `sleepy` -38°, `groom` -42°)
+     and clear of the squad.
+
+   On the independent `rotate` property, not `transform`, for the same compositional reason the swat
+   avoids it: the tail already carries `transform: rotate()` from those posture rules, and a keyframe on
+   `transform` would blank the cat's standing posture for the duration. `rotate` composes, so a
+   desperate cat's flick starts from where a desperate cat's tail already is.
+
+   The held form is stated first and unconditionally, and that is also the reduced-motion form. It
+   matters more here than for the swat: the swat's accent colour is ungated and its shake is garnish,
+   so it degrades to a colour change and stays legible, whereas a graze's whole tell *is* movement.
+   Gating it would put the dead zone straight back to invisible for exactly the visitors who cannot see
+   a twitch. §11's motion row is a promise about vestibular safety, not a licence to drop information. */
+.cat-card-boss.boss-grazed .cat-card-boss-tail {
+  rotate: 60deg;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cat-card-boss.boss-grazed .cat-card-boss-tail {
+    animation: cat-card-graze-tail 0.3s ease-out;
+  }
+}
+@keyframes cat-card-graze-tail {
+  0% { rotate: 0deg; }
+  30% { rotate: 66deg; }
+  70% { rotate: 44deg; }
+  100% { rotate: 60deg; }
+}
+
+.cat-card-boss[data-phase='telegraph'] .cat-card-boss-ear-near {
+  transform-origin: 60px 6px;
+  animation: cat-card-ear-charge 0.42s ease-in-out infinite alternate;
+}
+@keyframes cat-card-ear-charge {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(14deg); }
+}
+.cat-card-boss[data-phase='leap'] .cat-card-boss-svg {
+  animation: cat-card-leap-bob 0.26s ease-in-out;
+}
+@keyframes cat-card-leap-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.cat-card-boss[data-phase='recover'] .cat-card-boss-body {
+  transform-origin: 34px 15px;
+  transform: scale(1.06, 0.88);
+}
+.cat-card-boss[data-phase='eat'] .cat-card-boss-head {
+  transform-origin: 52px 12px;
+  transform: translate(2px, 3px) rotate(12deg);
+}
+
+.cat-card-squad {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+/* Kittens are created by the script, so — like the tiles above — they never carry Astro's
+   scoping attribute and every rule must be ``. Unscoped, the kitten filled the whole
+   board in pure black: no width, no height, `position: static`, and `fill` falling back to the
+   SVG initial value instead of `currentColor`. */
+.cat-card-kit {
+  position: absolute;
+  left: 0;
+  top: 0;
+  /* 16×13, matching the kitten's own 44×36 viewBox — taller than long, where the boss's
+     28×18 is longer than tall. The two silhouettes have different footprints on purpose. */
+  width: 16px;
+  height: 13px;
+  color: var(--color-ink);
+  fill: currentColor;
+  opacity: 0.92;
+  /* The same ground-coloured halo the boss has. A kitten standing on a tinted claimed tile had
+     nothing separating it from the tile. */
+  filter: drop-shadow(0 0 1.5px var(--color-ground)) drop-shadow(0 0 2.5px var(--color-ground));
+}
+.cat-card-kit svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.cat-card-kit[data-facing='-1'] svg {
+  transform: scaleX(-1);
+}
+.cat-card-kit[data-hit='1'] {
+  animation: cat-card-kit-flinch 0.22s ease-in-out;
+}
+@keyframes cat-card-kit-flinch {
+  0%, 100% { transform: translate(0, 0); }
+  40% { transform: translate(3px, 1px); }
+}
+
+.cat-card-treat {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  color: var(--color-accent);
+  z-index: 4;
+}
+.cat-card-treat svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.cat-card-treat.eaten {
+  animation: cat-card-treat-eat 0.5s ease-in forwards;
+}
+@keyframes cat-card-treat-eat {
+  to { opacity: 0; transform: scale(0.3); }
+}
+
+/* A speech bubble, not a slab. It was solid `--color-ink` with inverted text — a black bar
+   across two tiles, and the second-loudest thing on the card after the old sound chip. A small
+   cat should not speak in the largest voice available. Ground with an accent hairline keeps it
+   legible over tiles while reading as *paper*, like the rest of the site. */
+.cat-card-ribbon {
+  position: absolute;
+  z-index: 5;
+  max-width: calc(100% - 1rem);
+  padding: 0.2rem 0.45rem;
+  border-radius: 7px;
+  background: var(--color-ground);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 40%, transparent);
+  box-shadow: 0 1px 5px color-mix(in srgb, var(--color-ink) 16%, transparent);
+  color: var(--color-ink);
+  font-size: 0.6rem;
+  line-height: 1.3;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
+}
+/* The tail — so the line is attached to whoever is saying it. `--tail-x` is set per line from
+   the boss's position, because the bubble is only centred on the cat until a board edge
+   clamps it. */
+.cat-card-ribbon::after {
+  content: '';
+  position: absolute;
+  left: var(--tail-x, 12px);
+  bottom: -4px;
+  width: 6px;
+  height: 6px;
+  background: inherit;
+  border-right: inherit;
+  border-bottom: inherit;
+  transform: rotate(45deg);
+}
+.cat-card-ribbon.show {
+  opacity: 1;
+}
+
+/* Status text recedes. At 0.72rem in letterspaced uppercase it was competing with the tile
+   labels for attention while saying much less. */
+.cat-card-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.36rem 0.6rem 0.42rem;
+  border-top: 1px solid color-mix(in srgb, var(--color-ink) 10%, transparent);
+  font-size: 0.58rem;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--color-muted) 85%, transparent);
+}
+/* The caption is the game's voice; it gets the width and stays on one line. Empty between
+   beats, so it reserves its height to keep the card from resizing under the player. */
+.cat-card-caption {
+  min-height: 1.3em;
+  color: var(--color-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cat-card-stats {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
