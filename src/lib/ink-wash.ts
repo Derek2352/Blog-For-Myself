@@ -1,0 +1,863 @@
+/**
+ * The hero ink — a wet-paper simulation, not a drawing of one.
+ *
+ * Ink is injected across a band, then water carries pigment through paper and evaporates.
+ * Bleeding, soft edges, granulation and the darkened rims are consequences of the model rather than
+ * things this file draws. The physics lives in `ink-field.ts`; this file owns the pixels and the
+ * clock.
+ *
+ * ## Why it is a module rather than a component script
+ *
+ * This was 800 lines inside `InkWash.astro`'s `<script>`, of which about 750 were the engine and
+ * about 50 were Astro's lifecycle wiring — `astro:page-load` to mount, `astro:before-swap` to
+ * unmount. Porting to React by copying it would have produced a second copy of a fluid simulation,
+ * which is the last thing on this site that should exist twice: the two would drift, and the
+ * drift would be invisible, because "the ink looks slightly different" is not something anybody
+ * can diff.
+ *
+ * So the engine moved here whole, and `startInkWash()` is the only thing either framework touches.
+ * Astro tears down and restarts it per navigation; React calls it from an effect and returns the
+ * disposer as the cleanup. Same pixels, same clock, one implementation.
+ */
+
+import { motionReduced } from '@/lib/a11y-prefs';
+import {
+  CYCLE_MS,
+  INK_PEAK_ALPHA,
+  INK_SEED,
+  entrance,
+  inkAfterDrying,
+  mulberry32,
+  strokePresence,
+  valueNoise2,
+} from '@/lib/ink';
+import {
+  blurField,
+  ceilConc,
+  coverage,
+  createField,
+  DENSITY_FULL,
+  dropPlan,
+  fiveTones,
+  haloAlpha,
+  injectBlob,
+  injectStreak,
+  mottleAt,
+  sampleSmooth,
+  reseedField,
+  resetField,
+  stepInk,
+  throwAngle,
+  TONES,
+  visible,
+  voidAt,
+  type Drop,
+  type InkField,
+} from '@/lib/ink-field';
+
+/**
+ * Paper cell size in CSS pixels.
+ *
+ * Back to 4. Padding the field for the off-frame source pushed a 1280 hero
+ * from 37k cells to 69k and the frame time with it, and coarsening to 5 was
+ * the obvious lever — but it was paying for the wrong thing. The cost was
+ * `flowBias`, recomputed per cell per tick at six noise evaluations a time;
+ * it is a pure function of position and seed and is now cached on the field.
+ *
+ * With that gone the finer grid is affordable again, and it is worth having:
+ * coarsening measurably softened the silhouette (edge sharpness 0.043 to
+ * 0.024) and lost two of the four detached satellites.
+ */
+const CELL = 4;
+/**
+ * Ink moves slowly; 60fps would buy nothing and cost battery.
+ *
+ * 10 rather than 15, to pay for deciding tone per output pixel instead of per
+ * cell — that is what took the staircase off the ink's edge, and it cost about
+ * 40ms a frame, which 15fps had no room for. Fewer, longer frames is the right
+ * trade for a wash: the ink advances at the same rate per second because TICKS
+ * rose to match, so only the repaint rate changed, and the mark is slow enough
+ * that nobody can see the difference between 10 and 15.
+ */
+const FRAME_MS = 1000 / 10;
+/** How long the rain takes to fall across the sheet. */
+const INJECT_MS = 2200;
+/**
+ * Drops per pour, as a range — the count is rolled with the seed.
+ *
+ * Kept small at both ends. "Fewer drops, broader spread" was a deliberate
+ * decision and a range is not licence to abandon it; this varies the
+ * composition without ever crowding the sheet.
+ */
+const DROPS_MIN = 2;
+const DROPS_MAX = 4;
+/**
+ * Render-time softening radius, in cells.
+ *
+ * Halved. This was suppressing cell-scale noise back when the mottling swung
+ * +/-72% and the alpha curve magnified whatever it touched; with tone coming
+ * from a piecewise-constant field and mottling at 0.22 there is far less to
+ * suppress, and what it was costing was the thing a splash needs most — an
+ * edge that stops. Watch it: too little blur is what made the ink read as
+ * granular and dirty, twice.
+ */
+const BLUR = 1;
+/**
+ * How far the simulation runs past the frame, as a share of the canvas.
+ *
+ * The whole point of the composition. Every drop used to land *inside* the
+ * canvas, so what showed was always a complete blob — rounded far side and
+ * all — and a complete shape centred in view reads as an object on a page. A
+ * fragment entering from off-frame reads as scale, and as a gesture that
+ * began somewhere else.
+ *
+ * Two things made that impossible: the field was exactly the canvas, so
+ * anything placed outside was clipped away by the injector; and the field's
+ * edge is a no-flux wall, so ink banked against the frame instead of flowing
+ * in across it. Padding fixes both at once — the wall moves off-screen, and
+ * the source can sit beyond the boundary and bleed inward.
+ *
+ * On **every** side, not just the two the throw comes from. Padding only the
+ * source side was my first attempt and it was plainly wrong: the field's
+ * remaining edges are still walls, so the plume climbing away from its source
+ * banked against the top of the window instead — measured, peak alpha 0.8
+ * sitting in a band at y = 0, with the body of the hero nearly empty. Ink has
+ * to be able to leave the frame on the side it is travelling toward as much
+ * as arrive from the side it started on.
+ *
+ * Generous where the throw is sourced, thinner elsewhere — the far edges only
+ * need enough room to keep the wall out of shot.
+ */
+const MARGIN_L = 0.22;
+const MARGIN_B = 0.26;
+const MARGIN_T = 0.14;
+const MARGIN_R = 0.1;
+/** How wide, in CSS pixels, the tone ceiling fades in around a text block. */
+const RESERVE_FEATHER = 44;
+/** How far that fade's reach wanders, so its edge is not the box's edge. */
+const RESERVE_WANDER = 0.75;
+/**
+ * Output pixels per simulation cell, per axis.
+ *
+ * The silhouette and the tonal steps are decided per *output* pixel now, not
+ * per cell, so this is what takes the 4px staircase off the ink's edge. 2
+ * rather than 4: it removes the visible facets while leaving a 2x upscale for
+ * `drawImage` to smooth, and full resolution would be four times the per-pixel
+ * work for a difference the blur and the upscale hide anyway.
+ */
+const SUPERSAMPLE = 2;
+/** How far the main pours are stretched along the throw. */
+const ELONGATION = 2.3;
+/**
+ * Simulation ticks per painted frame. More is faster ink, not smoother.
+ *
+ * 12 at 10fps is 120 ticks a second, exactly what 8 at 15fps was. The ink's
+ * pace is a property of ticks per second, not per frame, so this has to move
+ * whenever FRAME_MS does or the whole animation changes speed.
+ */
+const TICKS = 12;
+/** Hard cap on live cursor drips, so a fast scribble stays bounded. */
+const MAX_DRIPS = 26;
+/** Minimum travel between drips, in CSS pixels. */
+const DRIP_GAP = 22;
+/**
+ * The ink's colour, read live from `--color-ink`.
+ *
+ * This was a fixed near-white while the layer composited with `difference`,
+ * where inversion made theme handling automatic. Composited normally it has to
+ * follow the theme again: espresso on cream, and pale on dark ground.
+ */
+let inkRgb = '42, 36, 30';
+
+/**
+ * This visit's composition.
+ *
+ * Every pure function downstream already took a seed argument, so varying the
+ * mark is entirely a matter of which number gets handed in — the paper's
+ * fibre and drift, the drop plan, the tone assignment, the mottling, the
+ * voids and the reservation's wobble all follow from it.
+ */
+let seed = INK_SEED;
+/** How many pours this visit gets. Rolled with the seed. */
+let dropCount = 3;
+
+/**
+ * Whether the composition is pinned, and to what.
+ *
+ * `?ink=<n>` fixes the mark for the whole visit — not a debug leftover, but
+ * what lets the measurement harnesses report comparable numbers instead of a
+ * different roll on every run and every pour.
+ */
+function pinnedSeed(): number | null {
+  const q = new URLSearchParams(location.search).get('ink');
+  return q && /^\d{1,10}$/.test(q) ? Number(q) : null;
+}
+
+/**
+ * Roll the next composition.
+ *
+ * This used to hold its roll in sessionStorage so that leaving the homepage
+ * and coming back showed the same mark. That rationale is gone: the mark now
+ * changes on every pour, roughly every twelve seconds, so persisting the first
+ * one bought nothing but a storage dependency.
+ */
+function rollSeed(): number {
+  return pinnedSeed() ?? ((Math.random() * 0xffffffff) >>> 0);
+}
+
+/**
+ * Choose the seed, cut the paper for it, and plan the pour.
+ *
+ * Shared by the mount path and the per-pour wipe so the two cannot drift.
+ * `reseed` false is the mount case, where `resize` has just built the field
+ * from the seed already and re-cutting it would be wasted work.
+ */
+function planPour(reseed: boolean): void {
+  if (!field) return;
+  seed = rollSeed();
+  dropCount = DROPS_MIN + Math.floor(mulberry32(seed + 6421)() * (DROPS_MAX - DROPS_MIN + 1));
+  buildPaper(field.gw, field.gh);
+  if (reseed) {
+    reseedField(field, seed);
+    if (canvas) buildReserve(field.gw, canvas.getBoundingClientRect());
+  }
+  // Placed across the padded field, but *sized* to the window — see sizeRef.
+  //
+  // Scaled by 1/sqrt(count) so a four-drop roll uses four smaller drops
+  // rather than a third more ink. The roll should vary the arrangement, not
+  // the amount; without it the sparse end sat at 18% of the hero covered.
+  const spread = winH * Math.sqrt(3 / dropCount);
+  drops = dropPlan(field.gw, field.gh, 0, field.gh, dropCount, seed, spread);
+  injectedTo = -1;
+  dripCount = 0;
+}
+
+let canvas: HTMLCanvasElement | null = null;
+let view: CanvasRenderingContext2D | null = null;
+/** Small canvas at grid resolution. Upscaling it is what softens the ink. */
+let grid: HTMLCanvasElement | null = null;
+let gridCtx: CanvasRenderingContext2D | null = null;
+let pixels: ImageData | null = null;
+let field: InkField | null = null;
+let host: HTMLElement | null = null;
+let raf = 0;
+let last = 0;
+let onScreen = false;
+let io: IntersectionObserver | null = null;
+let arrivedAt = 0;
+let cycleAt = 0;
+let lastTick = 0;
+let lastScrollAt = -Infinity;
+let pointerOver = false;
+/**
+ * How far through the pour we are, 0–1 — or -1 for "not started".
+ *
+ * The sentinel is load-bearing. `rainTo` lands a drop when `d.at > injectedTo`,
+ * and `dropPlan` gives the first drop `at = 0`, so starting this at 0 made
+ * `0 > 0` false and **the head pour never landed at all**. That is the
+ * biggest, most heavily charged drop, the one placed off-frame that the whole
+ * framing rests on; every composition was quietly missing it. With two drops
+ * rolled it meant a single drop landed.
+ */
+let injectedTo = -1;
+let drops: Drop[] = [];
+/** Per-cell weight for the text tone ceiling — see buildReserve. */
+let reserve: Float32Array | null = null;
+/**
+ * The paper's appearance, precomputed per cell: mottling times 留白.
+ *
+ * Both are pure functions of position and seed, so they are the same on every
+ * frame of a pour — and they were being recomputed for every cell on every
+ * frame, four noise evaluations at a time. That is ~150k wasted noise samples
+ * a frame, and paying for them is what makes rendering above cell resolution
+ * affordable. Same reasoning as caching flowBias on the field.
+ */
+let paper: Float32Array | null = null;
+/** 留白 alone — the halo is modulated by the voids but not by the mottling. */
+let voids: Float32Array | null = null;
+/** The throw's direction, in radians. */
+let axis = 0;
+/** The visible window's origin within the (larger) field, in cells. */
+let offX = 0;
+let offY = 0;
+/** The visible window's size in cells — the field is bigger than this. */
+let winW = 0;
+let winH = 0;
+let smooth: Float32Array | null = null;
+let scratch: Float32Array | null = null;
+let dripCount = 0;
+let lastDripX = 0;
+let lastDripY = 0;
+
+/**
+ * Resolved on first use, not at module scope — and this was found by the Next build failing rather
+ * than by reading the code.
+ *
+ * A `'use client'` module still *executes* during prerender, so that its output can be sent as
+ * HTML; only its effects are skipped. A bare `matchMedia(...)` at module scope therefore runs on
+ * the server, where it does not exist, and takes the whole static export down with
+ * `ReferenceError: matchMedia is not defined`. Astro never surfaced this because the engine lived
+ * in a `<script>`, which is client-only by construction.
+ *
+ * Every consumer already runs inside `mount()` or a listener, so a lazy getter costs nothing and
+ * makes the rule explicit: **no browser global at module scope in shared code.**
+ */
+let finePointerQuery: MediaQueryList | null = null;
+const getFinePointer = (): MediaQueryList =>
+  (finePointerQuery ??= matchMedia('(hover: hover) and (pointer: fine)'));
+
+/** `#2a241e` → `42, 36, 30`. */
+function toRgb(hex: string): string | null {
+  const h = hex.trim().replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  if (full.length !== 6 || /[^0-9a-f]/i.test(full)) return null;
+  const n = parseInt(full, 16);
+  return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+}
+
+function readInk(): void {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue('--color-ink');
+  const rgb = toRgb(raw);
+  if (rgb) inkRgb = rgb;
+}
+
+/**
+ * True when someone is plainly engaged with the hero.
+ *
+ * Used only to withhold the ink's *return* — it is free to keep drying, but it
+ * may not flood back over a line someone is reading. Fading out is polite;
+ * fading back in mid-sentence is worse than never having moved.
+ */
+function engaged(): boolean {
+  return pointerOver || performance.now() - lastScrollAt < 1200;
+}
+
+/** Let the drops that are due since the last frame land on the paper. */
+function rainTo(front: number): void {
+  if (!field || front <= injectedTo) return;
+  for (const d of drops) {
+    // Every pour is a streak now. This used to branch on size, sending small
+    // drops to injectBlob because satellite droplets land round rather than
+    // stretched — the satellites are gone, so the branch went with them.
+    if (d.at > injectedTo && d.at <= front) {
+      injectStreak(field, d.x, d.y, d.r, axis, ELONGATION, d.amount, d.conc, seed);
+    }
+  }
+  injectedTo = front;
+}
+
+function draw(now: number): void {
+  if (!field || !view || !canvas || !grid || !gridCtx || !pixels) return;
+  if (!arrivedAt) arrivedAt = now;
+  const { soak } = entrance(now - arrivedAt);
+
+  // Advance the cycle by real elapsed time, except that it may not step *into*
+  // a rising presence while someone is reading. Holding the clock rather than
+  // resetting it means the ink resumes where it left off instead of lurching.
+  const step = lastTick ? Math.min(250, now - lastTick) : 0;
+  lastTick = now;
+  if (step > 0) {
+    const next = cycleAt + step;
+    if (!(engaged() && strokePresence(next) > strokePresence(cycleAt))) {
+      cycleAt = next % (CYCLE_MS * 1024);
+    }
+  }
+  const presence = strokePresence(cycleAt);
+
+  // The cycle drives *injection*, not opacity. Ink is poured while presence
+  // holds, and the sheet is wiped once the hero is properly clear — so each
+  // cycle is a fresh pour rather than the same stain fading in and out.
+  if (presence > 0) {
+    if (step > 0) rainTo(Math.min(1, Math.max(0, injectedTo) + step / INJECT_MS));
+    for (let t = 0; t < TICKS; t++) stepInk(field, 1);
+  } else if (injectedTo >= 0) {
+    // A fresh mark, not the same one poured again. The seed used to be chosen
+    // once at mount, so every pour in a visit re-laid an identical
+    // composition and the variety only showed on refresh — the one moment
+    // nobody is watching.
+    //
+    // This is also the cheapest frame in the cycle to do expensive work: the
+    // branch runs the moment presence hits 0, and the very next statement
+    // clears the canvas and returns without rendering anything.
+    resetField(field);
+    planPour(true);
+  }
+
+  // Nothing on the paper and nothing to simulate: clear once and stop doing
+  // per-frame work. The clear phase is the majority of the cycle, so this is
+  // where the simulation pays for itself.
+  if (presence <= 0) {
+    view.clearRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
+
+  // ---- deposited pigment → pixels
+  // Soften first. The alpha curve has to be steep to clear the blend's dead
+  // middle, and a steep transfer turns any cell-to-cell variation into
+  // speckle — which is what made the wash granular rather than silky.
+  // What you see in water is the pigment *in suspension*, not what has
+  // settled. Rendering deposit alone was also why the plume could not spread:
+  // pigment only deposits as water dries, and drying is exactly what stops it
+  // travelling — so the visible ink was always the part that had stopped
+  // moving. Suspended plus settled is both more honest and what lets a drop
+  // stay visible for the whole time it is spreading.
+  const vis = visible(field);
+  if (smooth && scratch) blurField(vis, smooth, scratch, field.gw, field.gh, BLUR);
+  const data = pixels.data;
+  const dep = smooth ?? vis;
+  const parts = inkRgb.split(',');
+  const r = Number(parts[0]);
+  const g = Number(parts[1]);
+  const b = Number(parts[2]);
+  const fw = field.gw;
+  const conc = field.conc;
+  // `soak` is taken by the entrance envelope above, hence the longer name.
+  const soakField = field.soak;
+  // Two loops, not one flat pass: the canvas is a *window* into a field that
+  // extends past it on the left and below. Walking the field flat would paint
+  // the margins — the part of the plume that is deliberately out of shot.
+  const fh = field.gh;
+  const ss = SUPERSAMPLE;
+  const outW = winW * ss;
+  const outH = winH * ss;
+  // One decision per *output* pixel, on an interpolated field — not one per
+  // simulation cell with the result upscaled afterwards.
+  //
+  // That ordering was the whole "pixel edge" problem. `coverage` is nearly a
+  // step and `fiveTones` is deliberately a staircase, so evaluating them at
+  // cell resolution put every silhouette and every tonal boundary exactly on
+  // the cell grid, and a 4x upscale then rendered each cell as a 4px facet.
+  // Interpolating first puts those boundaries on the ink.
+  for (let oy = 0, p = 0; oy < outH; oy++) {
+    // cell coordinates of this output pixel's centre
+    const fy = (oy + 0.5) / ss - 0.5 + offY;
+    for (let ox = 0; ox < outW; ox++, p += 4) {
+      const fx = (ox + 0.5) / ss - 0.5 + offX;
+      const d = sampleSmooth(dep, fw, fh, fx, fy);
+      let a = 0;
+      if (d > 0) {
+        // Normalised against DENSITY_FULL, not clamped at 1. A settled plume
+        // runs past 2.4 here, so clamping made two thirds of the ink
+        // numerically identical before any of the steps below could see it.
+        const load = d >= DENSITY_FULL ? 1 : d / DENSITY_FULL;
+        // Floored at 清. There is no register below "the palest wash you can
+        // still see", so ink that exists reads as at least that — and letting
+        // dilution fall through to nothing had a specific cost: the advancing
+        // front of a bleed is always its most dilute part, so the plume's
+        // leading edge rendered as blank paper and the ink looked like it had
+        // stopped spreading.
+        let c = sampleSmooth(conc, fw, fh, fx, fy);
+        if (c < TONES[0]!) c = TONES[0]!;
+        // Words first: ink may cross the text, it may not be strong there.
+        if (reserve) c = ceilConc(c, sampleSmooth(reserve, fw, fh, fx, fy));
+        a =
+          fiveTones(c) *
+          coverage(inkAfterDrying(load, presence)) *
+          (paper ? sampleSmooth(paper, fw, fh, fx, fy) : 1);
+      }
+      // 滲透: the watermark the water left, where it ran on past the ink.
+      // Composited as a max rather than added, so it can only darken bare
+      // paper — the halo must never deepen ink that is already there, or it
+      // stops being a property of the sheet and becomes another tone.
+      const halo =
+        haloAlpha(sampleSmooth(soakField, fw, fh, fx, fy)) *
+        (voids ? sampleSmooth(voids, fw, fh, fx, fy) : 1);
+      if (halo > a) a = halo;
+      data[p] = r;
+      data[p + 1] = g;
+      data[p + 2] = b;
+      data[p + 3] = a * 255;
+    }
+  }
+  gridCtx.putImageData(pixels, 0, 0);
+
+  // The upscale is the softening. That trick was wrong for a crisp brush but
+  // is right here: diffusion output genuinely is smooth.
+  view.clearRect(0, 0, canvas.width, canvas.height);
+  view.globalAlpha = INK_PEAK_ALPHA * soak;
+  view.imageSmoothingEnabled = true;
+  view.imageSmoothingQuality = 'high';
+  view.drawImage(grid, 0, 0, canvas.width, canvas.height);
+  view.globalAlpha = 1;
+}
+
+function frame(now: number): void {
+  // Front-page-only, so it cannot use transition:persist and must genuinely
+  // stop. This check cannot leak even if a teardown event is ever missed.
+  if (!canvas || !canvas.isConnected) {
+    stop();
+    return;
+  }
+  raf = requestAnimationFrame(frame);
+  if (now - last < FRAME_MS) return;
+  last = now;
+  draw(now);
+}
+
+function start(): void {
+  if (raf || !canvas) return;
+  last = 0;
+  raf = requestAnimationFrame(frame);
+}
+
+function stop(): void {
+  if (!raf) return;
+  cancelAnimationFrame(raf);
+  raf = 0;
+}
+
+/**
+ * True while the cat arena has the screen.
+ *
+ * The wash is scenery, and a 10fps × 12-tick simulation is a real frame cost the fight
+ * wants back — `docs/cat-boss-gdd.md` §14.2 says so as a hard constraint of reusing the
+ * ink for the curtain. It also stops two ink simulations running at once, which is a
+ * silly thing to ask of a laptop for a joke about a cat.
+ */
+let lentOut = false;
+
+/** Run only while the hero is on screen, the tab is in front, and no fight is on. */
+function sync(): void {
+  if (onScreen && !document.hidden && !lentOut) start();
+  else stop();
+}
+
+function resize(): void {
+  if (!canvas || !grid || !gridCtx) return;
+  const rect = canvas.getBoundingClientRect();
+  const w = Math.max(1, Math.round(rect.width));
+  const h = Math.max(1, Math.round(rect.height));
+  canvas.width = w;
+  canvas.height = h;
+  // The window: what the canvas shows. The field is deliberately larger.
+  winW = Math.max(8, Math.round(w / CELL));
+  winH = Math.max(8, Math.round(h / CELL));
+  offX = Math.round(winW * MARGIN_L);
+  offY = Math.round(winH * MARGIN_T);
+  const gw = winW + offX + Math.round(winW * MARGIN_R);
+  const gh = winH + offY + Math.round(winH * MARGIN_B);
+  grid.width = winW * SUPERSAMPLE;
+  grid.height = winH * SUPERSAMPLE;
+  pixels = gridCtx.createImageData(grid.width, grid.height);
+  field = createField(gw, gh, seed);
+  smooth = new Float32Array(gw * gh);
+  scratch = new Float32Array(gw * gh);
+  buildReserve(gw, rect);
+  // The whole padded field, and no band. This was once handed `gw * 0.46` and
+  // a horizontal strip, because the layer was masked out past 48% of its width
+  // — which squeezed every mark the wash could make into the column the text
+  // occupies. Words are protected by a tone ceiling now, and the frame is no
+  // longer the world, so the axis alone decides where the throw runs: in from
+  // outside the bottom-left corner, climbing to the right.
+  axis = throwAngle(gw, gh);
+  // Reseeding here even though createField above just cut the paper: planPour
+  // rolls the seed, so without it the medium would come from one composition
+  // and the drops, mottling and voids from another.
+  planPour(true);
+}
+
+/**
+ * Rebuild the reserve once the hero's reveal animations have finished.
+ *
+ * Guarded on getAnimations, which not every engine has; without it the reserve
+ * simply keeps the mount-time rect, which is what happened before.
+ */
+function queueSettledReserve(): void {
+  const el = document.querySelector<HTMLElement>('[data-ink-reserve]');
+  if (!el || typeof el.getAnimations !== 'function') return;
+  const running = el.getAnimations().map((a) => a.finished);
+  Promise.all(running)
+    .then(() => {
+      if (canvas && field) buildReserve(field.gw, canvas.getBoundingClientRect());
+    })
+    .catch(() => {});
+}
+
+/** Bake the mottling and the voids for this seed, once per pour. */
+function buildPaper(gw: number, gh: number): void {
+  paper = new Float32Array(gw * gh);
+  voids = new Float32Array(gw * gh);
+  for (let y = 0; y < gh; y++) {
+    for (let x = 0; x < gw; x++) {
+      const i = y * gw + x;
+      const v = voidAt(x, y, seed);
+      voids[i] = v;
+      paper[i] = mottleAt(x, y, seed) * v;
+    }
+  }
+}
+
+/**
+ * Where the words are, as a per-cell weight in [0,1].
+ *
+ * Feathered, because a hard switch would print the text block's bounding box
+ * on the paper as a straight edge — the one shape ink never makes. The falloff
+ * is measured in CSS pixels and converted, so it stays the same visual width
+ * whatever the grid resolution works out to be.
+ */
+function buildReserve(gw: number, rect: DOMRect): void {
+  reserve = new Float32Array(field ? field.gw * field.gh : 0);
+  if (!host || !field) return;
+  const gh = field.gh;
+  const feather = RESERVE_FEATHER / CELL;
+  for (const el of host.querySelectorAll<HTMLElement>('[data-ink-reserve]')) {
+    const r = el.getBoundingClientRect();
+    // into grid cells, relative to the canvas
+    // Into *field* cells: the window sits at (offX, offY) inside the field.
+    //
+    // Grown by a cell on every side. Without it the boundary cells sit a
+    // fraction of a cell outside the rect, so their cap is a fraction short of
+    // full — and the 4x upscale then interpolates that partial row across the
+    // rect's own edge. Measured, that put a 2px band along the top of the text
+    // block at 0.23 alpha against a 0.13 ceiling: harmless in practice, since
+    // glyphs start below the border box, but the invariant should be true
+    // rather than nearly true.
+    const x0 = (r.left - rect.left) / CELL + offX - 1;
+    const x1 = (r.right - rect.left) / CELL + offX + 1;
+    const y0 = (r.top - rect.top) / CELL + offY - 1;
+    const y1 = (r.bottom - rect.top) / CELL + offY + 1;
+    // The feather wanders. A rectangle's edge is a straight line, and a
+    // linear falloff along one is still a straight line — just a softer one.
+    // On a phone the text column spans the full width, so the bottom of this
+    // box drew a dead-straight horizontal edge right across the ink, with
+    // pale capped ink above it and full-strength ink below. That reads as a
+    // plinth, and the mark sitting on it as a mountain.
+    //
+    // So the *reach* of the falloff varies from place to place, which puts
+    // the visible boundary on a wandering curve instead of on the box. The
+    // box itself is untouched: `d` is still zero everywhere inside it, so the
+    // text stays fully capped, and the wobble only ever extends the cap
+    // outward — it can never retreat into the words.
+    const wide = feather * (1 + RESERVE_WANDER);
+    const px0 = Math.max(0, Math.floor(x0 - wide));
+    const px1 = Math.min(gw - 1, Math.ceil(x1 + wide));
+    const py0 = Math.max(0, Math.floor(y0 - wide));
+    const py1 = Math.min(gh - 1, Math.ceil(y1 + wide));
+    for (let y = py0; y <= py1; y++) {
+      for (let x = px0; x <= px1; x++) {
+        // distance outside the rect, 0 within it
+        const dx = x < x0 ? x0 - x : x > x1 ? x - x1 : 0;
+        const dy = y < y0 ? y0 - y : y > y1 ? y - y1 : 0;
+        const d = Math.hypot(dx, dy);
+        if (d <= 0) {
+          reserve[y * gw + x] = 1;
+          continue;
+        }
+        // One octave, in the same low-frequency band as the pours and the
+        // mottling — finer than this frays the cap's edge into speckle.
+        //
+        // A second, shorter octave looked like the obvious next move, on the
+        // theory that one wavelength leaves the boundary locally flat within
+        // a period. Measured, it bought nothing on a phone (71px of straight
+        // edge against 70) and cost a third more on desktop (86px to 115), so
+        // it is not here.
+        const reach =
+          feather *
+          (1 + (valueNoise2(x * 0.055, y * 0.055, seed + 5507) - 0.5) * 2 * RESERVE_WANDER);
+        if (d >= reach) continue;
+        const t = 1 - d / reach;
+        const w = t * t * (3 - 2 * t);
+        const i = y * gw + x;
+        if (w > reserve[i]!) reserve[i] = w;
+      }
+    }
+  }
+}
+
+function onPointerMove(e: PointerEvent): void {
+  if (!canvas || !field || dripCount >= MAX_DRIPS) return;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  if (Math.hypot(e.clientX - lastDripX, e.clientY - lastDripY) < DRIP_GAP) return;
+  lastDripX = e.clientX;
+  lastDripY = e.clientY;
+  const x = ((e.clientX - rect.left) / rect.width) * winW + offX;
+  const y = ((e.clientY - rect.top) / rect.height) * winH + offY;
+  if (x < offX || y < offY || x > offX + winW || y > offY + winH) return;
+  // A drip is real ink now: it wets the paper and then bleeds outward on its
+  // own, rather than being a shape that fades on a timer.
+  // A fresh drip is undiluted 焦墨 — it has not met anything to weaken it.
+  injectBlob(field, x, y, 1.4 + Math.random() * 1.8, 0.85, 1, seed);
+  dripCount++;
+  sync();
+}
+
+function onEnter(): void {
+  pointerOver = true;
+}
+
+function onLeave(): void {
+  pointerOver = false;
+}
+
+function mount(): void {
+  if (canvas) return;
+  const el = document.querySelector<HTMLCanvasElement>('canvas.ink-wash');
+  if (!el) return;
+  // The decision was "nothing renders at all" — not a frozen frame.
+  if (motionReduced()) return;
+
+  const ctx = el.getContext('2d');
+  const g = document.createElement('canvas');
+  const gctx = g.getContext('2d', { willReadFrequently: true });
+  if (!ctx || !gctx) return;
+
+  canvas = el;
+  view = ctx;
+  grid = g;
+  gridCtx = gctx;
+  host = el.parentElement;
+  el.hidden = false;
+
+  readInk();
+  // Re-measure the reserve once the hero's entrance animation has settled.
+  //
+  // `.reveal` runs `translateY(10px)` for 600ms and getBoundingClientRect
+  // includes transforms, so a reserve built while that is in flight caps a
+  // rectangle up to 10px away from where the text actually lands — leaving a
+  // sliver of uncapped ink along one edge. It was there before the glass pane
+  // and the pane made it visible: measured peak alpha over the text went from
+  // 0.161 to 0.200, past the bound that protects reading.
+  //
+  // Deliberately not "wait, then build once": the animation may already be
+  // finished by the time this runs, in which case `finished` resolves at once.
+  queueSettledReserve();
+  // Rolled before resize(), because resize() builds the paper from `seed`.
+  seed = rollSeed();
+  dropCount = DROPS_MIN + Math.floor(mulberry32(seed + 6421)() * (DROPS_MAX - DROPS_MIN + 1));
+  resize();
+
+  window.addEventListener('resize', resize, { passive: true });
+  host?.addEventListener('pointerenter', onEnter, { passive: true });
+  host?.addEventListener('pointerleave', onLeave, { passive: true });
+  // Capability, not width: a phone drag over the hero means "scroll", and
+  // dripping ink on every swipe would fight it.
+  if (getFinePointer().matches && host) {
+    host.addEventListener('pointermove', onPointerMove, { passive: true });
+  }
+
+  io = new IntersectionObserver(
+    (entries) => {
+      onScreen = entries.some((entry) => entry.isIntersecting);
+      sync();
+    },
+    { threshold: 0 },
+  );
+  io.observe(host ?? el);
+}
+
+function unmount(): void {
+  stop();
+  io?.disconnect();
+  io = null;
+  window.removeEventListener('resize', resize);
+  host?.removeEventListener('pointermove', onPointerMove);
+  host?.removeEventListener('pointerenter', onEnter);
+  host?.removeEventListener('pointerleave', onLeave);
+  if (canvas) canvas.hidden = true;
+  canvas = null;
+  view = null;
+  grid = null;
+  gridCtx = null;
+  pixels = null;
+  field = null;
+  smooth = null;
+  scratch = null;
+  drops = [];
+  host = null;
+  onScreen = false;
+  // Landing on the page again should look like landing on it, so the ink is
+  // poured afresh rather than resuming a finished stain.
+  arrivedAt = 0;
+  cycleAt = 0;
+  lastTick = 0;
+  injectedTo = -1;
+  dripCount = 0;
+  pointerOver = false;
+}
+
+/* ---- wiring. Registered once at module scope: with the view transitions
+   router these listeners outlive every navigation, and re-registering them
+   per page-load is how this codebase has leaked handlers before. ---- */
+
+/* ------------------------------------------------------------------ *
+ * Lifecycle — the only export, and the one thing each framework wires.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Start the wash, and hand back the way to stop it.
+ *
+ * Every listener registered here is removed by the returned disposer, which is what makes this
+ * safe to call once per navigation. The Astro version registered these at module scope and relied
+ * on the script running once per session — correct there, and not something to carry across: a
+ * component that mounts per page needs its listeners to leave with it.
+ */
+export function startInkWash(): () => void {
+  const onStandDown = () => {
+    lentOut = true;
+    sync();
+  };
+  const onResume = () => {
+    lentOut = false;
+    sync();
+  };
+  const onScroll = () => {
+    lastScrollAt = performance.now();
+  };
+  const onFinePointerChange = () => {
+    if (!host) return;
+    host.removeEventListener('pointermove', onPointerMove);
+    if (getFinePointer().matches) host.addEventListener('pointermove', onPointerMove, { passive: true });
+  };
+  const reduceQuery = matchMedia('(prefers-reduced-motion: reduce)');
+  const classObserver = new MutationObserver(syncMotion);
+
+  /*
+   * The arena already announces itself at exactly the right moments: it borrows the cat on
+   * `cat:standdown` and hands it back on `cat:resume`. Reusing those means no new protocol between
+   * the two components, and no way for the wash to miss a fight starting.
+   */
+  document.addEventListener('cat:standdown', onStandDown);
+  document.addEventListener('cat:resume', onResume);
+  document.addEventListener('visibilitychange', sync);
+  /* Scrolling counts as reading, and is the half of engagement that works on a phone, where there
+     is no pointer to hover with. */
+  document.addEventListener('scroll', onScroll, { passive: true });
+  getFinePointer().addEventListener('change', onFinePointerChange);
+  /* Both halves of motionReduced() can change while the page is open: the OS setting, and the
+     site's own "Reduce motion" toggle (an <html> class). */
+  reduceQuery.addEventListener('change', syncMotion);
+  classObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
+  /* Deferred: the hero photograph is fetchpriority="high" and is the LCP element, so the ink waits
+     rather than competing with it. */
+  let pendingLoad: (() => void) | null = null;
+  if (document.readyState === 'complete') {
+    mount();
+  } else {
+    pendingLoad = () => mount();
+    window.addEventListener('load', pendingLoad, { once: true });
+  }
+
+  return () => {
+    if (pendingLoad) window.removeEventListener('load', pendingLoad);
+    document.removeEventListener('cat:standdown', onStandDown);
+    document.removeEventListener('cat:resume', onResume);
+    document.removeEventListener('visibilitychange', sync);
+    document.removeEventListener('scroll', onScroll);
+    getFinePointer().removeEventListener('change', onFinePointerChange);
+    reduceQuery.removeEventListener('change', syncMotion);
+    classObserver.disconnect();
+    unmount();
+  };
+}
+
+function syncMotion(): void {
+  if (motionReduced()) unmount();
+  else if (document.querySelector('canvas.ink-wash')) mount();
+  // Composited normally now, so the ink colour does have to follow the theme.
+  if (canvas) {
+    readInk();
+    if (!raf) draw(performance.now());
+  }
+}

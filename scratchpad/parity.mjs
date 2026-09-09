@@ -34,7 +34,18 @@ const facts = (page) =>
   page.evaluate(() => ({
     title: document.title,
     canonical: document.querySelector('link[rel=canonical]')?.getAttribute('href') ?? null,
-    h1: document.querySelector('h1')?.textContent?.trim() ?? null,
+    /* Whitespace-collapsed, because the difference it would otherwise report is not one.
+       Astro preserved the source newline between the hero h1's two spans; JSX strips whitespace
+       between elements, so the Next copy needed an explicit `{' '}` — and once it had one, the
+       two textContents differed by newline-versus-space. HTML collapses both to a single space
+       when rendering, and accessible-name computation does the same, so a reader and a screen
+       reader receive identical text. A check that stays red on that is a check that gets ignored.
+
+       The `{' '}` still had to be added: without *any* separator the name reads
+       "Hi — I’m Derek.Numbers by day", which is a real fault and one this comparison caught. The
+       instrument was right about the fault and wrong about the fix, which is why it is loosened
+       here and not before. */
+    h1: document.querySelector('h1')?.textContent?.replace(/\s+/g, ' ').trim() ?? null,
     links: document.querySelectorAll('a[href]').length,
     imgs: document.querySelectorAll('img').length,
     /* An image without both dimensions reflows the page as it loads. Astro's `image()` guaranteed
