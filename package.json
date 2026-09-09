@@ -7,6 +7,10 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro check && astro build && pagefind --site dist",
+    "stage:images": "node scripts/stage-content-images.mjs",
+    "build:next": "npm run stage:images && next build",
+    "dev:next": "npm run stage:images && next dev",
+    "start:next": "npx serve out",
     "build:drafts": "SHOW_DRAFTS=1 npm run build",
     "preview": "astro preview",
     "new-entry": "node scripts/new-entry.mjs",
@@ -28,15 +32,31 @@
     "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/vite": "^4.1.0",
     "astro": "^5.12.0",
+    "gray-matter": "^4.0.3",
+    "next": "^16.3.4",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "rehype-raw": "^7.0.0",
+    "rehype-stringify": "^10.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
+    "remark-rehype": "^11.1.2",
     "satori": "^0.28.0",
     "sharp": "^0.34.0",
-    "tailwindcss": "^4.1.0"
+    "shiki": "^4.4.3",
+    "tailwindcss": "^4.1.0",
+    "unified": "^11.0.5",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.4",
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^26.1.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "pagefind": "^1.5.2",
     "playwright-core": "^1.61.1",
+    "postcss": "^8.5.28",
     "typescript": "^5.7.0",
     "vitest": "^4.1.10"
   }

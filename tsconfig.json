@@ -1,11 +1,28 @@
 {
   "extends": "astro/tsconfigs/strict",
-  "include": [".astro/types.d.ts", "src/**/*", "scripts/**/*"],
-  "exclude": ["dist"],
+  "include": [
+    ".astro/types.d.ts",
+    "src/**/*",
+    "scripts/**/*",
+    "next-env.d.ts",
+    ".next/types/**/*"
+  ],
+  "exclude": ["dist", ".next", "out", "node_modules"],
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
-    }
+    },
+    /* Next needs the DOM libs named explicitly; Astro's preset leaves `lib` to the default, which
+       omits `dom.iterable` and then fails on things like iterating a NodeList. */
+    "lib": ["dom", "dom.iterable", "esnext"],
+    /* Astro's preset sets `jsx: "preserve"` and — importantly — does *not* set `jsxImportSource`,
+       so React's own runtime applies to .tsx without an override. Named here anyway, because the
+       whole migration rests on it and a future preset bump should break loudly rather than
+       silently compile every component against the wrong JSX factory. */
+    "jsx": "preserve",
+    "jsxImportSource": "react",
+    "plugins": [{ "name": "next" }],
+    "incremental": true
   }
 }
