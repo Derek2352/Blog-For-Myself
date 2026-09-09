@@ -1,0 +1,40 @@
+/*
+ * Astro's <style> block was scoped to the component; a CSS Module is the faithful translation of
+ * that, rather than moving these rules into the shared global.css where they would apply to a
+ * build that already has its own copy. Nothing outside this component — no page, no test, no
+ * harness — selects these class names, so scoping them costs nothing.
+ */
+.a11y {
+  position: relative;
+}
+.menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.4rem);
+  z-index: 50;
+  /* never wider than the screen, however narrow the viewport gets */
+  min-width: min(12.5rem, calc(100vw - 2rem));
+  max-width: calc(100vw - 2rem);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: 0 16px 40px -20px rgb(30 20 10 / 0.35);
+  padding: 0.6rem;
+}
+.menu label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.4rem;
+  border-radius: var(--radius-chip);
+  cursor: pointer;
+}
+.menu label:hover {
+  background: var(--color-ground);
+}
+.menu input {
+  accent-color: var(--color-accent);
+  width: 1rem;
+  height: 1rem;
+}

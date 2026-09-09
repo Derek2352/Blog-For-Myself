@@ -5,9 +5,17 @@
  * It renders from `src/server/content.ts`, which means every number on it is derived from the
  * markdown exactly as the Astro page's were.
  */
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getEntries, getNavCategories, entryHref, categoryHref } from '@/server/content';
 import { site } from '@/data/site';
+
+/**
+ * Astro emitted `<link rel="canonical">` on every page from `Astro.url` + `site`. Next has no
+ * equivalent default, so each page states its own — and the parity harness checks it, because a
+ * missing canonical is invisible on the page and visible only to a crawler.
+ */
+export const metadata: Metadata = { alternates: { canonical: '/' } };
 
 export default async function HomePage() {
   const [entries, tabs] = await Promise.all([getEntries(), getNavCategories()]);

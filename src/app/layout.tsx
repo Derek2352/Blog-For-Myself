@@ -28,6 +28,9 @@ import { SITE_URL } from '@/lib/site-url';
 import { A11Y_KEYS } from '@/lib/a11y-prefs';
 import { isDraftPreviewBuild } from '@/server/content';
 import RouteEffects from './_chrome/RouteEffects';
+import SearchShortcut from './_chrome/SearchShortcut';
+import Header from './_chrome/Header';
+import Footer from './_chrome/Footer';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -118,12 +121,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             preview build — drafts visible · not the public site
           </p>
         )}
+        <Header />
         {/* polite announcement of the new page after client-side navigation */}
         <p className="sr-only" aria-live="polite" data-route-announce />
         <main id="main" className="flex-1" tabIndex={-1}>
           {children}
         </main>
+        <Footer />
         <RouteEffects />
+        <SearchShortcut />
       </body>
     </html>
   );
