@@ -143,6 +143,25 @@ export const IMPULSE_TRAVEL_PX = IMPULSE_SPEED * (2 / 3) * (IMPULSE_MS / 1000);
 /** Mirrors `INTERACTIVE` in src/lib/arena.ts — and deliberately *not* `PROTECTED`. */
 export const INTERACTIVE = 'a[href], button, input, select, textarea, summary, label, [contenteditable]';
 
+/**
+ * Which build the fleet is measuring.
+ *
+ * Two targets exist while the migration runs, and every harness works against either without
+ * modification — which is the strongest single statement about the port, because it means the DOM
+ * contract the harnesses assert on did not move:
+ *
+ *   Astro:  npm run build      && npx astro preview --port 4416   (the default)
+ *   Next:   npm run build:next && npm run preview:next            (BASE_URL=http://localhost:4417)
+ *
+ * `preview:next` is `scripts/serve-out.mjs` rather than a generic static server, because two
+ * behaviours are load-bearing: `/about/` has to resolve to `out/about/index.html` (every URL on
+ * this site ends in a slash), and an unmatched path has to answer `404.html` with a real 404
+ * status, which is what the hosts do and what more than one check asserts.
+ *
+ * Read at import, so it is an environment variable and not something a harness can set for itself
+ * halfway through — a lesson from a diagnostic that set `process.env.BASE_URL` after importing
+ * this file and quietly measured the Astro build twice.
+ */
 export const BASE = process.env.BASE_URL ?? 'http://localhost:4416';
 
 /* ------------------------------------------------------------------ *

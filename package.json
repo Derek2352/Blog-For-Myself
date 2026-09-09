@@ -19,7 +19,8 @@
     "inbox": "node scripts/inbox.mjs",
     "studio": "node scripts/studio.mjs",
     "test": "vitest run",
-    "covers": "node scripts/redraw-covers.mjs"
+    "covers": "node scripts/redraw-covers.mjs",
+    "preview:next": "node scripts/serve-out.mjs"
   },
   "dependencies": {
     "@astrojs/mdx": "^4.3.0",
