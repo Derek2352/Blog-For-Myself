@@ -4,7 +4,24 @@
  * entry pages. All values derive from site data and content frontmatter.
  */
 import { site } from '@/data/site';
-import type { Entry } from '@/lib/content';
+
+/**
+ * The fields `entrySchema` reads, and nothing more.
+ *
+ * This used to import `Entry` from `@/lib/content`, which tied a pure JSON-LD builder to Astro's
+ * content layer for the sake of five properties. Declared structurally, it serves both builds —
+ * the same move `content-core.ts` makes, for the same reason: nothing here needs to know where the
+ * entry came from.
+ */
+export interface SchemaEntry {
+  data: {
+    title: string;
+    summary: string;
+    date: Date;
+    updated?: Date;
+    tags: string[];
+  };
+}
 
 export function personSchema(siteUrl: URL | undefined): Record<string, unknown> {
   const sameAs = [site.github, site.linkedin].filter(Boolean);
@@ -38,7 +55,7 @@ export function breadcrumbSchema(
 }
 
 export function entrySchema(
-  entry: Entry,
+  entry: SchemaEntry,
   opts: { url: string; image: string; categoryLabel: string },
 ): Record<string, unknown> {
   return {
