@@ -22,7 +22,7 @@ export default function TagChip({
   return (
     <Link
       href={tagHref(tag)}
-      className={`rail inline-flex min-h-6 items-center rounded-(--radius-chip) border px-2 py-0.5 transition-colors hover:border-accent hover:text-accent ${
+      className={`rail inline-flex min-h-6 items-center rounded-(--radius-chip) border px-2 py-0.5 transition-colors hover:border-secondary hover:text-secondary ${
         muted ? 'border-line/60 text-muted' : 'border-line'
       }`}
     >

@@ -130,7 +130,7 @@ export default function EntryCard({
           {entry.data.title}
         </h3>
         <p className="mt-1.5 text-sm leading-relaxed text-muted">{entry.data.summary}</p>
-        {showCategory && category && <p className="rail mt-2">{category.label}</p>}
+        {showCategory && category && <p className="rail mt-2 text-secondary">{category.label}</p>}
       </Link>
     </article>
   );

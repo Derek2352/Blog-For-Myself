@@ -25,6 +25,22 @@
   --color-accent-ink: #ffffff; /* text on accent */
   --color-signal: #e8a13a;   /* photo-chemical amber — markers, badges (bg use) */
   --color-signal-text: #8a5a14; /* amber legible as text on light ground */
+  /**
+   * Sage secondary — taxonomy, as distinct from action and from attention.
+   *
+   * Adopted from the Next.js drops, which proposed `#697b58`. Kept at that hue (91°) and
+   * saturation and taken two percent darker, because `#697b58` measures **4.19:1** on this
+   * ground: fine for a border or a dot, below AA for text, and it would have been the only
+   * sub-AA colour on a site whose others run 5.4–7.8. This is 4.55 on ground and 4.86 on
+   * surface.
+   *
+   * It earns a slot because the palette had two roles and three jobs. Wine says *this is
+   * interactive*; amber says *notice this*. Category labels, tags and log kinds are none of
+   * those — they say *this is what sort of thing it is*, and they were borrowing muted grey or
+   * amber for want of anywhere better. Three accents is usually one too many; three accents with
+   * one meaning each is a palette.
+   */
+  --color-secondary: #647554;
 
   /* type */
   --font-display: "Instrument Serif", "Iowan Old Style", Georgia, "Noto Serif TC", "Songti TC", serif;
@@ -66,6 +82,8 @@
   --color-accent-ink: #211a13;
   --color-signal: #e8a13a;
   --color-signal-text: #e8a13a;
+  /* The drops' own dark value, which needed no adjustment: 7.84 on the dark ground. */
+  --color-secondary: #a4b28c;
 }
 
 @layer base {
@@ -75,6 +93,7 @@
   html.a11y-underline main a:not(.rail):not([class*="bg-accent"]) { text-decoration: underline; text-underline-offset: 2px; }
   html.a11y-contrast {
     --color-muted: var(--color-ink);
+    --color-secondary: var(--color-ink);
     --color-line: color-mix(in srgb, var(--color-ink) 45%, transparent);
   }
   html.a11y-contrast.dark { --color-line: color-mix(in srgb, var(--color-ink) 55%, transparent); }
@@ -760,6 +779,9 @@
     --color-line: #dddddd;
     --color-accent: #1a3a99;
     --color-signal-text: #7a4d0e;
+    /* Sage prints as mud on white paper, and a taxonomy label is not worth ink of its own in a
+       printout — it goes to the same near-black as the body. */
+    --color-secondary: #333333;
   }
   .page-bg,
   header nav,
