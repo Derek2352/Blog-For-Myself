@@ -9,7 +9,15 @@ import Base from '@/layouts/Base.astro';
 import EntryCard from '@/components/EntryCard.astro';
 import PeriodGroup from '@/components/PeriodGroup.astro';
 import { categories, RESERVED_SLUGS, type Category } from '@/data/categories';
-import { getEntries, getLogs, sortForCategory, toFeed, groupByPeriod } from '@/lib/content';
+import {
+  categoryHref,
+  getCategoryIndex,
+  getEntries,
+  getLogs,
+  sortForCategory,
+  toFeed,
+  groupByPeriod,
+} from '@/lib/content';
 import { resolveWash } from '@/lib/wash';
 
 export async function getStaticPaths() {
@@ -37,6 +45,38 @@ const entries = sortForCategory(
 const logs = (await getLogs()).filter((l) => l.data.category === category.slug);
 const logGroups = groupByPeriod(toFeed([], logs));
 const wash = resolveWash(category);
+/**
+ * Somewhere to go when this page has nothing. Only computed for the empty case, and only
+ * *populated* categories are offered — sending a visitor from one empty category to another
+ * would be the page repeating the problem it is apologising for.
+ *
+ * Busiest first, capped, and this one is not `[PH]`: the cap is the whole list. There are eight
+ * categories, so an empty page can offer at most seven, which is a row of chips rather than a
+ * decision. If the site ever grows enough categories for that to stop being true, the row will
+ * look wrong long before anyone has to reason about it.
+ */
+/**
+ * Nothing filed here at all — the state that decides both the recovery row below and whether
+ * this page is a search result.
+ *
+ * `/leisure-time/` was in the sitemap with no `robots` meta, so a page whose entire content is
+ * *"Nothing here yet."* was being offered to search engines, while being unreachable by
+ * clicking — `getNavCategories()` correctly keeps empty categories out of the tab bar. The URL
+ * still builds, because the author needs somewhere to look and `npm run new-entry` needs a page
+ * to put an entry on; it just stops being advertised.
+ *
+ * Read off the page's own contents rather than kept in a list of exceptions, so the flag lifts
+ * by itself the day something lands here — the same bargain `cover-plate.ts` makes for the
+ * plates. (The sitemap still lists the URL: `@astrojs/sitemap`'s filter sees a path and has no
+ * access to content counts. `noindex` is the authoritative signal and a crawler honours it.)
+ */
+const empty = entries.length === 0 && logs.length === 0;
+const siblings =
+  entries.length > 0
+    ? []
+    : (await getCategoryIndex())
+        .filter((c) => c.slug !== category.slug && c.entryCount > 0)
+        .sort((a, b) => b.entryCount - a.entryCount || a.label.localeCompare(b.label));
 ---
 
 <Base
@@ -45,16 +85,24 @@ const wash = resolveWash(category);
   ogImage={new URL(`/og/category/${category.slug}.png`, Astro.site).toString()}
   hue={wash.hue}
   tab={category.slug}
+  noindex={empty}
 >
   <div class="wrap py-10">
     <header class="max-w-3xl">
       <p class="kicker">Index / {category.slug}</p>
       <h1 class="mt-2 font-display text-4xl sm:text-5xl">{category.label}</h1>
       {category.blurb && <p class="mt-3 text-lg leading-relaxed text-muted">{category.blurb}</p>}
-      <p class="rail mt-4">
-        {entries.length} {entries.length === 1 ? 'entry' : 'entries'} · {logs.length}
-        {logs.length === 1 ? ' log' : ' logs'}
-      </p>
+      {/* Same rule as the browse cards on the home page: a count of nothing is not a fact
+          worth printing. Every category reads "0 logs" today, so this line spent half its
+          width telling eight different pages the same absence — and on `/leisure-time/`,
+          which has neither, the whole line was "0 entries" sitting three lines above a
+          heading that says "Nothing here yet." twice as well and in the site's own voice. */}
+      {(entries.length > 0 || logs.length > 0) && (
+        <p class="rail mt-4">
+          {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
+          {logs.length > 0 && ` · ${logs.length} ${logs.length === 1 ? 'log' : 'logs'}`}
+        </p>
+      )}
     </header>
 
     <section class="mt-10" aria-labelledby="entries-h">
@@ -89,27 +137,69 @@ const wash = resolveWash(category);
       }
     </section>
 
-    <section class="mt-20" aria-labelledby="monthly-log-h">
-      <p class="kicker">Monthly log</p>
-      <h2 id="monthly-log-h" class="mt-1 font-display text-3xl">Small things, monthly</h2>
-      {
-        logGroups.length > 0 ? (
-          <div class="mt-8 space-y-12">
-            {logGroups.map((group) => (
-              <PeriodGroup group={group} headingLevel="h3" />
+    {/* The recovery path, and the reason it is here rather than in the paragraph above.
+        Measured at 1280, `/leisure-time/` was 900px tall — exactly one viewport — with 212px
+        of nothing between the last sentence and the footer, which made it the second and last
+        page on the site that does not fill its own screen (`scratchpad/tail-gap.mjs`; /search/
+        was the first, fixed in the same pass). A visitor who lands on an empty category wants
+        a category that is not empty, and "the timeline has everything published so far" is a
+        list of *everything*, which is the wrong grain — it hands somebody who asked a narrow
+        question the widest possible answer.
+
+        Counts included, unlike the home page's browse cards where the count is decoration next
+        to a blurb: here the count *is* the recommendation, because the one thing this visitor
+        now knows is that a category on this site can be empty. */}
+    {
+      siblings.length > 0 && (
+        <section class="mt-12" aria-labelledby="siblings-h">
+          <h2 id="siblings-h" class="kicker">these have things in them</h2>
+          <ul class="mt-3 flex flex-wrap gap-2" data-io-stagger>
+            {siblings.map((c) => (
+              <li>
+                <a
+                  href={categoryHref(c.slug)}
+                  class="rail inline-flex min-h-6 items-center rounded-(--radius-chip) border border-line px-2 py-0.5 transition-colors hover:border-accent hover:text-accent"
+                >
+                  {c.label} · {c.entryCount}
+                </a>
+              </li>
             ))}
-          </div>
-        ) : (
-          <>
-            <p class="mt-4 text-sm leading-relaxed text-muted">
-              No monthly notes filed under this one yet.
+          </ul>
+        </section>
+      )
+    }
+
+    {/* The monthly log is a *secondary* section, and that is what decides whether its empty
+        state ships. The entries section above keeps its "Nothing here yet" because entries are
+        the reason the page exists — arriving at an empty index and being told why is useful.
+        This one used to spend a kicker, a 3xl display heading and a sentence saying "No monthly
+        notes filed under this one yet", on all eight categories, none of which has ever had a
+        log. That is a section whose only content is an apology for itself, and it left roughly
+        five hundred pixels of nothing above the footer as well.
+
+        The author's hint is the part worth keeping, so it keeps the section alive in dev — the
+        same DEV-flag split the entries branch already uses, and the same one PhotoPlan.astro
+        established: a visitor is never shown the scaffolding, and the author never loses it. */}
+    {
+      (logGroups.length > 0 || import.meta.env.DEV) && (
+        <section class="mt-20" aria-labelledby="monthly-log-h">
+          <p class="kicker">Monthly log</p>
+          <h2 id="monthly-log-h" class="mt-1 font-display text-3xl">
+            Small things, monthly
+          </h2>
+          {logGroups.length > 0 ? (
+            <div class="mt-8 space-y-12">
+              {logGroups.map((group) => (
+                <PeriodGroup group={group} headingLevel="h3" />
+              ))}
+            </div>
+          ) : (
+            <p class="rail mt-4 text-signal-text">
+              dev note: this whole section is hidden in the build — npm run new-log adds one
             </p>
-            {import.meta.env.DEV && (
-              <p class="rail mt-3 text-signal-text">dev note: npm run new-log adds one</p>
-            )}
-          </>
-        )
-      }
-    </section>
+          )}
+        </section>
+      )
+    }
   </div>
 </Base>

@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="presentation">
   <defs>
-    <pattern id="ledger" width="40" height="40" patternUnits="userSpaceOnUse" patternTransform="translate(9 9)">
-      <path d="M40 0H0v40" fill="none" stroke="hsl(350 18% 34%)" stroke-opacity="0.11" stroke-width="1.5"/>
+    <pattern id="ledger" width="52" height="52" patternUnits="userSpaceOnUse">
+      <path d="M52 0H0v52" fill="none" stroke="hsl(350 18% 34%)" stroke-opacity="0.11" stroke-width="1.5"/>
     </pattern>
   </defs>
-  <rect width="1600" height="1000" fill="hsl(350 24% 86%)"/>
+  <rect width="1600" height="1000" fill="hsl(350 18% 88%)"/>
   <rect width="1600" height="1000" fill="url(#ledger)"/>
   <rect x="28" y="28" width="1544" height="944" fill="none" stroke="hsl(350 22% 58%)" stroke-width="2" rx="18"/>
-  <line x1="28" y1="88" x2="1572" y2="88" stroke="hsl(350 22% 58%)" stroke-width="2" stroke-dasharray="2 26"/>
-  <line x1="28" y1="912" x2="1572" y2="912" stroke="hsl(350 22% 58%)" stroke-width="2" stroke-dasharray="2 26"/>
+  <line x1="28" y1="115" x2="1572" y2="115" stroke="hsl(350 22% 58%)" stroke-width="2" stroke-dasharray="2 26"/>
+  <line x1="28" y1="885" x2="1572" y2="885" stroke="hsl(350 22% 58%)" stroke-width="2" stroke-dasharray="2 26"/>
   <path d="M787 500h26M800 487v26" stroke="#8e2f45" stroke-opacity="0.7" stroke-width="3"/>
 </svg>

@@ -3,13 +3,27 @@ import { tagHref } from '@/lib/content';
 
 interface Props {
   tag: string;
+  /**
+   * How many entries carry this tag, when the caller has a reason to show it.
+   *
+   * Optional rather than always-on: `/search/` uses these chips as *starting points* and a
+   * number there is noise on a choice the visitor is making blind, while `/tags/` uses them as
+   * an *index* where recurrence is the whole subject of the page's own opening sentence. Same
+   * component, and the difference is the caller's, which is where it belongs.
+   */
+  count?: number;
+  /** Quieter type for the tail of the index — see `/tags/` for what earns it. */
+  muted?: boolean;
 }
-const { tag } = Astro.props;
+const { tag, count, muted = false } = Astro.props;
 ---
 
 <a
   href={tagHref(tag)}
-  class="rail inline-flex min-h-6 items-center rounded-(--radius-chip) border border-line px-2 py-0.5 transition-colors hover:border-accent hover:text-accent"
+  class:list={[
+    'rail inline-flex min-h-6 items-center rounded-(--radius-chip) border px-2 py-0.5 transition-colors hover:border-accent hover:text-accent',
+    muted ? 'border-line/60 text-muted' : 'border-line',
+  ]}
 >
-  #{tag}
+  #{tag}{count !== undefined && <span class="ml-1 text-muted">·&nbsp;{count}</span>}
 </a>

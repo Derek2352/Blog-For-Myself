@@ -1,8 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1125" viewBox="0 0 900 1125" role="img" aria-label="Placeholder image">
-  <rect width="900" height="1125" fill="#372532"/>
-  <rect x="28" y="28" width="844" height="1069" fill="none" stroke="#a5937d" stroke-opacity="0.5" stroke-width="2" rx="18"/>
-  <line x1="28" y1="88" x2="872" y2="88" stroke="#a5937d" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="2 26"/>
-  <line x1="28" y1="1037" x2="872" y2="1037" stroke="#a5937d" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="2 26"/>
-  <text x="450" y="548.5" text-anchor="middle" font-family="'IBM Plex Mono','Courier New',monospace" font-size="38" letter-spacing="10" fill="#b7a58f">PORTRAIT</text>
-  <text x="450" y="610.5" text-anchor="middle" font-family="'IBM Plex Mono','Courier New',monospace" font-size="22" letter-spacing="6" fill="#b7a58f" fill-opacity="0.7">REPLACE ME</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1125" viewBox="0 0 900 1125" role="presentation">
+  <defs>
+    <pattern id="ledger" width="88" height="88" patternUnits="userSpaceOnUse">
+      <path d="M88 0H0v88" fill="none" stroke="hsl(32 18% 34%)" stroke-opacity="0.11" stroke-width="1.5"/>
+    </pattern>
+  </defs>
+  <rect width="900" height="1125" fill="hsl(32 18% 88%)"/>
+  <rect width="900" height="1125" fill="url(#ledger)"/>
+  <rect x="28" y="28" width="844" height="1069" fill="none" stroke="hsl(32 22% 58%)" stroke-width="2" rx="18"/>
+  <line x1="28" y1="129" x2="872" y2="129" stroke="hsl(32 22% 58%)" stroke-width="2" stroke-dasharray="2 26"/>
+  <line x1="28" y1="996" x2="872" y2="996" stroke="hsl(32 22% 58%)" stroke-width="2" stroke-dasharray="2 26"/>
+  <path d="M437 562.5h26M450 549.5v26" stroke="#8e2f45" stroke-opacity="0.7" stroke-width="3"/>
 </svg>

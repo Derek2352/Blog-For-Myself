@@ -30,6 +30,25 @@
   /* shape — soft, unhurried corners */
   --radius-card: 0.875rem;
   --radius-chip: 0.5rem;
+
+  /* ---- the treats HUD's offset from the bottom edge ----
+     `#cat-hud` in SiteCat.astro is fixed to the bottom-left corner; this clears the cat's
+     own 30px band so the chip never sits on the animal.
+
+     This pass wrote two more tokens here — `--cat-hud-height` and `--cat-hud-clear`, with
+     the footer padding itself by the latter so the chip would never cover it — and then
+     deleted them again before committing, so they exist only in 2.6.2's account of why.
+     The reserve treated the chip as permanent furniture the page had to accommodate. That
+     was true when it was written, and its measurements were right: 111px wide from `left: 1rem` against a content column starting at 88px @1280
+     and 24px @1024, landing on the footer's first column. What it got wrong was the
+     scope. `scratchpad/hud-overlap.mjs` found the chip on `h2 "Education"` and on body
+     prose at scroll-top and mid-page too, and no amount of footer padding reaches the
+     middle of a page. The chip is transient now — it rises when it has something to say
+     and retires — so a permanent reserve buys nothing, and every page gets the 104px at
+     its foot back. The re-measured cost of dropping it, since "nothing to keep out of the
+     way of" would be too tidy: while the chip is speaking it does cover the footer's
+     tagline, on every page at both widths. For the three seconds it is speaking. */
+  --cat-hud-bottom: 2.75rem;
 }
 
 /* Dark theme: candlelit versions of the same tokens. */
@@ -480,9 +499,68 @@
   }
   .flyout-more:hover { color: var(--color-accent); }
 
-  /* mobile: fade + hint at the tab bar's scroll edge so hidden tabs show */
+  /* ---- mobile: the tab strip's scroll edges ----
+
+     At 390px the strip is 358px wide and its content is 1216px, so something is always cut.
+     There was already a fade for the right edge — a 2.4rem `::after` washing `--color-ground`
+     over the text — and two things were wrong with it, measured on `/competitions/` with
+     `scratchpad/tab-edge.mjs`.
+
+     It was too short. The gradient reached full strength 21px in, so the last glyph of
+     "AI & Creative Projects" sat at about a third of the way through and came out smudged
+     rather than dissolved — which reads as a clipped letter, not as "there is more this way".
+
+     And there was no fade at all on the **left**. Scroll the strip and the first visible tab
+     was cut hard against the container. That edge had never been looked at because the audit
+     shoots pages at rest, and at rest the strip is at `scrollLeft: 0`.
+
+     `mask-image` fades the strip's own content rather than painting over it, driven at both
+     edges by `data-more-left` / `data-more-right` from the same scroll listener. The chevron
+     stays, because a fade says "cut off" and an arrow says "scroll", but it loses its own
+     background now that the mask does the fading.
+
+     One thing this comment used to claim and does not: that the opaque wash mismatched the
+     header's translucent pane (`… / 0.82`) once content was behind it. Measured, that never
+     happens — the header is sticky at a negative offset and the strip's top is at -41px by
+     scroll 400, so the bar is only ever on screen near scroll-top, where an opaque
+     `--color-ground` matched exactly. Fading content instead of covering it is still the
+     better mechanism, but it is robustness, not a bug that was fixed. */
   .tabbar-wrap { position: relative; }
   @media (max-width: 767px) {
+    /* `[PH 2.75rem]` on the right: wide enough that a whole glyph dissolves inside it rather
+       than being caught halfway, and it clears the chevron's 2.4rem so the arrow sits on
+       already-faded type. The left edge needs less — nothing is being announced there, the
+       fade is only saying the strip continues. */
+    .tabbar {
+      --fade-l: 0px;
+      --fade-r: 0px;
+      -webkit-mask-image: linear-gradient(
+        to right,
+        transparent 0,
+        #000 var(--fade-l),
+        #000 calc(100% - var(--fade-r)),
+        transparent 100%
+      );
+      mask-image: linear-gradient(
+        to right,
+        transparent 0,
+        #000 var(--fade-l),
+        #000 calc(100% - var(--fade-r)),
+        transparent 100%
+      );
+      /* A custom property is not animatable unless it has been registered with a type, so the
+         two `@property` blocks at the foot of this file are what make this line more than a
+         comment — they cannot be nested in a rule, which is why they are not here. Without them
+         the fade would pop on and off at the 8px threshold — most visibly on the right, where
+         reaching the end of the strip would snap the last tab from two-thirds faded to fully
+         opaque. */
+      transition:
+        --fade-l 0.2s ease,
+        --fade-r 0.2s ease;
+    }
+    .tabbar[data-more-right] { --fade-r: 2.75rem; }
+    .tabbar[data-more-left] { --fade-l: 1.5rem; }
+
     .tabbar-wrap[data-more]::after {
       content: "›";
       position: absolute;
@@ -496,7 +574,6 @@
       padding-right: 0.4rem;
       font-family: var(--font-mono);
       color: var(--color-muted);
-      background: linear-gradient(to right, transparent, var(--color-ground) 55%);
       pointer-events: none;
     }
   }
@@ -987,4 +1064,21 @@ summary:active,
   color: var(--color-accent);
   pointer-events: none;
   filter: drop-shadow(0 2px 3px rgb(20 14 8 / 0.25));
+}
+
+
+/* The tab strip's two mask stops, registered so they can be transitioned.
+   `@property` cannot live inside a rule, which is why these sit apart from the `.tabbar`
+   block in `@layer components` that uses them — see the fade comment there. Typed as
+   `<length>` with an initial of 0, so a browser that never runs the scroll listener (no JS)
+   gets an unmasked strip rather than an invisible one. */
+@property --fade-l {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --fade-r {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
 }
