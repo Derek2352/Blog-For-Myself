@@ -151,3 +151,52 @@ export const PERCH_SNAP_PX = 4;
  * the one thing a cat sitting on your cursor must do is get off it the moment you want to work.
  */
 export const PERCH_BREAK_PX = 22;
+
+/* ------------------------------------------------------------------ *
+ * The gaze (§17) — the cat looks where you point
+ * ------------------------------------------------------------------ */
+
+/**
+ * `[PH 9]` degrees — how far the head turns toward the pointer.
+ *
+ * Read off the drawing rather than chosen: the skull is a circle of r=7.6 in a 64×40 viewBox,
+ * and the two ears sit on top of it as separate paths reaching up to y=1.5. Past about 10° the
+ * far ear's tip swings clear of the skull's silhouette and the head reads as *detached* rather
+ * than turned — at the rendered 48×30 that is a two-pixel gap, which is plenty to look broken.
+ *
+ * The reference clip this came from was measured the same way (`scratchpad/measure_ref.py`): its
+ * mascot's face travels ~17px horizontally against ~3px vertically, so the motion that reads as
+ * "it noticed me" is a **yaw**, not a nod. This is the yaw.
+ */
+export const GAZE_YAW_DEG = 9;
+
+/**
+ * `[PH 1.2]` user units the eye slides inside the head, at full deflection.
+ *
+ * Bounded by the art again: the eye is r=1.15 centred at (57.5, 11.5), inside a skull centred
+ * (55, 13) with r=7.6. Beyond roughly 1.3 units the eye's edge reaches the skull's outline, and
+ * an eye touching the edge of a head is not a glance — it is a mistake in the drawing.
+ */
+export const GAZE_EYE_UNITS = 1.2;
+
+/**
+ * `[PH 0.3]` — vertical deflection as a fraction of horizontal.
+ *
+ * Not 1. The measured reference is a 5.7:1 horizontal-to-vertical ratio, and the reason
+ * generalises past that one clip: a head on a neck turns much further than it tilts. Keeping
+ * some vertical is still worth it, because a pointer up in the header and a pointer down by the
+ * footer should not produce the same face. 0.3 is enough to tell those apart and not enough to
+ * turn the yaw into a nod.
+ */
+export const GAZE_NOD_RATIO = 0.3;
+
+/**
+ * `[PH 200]` ms time constant for easing the gaze toward its target.
+ *
+ * `HEADING_TAU_MS = 220` is already justified in `hand.ts` as roughly the window an eye
+ * integrates a direction over, and this is the same perceptual quantity one step more direct:
+ * there the number smoothed an *inferred* heading, here it smooths where a literal eye is
+ * pointing. Slightly quicker for that reason. Short enough that the cat feels like it noticed
+ * you; long enough that a flick of the wrist does not snap its head round like a mechanism.
+ */
+export const GAZE_TAU_MS = 200;

@@ -57,6 +57,13 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
         stroke="currentColor"
         stroke-width="2.6"
         stroke-linecap="round"></path>
+      {/* `.cat-gaze` exists only to own the yaw's rotation origin (§17). It wraps the head
+          rather than replacing it because `.cat-head` already carries two animations of its
+          own — `cat-groom` and `cat-munch` — and both rotate or translate about the default
+          origin. Giving *that* element a neck origin would silently redraw two shipped poses;
+          giving the yaw its own group changes nothing that already works. Same reasoning as
+          the near ear's group below, one level up. */}
+      <g class="cat-gaze">
       <g class="cat-head">
         <path class="cat-ear ear-far" d="M48 9 L49.5 1.5 L54 6.5 Z"></path>
         {/* The near ear is a group so the notch can ride with it: the arena rotates
@@ -83,6 +90,7 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
         </g>
         <circle cx="55" cy="13" r="7.6"></circle>
         <circle class="cat-eye" cx="57.5" cy="11.5" r="1.15"></circle>
+      </g>
       </g>
     </svg>
     {/* purr/pet feedback — a couple of small marks, never text */}
@@ -190,6 +198,21 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
   }
   #site-cat.face-left .cat-flip {
     transform: scaleX(-1);
+  }
+  /* The yaw turns the head about the **neck**, which has to be said out loud because SVG's
+     default is not what anyone expects: `transform-origin`'s initial value resolves against the
+     *view box*, so an unset origin here would swing the head about (32, 20) — the middle of the
+     sprite, well below and left of the skull — and the "glance" would arrive as a shoulder
+     throw. (50, 19) is where the skull meets the body: skull centre (55, 13), r=7.6, so its
+     lower-left quadrant lands about there.
+
+     Nothing is declared for the resting state on purpose. The gaze is written from the script
+     as the independent `rotate:` property and only while it is non-zero, so a reader with
+     reduced motion, or JavaScript off, gets a head with no transform on it at all rather than
+     an identity one. */
+  .cat-gaze {
+    transform-box: view-box;
+    transform-origin: 50px 19px;
   }
   .cat-eye {
     fill: var(--color-ground);
@@ -572,6 +595,10 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
     PERCH_STILL_MS,
     PERCH_SNAP_PX,
     PERCH_BREAK_PX,
+    GAZE_YAW_DEG,
+    GAZE_EYE_UNITS,
+    GAZE_NOD_RATIO,
+    GAZE_TAU_MS,
   } from '@/lib/cat-game';
 
   const CAT_W = 48;
@@ -651,6 +678,38 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
     // toggle — parks the cat idle instead of letting it wander. Checked live
     // (see the observers at the end), so flipping the accessibility control
     // starts or stops the cat without a reload.
+    const gazeEl = root.querySelector<SVGGElement>('.cat-gaze');
+    const gazeEye = root.querySelector<SVGCircleElement>('.cat-eye');
+    /** Where the gaze is *now*, in the same units as its targets, so it can be eased. */
+    const gaze = { yaw: 0, ex: 0, ey: 0, t: performance.now() };
+
+    /**
+     * Poses that own the head already, and one that makes the gaze meaningless.
+     *
+     * `grooming` and `munching` animate `.cat-head` directly; `dozing` and `stretching` curl or
+     * squash the whole sprite. Turning the head in the middle of any of those is two animations
+     * arguing. `perched` is different — the cat is sitting *on* the cursor, so "look at the
+     * pointer" resolves to "look at your own feet" and reads as a twitch. `climb` is the fourth
+     * kind: `render` has already rotated the entire sprite 90° onto a wall, so the neck no
+     * longer points where this maths thinks it does.
+     */
+    const GAZE_MUTE = ['grooming', 'munching', 'dozing', 'stretching', 'perched'];
+
+    /**
+     * Put the head straight, and remove the properties rather than zeroing them.
+     *
+     * `paintGaze` clears itself once it eases home, but it only runs while the rAF loop runs —
+     * and the one case that matters most is the loop *stopping*: reduce-motion bails out of
+     * `tick` at the top, so without this a cat caught mid-glance would keep a turned head for
+     * the rest of the visit, which is precisely the "frozen frame" the reduced-motion promise
+     * exists to rule out. `parkIdle` is the shared exit for both that path and `stop()`.
+     */
+    const clearGaze = () => {
+      gaze.yaw = gaze.ex = gaze.ey = 0;
+      gazeEl?.style.removeProperty('rotate');
+      gazeEye?.style.removeProperty('translate');
+    };
+
     const parkIdle = () => {
       /*
        * Through `unperch`, not by stripping the class: the perch is a *flag* as well as two
@@ -664,6 +723,7 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
       unperch(); // removes `perched` and `dozing`
       root.classList.remove('walking', 'chasing', 'pounce', 'startled');
       root.classList.add('idle');
+      clearGaze();
     };
     let running = false;
 
@@ -1149,7 +1209,109 @@ const tabs = (await getNavCategories()).map((c) => c.slug);
       setClasses();
     };
 
+    /* ---- §17 the gaze: the cat looks where you point ----
+
+       Purpose: make the animal notice the reader. The cat has walked the bottom edge since
+       0.1 and has never once acknowledged that anybody was there; a head that turns is the
+       cheapest possible "I can see you", and it costs no new art and no new event listener.
+
+       Inputs: `prey` — the pointer record the cat already keeps (`sight()` above), fed by the
+       one `window` pointermove and, on touch, by the pointerdown path that logs a tap as a
+       sighting held 5200ms because a tap reports once. So "look at where I touch" needed
+       nothing built; it needed the gaze to read a record that was already there.
+
+       Outputs: `rotate:` on `.cat-gaze` and `translate:` on `.cat-eye` — the *independent*
+       transform properties, never `transform:`. That is not stylistic. `cat-blink` on the eye,
+       and `cat-groom` and `cat-munch` on the head, all animate `transform`, so writing
+       `transform` here would fight three shipped animations and the cat would stop blinking
+       the moment it looked at you. The independent properties compose with them instead.
+
+       Both writes land inside `#site-cat`, which is already excluded from the harness fleet's
+       page snapshot (`.cat-card-root, #site-cat, #cat-hud` in arena.mjs and arena4.mjs) — so a
+       per-frame style write here cannot break pillar 2's byte-identical-page check, which is
+       exactly what it would have done anywhere else on the page. */
+    const paintGaze = () => {
+      if (!gazeEl || !gazeEye) return;
+      const now = performance.now();
+      const dt = Math.min(120, now - gaze.t);
+      gaze.t = now;
+
+      let yaw = 0;
+      let ex = 0;
+      let ey = 0;
+
+      const muted =
+        motionReduced() ||
+        s.mode === 'climb' ||
+        GAZE_MUTE.some((c) => root.classList.contains(c));
+      /*
+       * `prey.here` is false once the pointer leaves the window, and a sighting older than
+       * `prey.hold` is stale — which is what expires a touch. Both ease the head back to
+       * neutral rather than leaving it turned: a cat frozen mid-glance at a cursor that is no
+       * longer there is the failure state this whole block is arranged to avoid.
+       */
+      const fresh = prey.here && now - prey.t < prey.hold;
+      if (!muted && fresh) {
+        /*
+         * The head's position on screen, from state rather than from a rect. `render` writes
+         * `transform` on the same element, and reading a rect straight afterwards would force a
+         * synchronous layout every frame for a number the state already knows.
+         *
+         * The head sits at (55, 13) of a 64x40 view box, so it is 55/64 across a 48px sprite
+         * and 13/40 down a 30px one. When the cat faces left, `.cat-flip` mirrors the sprite
+         * about its own centre, which puts the head at 1 - 55/64 instead — miss that and the
+         * cat looks at your cursor's reflection.
+         */
+        const acrossFrac = s.dir === -1 ? 1 - 55 / 64 : 55 / 64;
+        const headX = s.x + acrossFrac * CAT_W;
+        const headY = window.innerHeight - CAT_H + (13 / 40) * CAT_H;
+
+        /*
+         * Saturating at half the viewport, in each axis, rather than at a pixel count. A fixed
+         * reach would mean the gaze behaves differently on a phone and a monitor for no reason
+         * a reader could name; half the viewport makes "the far edge of your screen" the point
+         * of full deflection whatever that screen is.
+         */
+        const hx = Math.max(-1, Math.min(1, (prey.x - headX) / (window.innerWidth / 2)));
+        const hy = Math.max(-1, Math.min(1, (prey.y - headY) / (window.innerHeight / 2)));
+
+        /*
+         * The mirror again, and this time for two properties. Inside a `scaleX(-1)` ancestor a
+         * positive rotation turns the wrong way and a positive x-translation moves the wrong
+         * way, so both horizontal terms are negated when the cat faces left. The vertical term
+         * is untouched — a horizontal mirror does not care which way is up.
+         */
+        const m = s.dir === -1 ? -1 : 1;
+        yaw = GAZE_YAW_DEG * hx * m;
+        ex = GAZE_EYE_UNITS * hx * m;
+        ey = GAZE_EYE_UNITS * GAZE_NOD_RATIO * hy;
+      }
+
+      // Exponential ease on a time constant, so the result is frame-rate independent: the same
+      // glance takes the same 200ms whether the browser is managing 60fps or 30.
+      const k = 1 - Math.exp(-dt / GAZE_TAU_MS);
+      gaze.yaw += (yaw - gaze.yaw) * k;
+      gaze.ex += (ex - gaze.ex) * k;
+      gaze.ey += (ey - gaze.ey) * k;
+
+      /*
+       * Below a twentieth of a degree the head is home. Clearing the properties rather than
+       * writing `rotate: 0.001deg` matters for the reduced-motion promise: what a stood-down
+       * cat has is *no transform*, which is checkable, rather than an identity one that merely
+       * computes to the same pixels.
+       */
+      if (Math.abs(gaze.yaw) < 0.05 && Math.abs(gaze.ex) < 0.01 && Math.abs(gaze.ey) < 0.01) {
+        gaze.yaw = gaze.ex = gaze.ey = 0;
+        if (gazeEl.style.rotate) gazeEl.style.rotate = '';
+        if (gazeEye.style.translate) gazeEye.style.translate = '';
+        return;
+      }
+      gazeEl.style.rotate = `${gaze.yaw.toFixed(2)}deg`;
+      gazeEye.style.translate = `${gaze.ex.toFixed(2)}px ${gaze.ey.toFixed(2)}px`;
+    };
+
     const render = () => {
+      paintGaze();
       if (s.mode === 'climb') {
         // a short scramble up the side edge: rotate to vertical, feet on the wall
         const rot = s.climbSide === 1 ? -90 : 90;
