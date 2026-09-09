@@ -31,6 +31,7 @@ import RouteEffects from './_chrome/RouteEffects';
 import SearchShortcut from './_chrome/SearchShortcut';
 import Header from './_chrome/Header';
 import Footer from './_chrome/Footer';
+import Chrome from './_chrome/Chrome';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -128,6 +129,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
         </main>
         <Footer />
+        {/* The cat and its card. Rendered by the layout, which is what makes them persist across
+            navigation — Astro needed `transition:persist` on each; the App Router needs nothing. */}
+        <Chrome />
         <RouteEffects />
         <SearchShortcut />
       </body>
