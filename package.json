@@ -3,7 +3,7 @@
   "type": "module",
   "version": "0.1.0",
   "private": true,
-  "description": "Derek Yung \u2014 portfolio & reflections blog. Content-driven: add files, not code.",
+  "description": "Derek Yung — portfolio & reflections blog. Content-driven: add files, not code.",
   "scripts": {
     "dev": "astro dev",
     "build": "astro check && astro build && pagefind --site dist",
@@ -30,6 +30,7 @@
     "@fontsource/instrument-serif": "^5.2.5",
     "@fontsource/noto-sans-tc": "^5.3.0",
     "@resvg/resvg-js": "^2.6.2",
+    "@shikijs/rehype": "^4.4.3",
     "@tailwindcss/vite": "^4.1.0",
     "astro": "^5.12.0",
     "gray-matter": "^4.0.3",
@@ -46,6 +47,7 @@
     "shiki": "^4.4.3",
     "tailwindcss": "^4.1.0",
     "unified": "^11.0.5",
+    "unist-util-visit": "^5.1.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {

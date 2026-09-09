@@ -1,107 +1,123 @@
+/**
+ * The Astro build's view of the content.
+ *
+ * This file used to be the whole content layer. Every derivation it held now lives in
+ * `content-core.ts`, written against structural types so the Next build's filesystem loader can
+ * use the identical code — see that file's header for why copying it instead would have been the
+ * expensive mistake. What is left here is the part that is genuinely Astro's: `getCollection`, the
+ * draft policy that reads `import.meta.env`, and the promise-shaped API the sixteen `.astro` pages
+ * already call.
+ *
+ * **The public API is unchanged on purpose.** Not one page was edited when this was split. A
+ * refactor that also moves call sites cannot tell you whether the refactor was correct, because
+ * everything changed at once; keeping the surface identical means the existing build, the 549
+ * tests and the harness fleet are all still measuring the same thing.
+ */
 import { getCollection, type CollectionEntry } from 'astro:content';
-import { categories, type Category } from '@/data/categories';
-import { resolvePeriod, type PeriodRef } from './periods';
-import { monthKey, monthLabelFromKey } from './format';
-import { byPinnedOrder, byDateDesc } from './sort';
+import {
+  categoryIndex,
+  indexCodes,
+  navCategories,
+  newestFirst,
+  relatedTo,
+  sortForCategory,
+  allTagsIn,
+  tagCountsIn,
+  type CategoryWithCounts,
+  type FeedItem as CoreFeedItem,
+  type MonthGroup as CoreMonthGroup,
+  type PeriodGroupData as CorePeriodGroupData,
+} from './content-core';
 
 export type Entry = CollectionEntry<'entries'>;
 export type Log = CollectionEntry<'logs'>;
 
+/* Re-exported so the pages' imports keep working unchanged — the split is an internal detail, and
+   a page should not have to know which half of the content layer a helper ended up in. */
+export {
+  sortForCategory,
+  groupByPeriod,
+  toFeed,
+  logHasBody,
+  reflectionWritten,
+  entryHref,
+  logHref,
+  categoryHref,
+  tagHref,
+} from './content-core';
+export type { CategoryWithCounts } from './content-core';
+
 /**
- * Draft policy: drafts render in `npm run dev` (with a DRAFT badge) so you
- * can preview them, and are excluded from production builds. Publishing =
- * setting `draft: false`.
+ * The three feed types, **bound to Astro's entry and log**.
  *
- * `npm run build:drafts` (SHOW_DRAFTS=1) builds a preview that keeps
- * drafts in — for a second, private deploy to review on your phone.
- * Preview builds carry a visible watermark strip (see Base.astro).
+ * `content-core` declares them generic with structural defaults, so a bare `PeriodGroupData` there
+ * means "some item with a date" — correct for the core, wrong here. Re-exporting them unbound
+ * silently widened `PeriodGroup.astro`'s props from `CollectionEntry` to the structural type, and
+ * the component then had no `collection` field to hand on. Naming the arguments once, here, is
+ * what keeps every `.astro` page seeing exactly the types it saw before the split.
+ */
+export type FeedItem = CoreFeedItem<Entry, Log>;
+export type MonthGroup = CoreMonthGroup<Entry, Log>;
+export type PeriodGroupData = CorePeriodGroupData<Entry, Log>;
+
+/**
+ * Draft policy: drafts render in `npm run dev` (with a DRAFT badge) so you can preview them, and
+ * are excluded from production builds. Publishing = setting `draft: false`.
+ *
+ * `npm run build:drafts` (SHOW_DRAFTS=1) builds a preview that keeps drafts in — for a second,
+ * private deploy to review on your phone. Preview builds carry a visible watermark strip (see
+ * Base.astro).
  */
 const showDrafts = import.meta.env.DEV || process.env.SHOW_DRAFTS === '1';
 
 /** True on a drafts-included production build — used for the watermark. */
 export const isDraftPreviewBuild = !import.meta.env.DEV && process.env.SHOW_DRAFTS === '1';
 
-const dateDesc = <T extends { date: Date }>(a: T, b: T) =>
-  b.date.getTime() - a.date.getTime();
-
 /** All visible entries, newest first. */
 export async function getEntries(): Promise<Entry[]> {
-  const all = await getCollection('entries', (e) => showDrafts || !e.data.draft);
-  return all.sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+  return newestFirst(await getCollection('entries', (e) => showDrafts || !e.data.draft));
 }
 
 /** All visible logs, newest first. */
 export async function getLogs(): Promise<Log[]> {
-  const all = await getCollection('logs', (l) => showDrafts || !l.data.draft);
-  return all.sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
-}
-
-/**
- * Category-grid sort: entries with a manual `order` pin first (ascending),
- * everything else newest-first behind them.
- */
-export function sortForCategory(entries: Entry[]): Entry[] {
-  return [...entries].sort((a, b) => byPinnedOrder(a, b) || byDateDesc(a, b));
+  return newestFirst(await getCollection('logs', (l) => showDrafts || !l.data.draft));
 }
 
 /* ------------------------------------------------------------------ *
- * Index codes — the signature "archival index" (E-014 / L-003).
- * Derived from content only: all items (drafts included, so codes stay
- * stable between dev and production), sorted by date then id.
+ * Index codes — memoised, because every card on every page asks for one.
  * ------------------------------------------------------------------ */
 let codesPromise: Promise<Map<string, string>> | null = null;
 
-function indexCodes(): Promise<Map<string, string>> {
-  codesPromise ??= (async () => {
-    const map = new Map<string, string>();
-    const num = (i: number) => String(i + 1).padStart(3, '0');
-    const chrono = <T extends Entry | Log>(items: T[]) =>
-      [...items].sort(
-        (a, b) =>
-          a.data.date.getTime() - b.data.date.getTime() || a.id.localeCompare(b.id),
-      );
-    chrono(await getCollection('entries')).forEach((e, i) =>
-      map.set(`entries:${e.id}`, `E-${num(i)}`),
-    );
-    chrono(await getCollection('logs')).forEach((l, i) =>
-      map.set(`logs:${l.id}`, `L-${num(i)}`),
-    );
-    return map;
-  })();
+function codes(): Promise<Map<string, string>> {
+  /* Built from the *unfiltered* collections: a code is a position in a chronological sequence, so
+     leaving drafts out would renumber every later item the moment one is published. */
+  codesPromise ??= (async () =>
+    indexCodes(await getCollection('entries'), await getCollection('logs')))();
   return codesPromise;
 }
 
 export async function entryCode(entry: Entry): Promise<string> {
-  return (await indexCodes()).get(`entries:${entry.id}`) ?? 'E-000';
+  return (await codes()).get(`entries:${entry.id}`) ?? 'E-000';
 }
 
 export async function logCode(log: Log): Promise<string> {
-  return (await indexCodes()).get(`logs:${log.id}`) ?? 'L-000';
+  return (await codes()).get(`logs:${log.id}`) ?? 'L-000';
 }
 
 /* ------------------------------------------------------------------ *
  * Navigation — derived, never hardcoded.
  * ------------------------------------------------------------------ */
-export interface CategoryWithCounts extends Category {
-  entryCount: number;
-  logCount: number;
-}
 
 /** Every category (in tab order) with its visible-item counts. */
 export async function getCategoryIndex(): Promise<CategoryWithCounts[]> {
   const [entries, logs] = await Promise.all([getEntries(), getLogs()]);
-  return [...categories]
-    .sort((a, b) => a.order - b.order)
-    .map((c) => ({
-      ...c,
-      entryCount: entries.filter((e) => e.data.category === c.slug).length,
-      logCount: logs.filter((l) => l.data.category === c.slug).length,
-    }));
+  return categoryIndex(entries, logs);
 }
 
 /** Tabs = categories with at least one visible entry or log. */
 export async function getNavCategories(): Promise<CategoryWithCounts[]> {
-  return (await getCategoryIndex()).filter((c) => c.entryCount + c.logCount > 0);
+  const [entries, logs] = await Promise.all([getEntries(), getLogs()]);
+  return navCategories(entries, logs);
 }
 
 export interface NavCategory extends CategoryWithCounts {
@@ -110,8 +126,8 @@ export interface NavCategory extends CategoryWithCounts {
 }
 
 /**
- * Nav categories with their leading entries attached — powers the tab-bar
- * hover flyout. Derived from content; no hardcoded sub-navigation.
+ * Nav categories with their leading entries attached — powers the tab-bar hover flyout. Derived
+ * from content; no hardcoded sub-navigation.
  */
 export async function getNavTree(limit = 8): Promise<NavCategory[]> {
   const [allEntries, nav] = await Promise.all([getEntries(), getNavCategories()]);
@@ -122,133 +138,21 @@ export async function getNavTree(limit = 8): Promise<NavCategory[]> {
 }
 
 /* ------------------------------------------------------------------ *
- * Mixed feed (entries + logs) and period → month grouping.
+ * Derivations that need the whole set fetched first.
  * ------------------------------------------------------------------ */
-export type FeedItem =
-  | { type: 'entry'; date: Date; entry: Entry }
-  | { type: 'log'; date: Date; log: Log };
 
-export function toFeed(entries: Entry[], logs: Log[]): FeedItem[] {
-  const items: FeedItem[] = [
-    ...entries.map((entry) => ({ type: 'entry' as const, date: entry.data.date, entry })),
-    ...logs.map((log) => ({ type: 'log' as const, date: log.data.date, log })),
-  ];
-  return items.sort(dateDesc);
-}
-
-export interface MonthGroup {
-  key: string; // "2026-07"
-  label: string; // "July 2026"
-  items: FeedItem[];
-}
-
-export interface PeriodGroupData {
-  ref: PeriodRef;
-  months: MonthGroup[];
-  count: number;
-}
-
-/** Group a feed period → month → items, everything newest-first. */
-export function groupByPeriod(items: FeedItem[]): PeriodGroupData[] {
-  const groups = new Map<string, { ref: PeriodRef; months: Map<string, FeedItem[]> }>();
-  for (const item of items) {
-    const ref = resolvePeriod(item.date);
-    let group = groups.get(ref.id);
-    if (!group) {
-      group = { ref, months: new Map() };
-      groups.set(ref.id, group);
-    }
-    const key = monthKey(item.date);
-    const month = group.months.get(key) ?? [];
-    month.push(item);
-    group.months.set(key, month);
-  }
-  return [...groups.values()]
-    .map((group) => ({
-      ref: group.ref,
-      count: [...group.months.values()].reduce((n, arr) => n + arr.length, 0),
-      months: [...group.months.entries()]
-        .sort((a, b) => b[0].localeCompare(a[0]))
-        .map(([key, monthItems]) => ({
-          key,
-          label: monthLabelFromKey(key),
-          items: monthItems.sort(dateDesc),
-        })),
-    }))
-    .sort((a, b) => b.ref.end.localeCompare(a.ref.end));
-}
-
-/* ------------------------------------------------------------------ *
- * Related entries: same category or shared tags, best matches first.
- * ------------------------------------------------------------------ */
 export async function relatedEntries(entry: Entry, limit = 3): Promise<Entry[]> {
-  const all = await getEntries();
-  return all
-    .filter((e) => e.id !== entry.id)
-    .map((e) => ({
-      e,
-      score:
-        (e.data.category === entry.data.category ? 2 : 0) +
-        e.data.tags.filter((t) => entry.data.tags.includes(t)).length,
-    }))
-    .filter((x) => x.score > 0)
-    .sort((a, b) => b.score - a.score || b.e.data.date.getTime() - a.e.data.date.getTime())
-    .slice(0, limit)
-    .map((x) => x.e);
+  return relatedTo(entry, await getEntries(), limit);
 }
 
 /** Union of all tags across visible entries + logs, alphabetical. */
 export async function allTags(): Promise<string[]> {
   const [entries, logs] = await Promise.all([getEntries(), getLogs()]);
-  const tags = new Set<string>();
-  for (const e of entries) e.data.tags.forEach((t) => tags.add(t));
-  for (const l of logs) l.data.tags.forEach((t) => tags.add(t));
-  return [...tags].sort((a, b) => a.localeCompare(b));
+  return allTagsIn(entries, logs);
 }
 
-/**
- * The same tags, carrying how often each is used, busiest first.
- *
- * `/tags/` wants them alphabetical because it is an *index* — you arrive knowing the word and
- * need to find it. `/search/` wants them by weight because you arrive knowing nothing and need
- * somewhere to start, and the busiest thread is the likeliest to have what a stranger came for.
- * Same data, two orders, one source — which is why this returns counts rather than a second
- * hand-kept list of "featured" tags that would go stale the first time an entry is filed.
- *
- * Ties break alphabetically so the order is stable across builds: a run of tags used once each
- * would otherwise shuffle with `Set` insertion order, and a page that reorders itself for no
- * visible reason is a diff nobody can review.
- */
+/** The same tags with usage counts, busiest first. See `tagCountsIn` for why both orders exist. */
 export async function tagCounts(): Promise<{ tag: string; count: number }[]> {
   const [entries, logs] = await Promise.all([getEntries(), getLogs()]);
-  const counts = new Map<string, number>();
-  for (const e of entries) e.data.tags.forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1));
-  for (const l of logs) l.data.tags.forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1));
-  return [...counts.entries()]
-    .map(([tag, count]) => ({ tag, count }))
-    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+  return tagCountsIn(entries, logs);
 }
-
-/* ------------------------------------------------------------------ *
- * Hrefs. A log with no body is a terminal card — no dead detail page.
- * ------------------------------------------------------------------ */
-export const logHasBody = (log: Log): boolean =>
-  !!log.body && log.body.replace(/<!--[\s\S]*?-->/g, '').trim().length > 0;
-
-/**
- * True once an entry's reflection has real prose — i.e. the body contains
- * more than the four template headings and comments. Unwritten reflections
- * get a graceful placeholder instead of four bare headings.
- */
-export const reflectionWritten = (entry: Entry): boolean =>
-  !!entry.body &&
-  entry.body
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/^##\s.*$/gm, '')
-    .trim().length > 0;
-
-export const entryHref = (entry: Entry): string => `/entry/${entry.id}/`;
-export const logHref = (log: Log): string | undefined =>
-  logHasBody(log) ? `/log/${log.id}/` : undefined;
-export const categoryHref = (slug: string): string => `/${slug}/`;
-export const tagHref = (tag: string): string => `/tags/${tag}/`;
