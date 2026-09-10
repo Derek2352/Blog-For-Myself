@@ -13,6 +13,9 @@ export default function TimelineItem({ entry, code }: { entry: Entry; code: stri
   return (
     <li
       className="grid grid-cols-[5.2rem_1fr] gap-4 border-b border-line py-5 sm:grid-cols-[6.5rem_1fr] sm:gap-6"
+      /* Read by TimelineControls, which filters these nodes in place rather than re-rendering the
+         list — see that component for why the server-rendered DOM is the source of truth. */
+      data-cat={entry.data.category}
       data-io-reveal
     >
       <div className="rail pt-1">
