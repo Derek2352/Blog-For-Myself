@@ -12,6 +12,11 @@ Built with [Next.js](https://nextjs.org) (App Router, static export), React, Typ
 Tailwind (v4 tokens). No database, no CMS — the repo *is* the backend. Entries are Markdown files
 read at build time; every page, feed, sitemap and share card is derived from them.
 
+The two Next.js/PostgreSQL rewrite proposals this migration drew on are kept at
+[`docs/nextjs-drops-proposal.md`](docs/nextjs-drops-proposal.md), with a header recording what was
+adopted from them and what was deliberately not. `content/` at the repo root is a dead snapshot from
+those zips — the site builds from `src/content/`; see [`content/README.md`](content/README.md).
+
 ---
 
 ## Setup — step by step
