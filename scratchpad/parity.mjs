@@ -18,14 +18,38 @@
  *   Astro:  npm run build && npx astro preview --port 4416
  *   Next:   npm run build:next && (cd out && python3 -m http.server 4417)
  */
+import { readdirSync } from 'node:fs';
+import path from 'node:path';
 import { launch, report } from './lib/fixture.mjs';
 
 const ASTRO = process.env.ASTRO_URL ?? 'http://localhost:4416';
 const NEXT = process.env.NEXT_URL ?? 'http://localhost:4417';
 const OUT = '/home/user/Blog-For-Myself/scratchpad/audit';
 
-/** Paths to compare. Add one here as each page is ported. */
-const PATHS = (process.env.PARITY_PATHS ?? '/').split(',').filter(Boolean);
+/**
+ * Paths to compare. `PARITY_PATHS=all` walks every page the Astro build produced, which is the run
+ * to do before deleting the Astro build — after that there is nothing left to compare against.
+ */
+const PATHS = (() => {
+  const raw = process.env.PARITY_PATHS ?? '/';
+  if (raw !== 'all') return raw.split(',').filter(Boolean);
+  const dist = path.join(process.cwd(), 'dist');
+  const walk = (dir) =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? walk(path.join(dir, e.name)) : e.name === 'index.html' ? [dir] : [],
+    );
+  return walk(dist)
+    .map((d) => `${path.relative(dist, d).split(path.sep).join('/')}/`)
+    .map((u) => (u === '/' ? '/' : `/${u}`.replace('//', '/')))
+    .sort();
+})();
+
+/**
+ * Screenshots are the point on a handful of pages and 336 files on all of them, so the full sweep
+ * runs facts-only. The pictures are for a human comparing a design; the counts are for a machine
+ * confirming nothing was dropped, and only the second scales to every page.
+ */
+const SHOTS = process.env.PARITY_SHOTS !== '0';
 
 const { ok, note, fixture, done } = report();
 
@@ -81,7 +105,7 @@ for (const path of PATHS) {
     ['astro', ASTRO],
     ['next', NEXT],
   ]) {
-    for (const theme of ['light', 'dark']) {
+    for (const theme of SHOTS ? ['light', 'dark'] : ['light']) {
       const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
       const page = await ctx.newPage();
       if (theme === 'dark') {
@@ -99,8 +123,10 @@ for (const path of PATHS) {
       }
       /* Let the reveal observers fire and the fonts settle before shooting. */
       await page.waitForTimeout(1400);
-      const name = `parity${path.replace(/\//g, '-').replace(/-$/, '') || '-home'}-${tag}-${theme}`;
-      await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: false });
+      if (SHOTS) {
+        const name = `parity${path.replace(/\//g, '-').replace(/-$/, '') || '-home'}-${tag}-${theme}`;
+        await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: false });
+      }
       if (theme === 'light') got[tag] = await facts(page);
       await ctx.close();
     }

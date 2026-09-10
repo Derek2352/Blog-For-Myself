@@ -198,60 +198,96 @@ async function lureCat(page, target, within = 18, budgetMs = 16000) {
 }
 
 // ---- 4. trickster: some wind-ups are bluffs, and a bluff looks different
+/*
+ * **The sample is a fixture, and it used to be asserted on.** All four checks below rest on having
+ * recorded some wind-ups to judge, and when the provocation produced none they reported as four
+ * assertion failures — "0 wind-ups", "0 of 0 marked as feints", and a bluff rate of "NaN%". That is
+ * §12's fault in this file: a check standing on a fixture a roll handed it rather than on what the
+ * build does. Nothing was measured, so nothing should have been claimed.
+ *
+ * Two causes, both roll-shaped rather than build-shaped. The nervous-player loop provokes 34 times
+ * without ever finishing a hold, and a fight that ends early (the console line above says which)
+ * stops producing phases; and a stance that spends the window stalking simply never telegraphs.
+ * So: report the sample as a fixture, and re-roll it, exactly as `deal()` does for a board.
+ */
 {
-  const ctx = await fresh();
-  const page = await ctx.newPage();
-  await page.goto(BASE + '/', { waitUntil: 'load' });
-  await page.waitForTimeout(700);
-  /*
-   * **Treats in hand, never thrown — added 1.4.** §2 makes a loss "every claim taken **and**
-   * nothing left to throw", and this section deliberately provokes without ever *finishing* a
-   * hold, so it frees nothing while the cat takes ground on every landed pounce and every
-   * regrow. Arming removes the loss without touching what is being measured.
-   */
-  const held = await armAmmo(page, { hops: 5, pool: 6, dwell: 650, settle: 800, home: '/' });
-  ok('treats in hand, so provoking cannot lose the fight (§2)', held >= 3, `${held} found`);
-  fixture('rolled a trickster', await stanceDeal(page, 'trickster'));
-  await page.evaluate(RECORDER);
+  const NEEDED = 6; // the same threshold the checks below want to be meaningful
+  const ATTEMPTS = 3;
+  let dealt = null;
 
-  const spot = await bandSpot(page);
-  await lureCat(page, spot);
-  /*
-   * Provoke over and over without ever finishing: hold past the 0.35 that provokes, break
-   * the hold before it completes, and do it again — what a nervous player looks like.
-   */
-  for (let i = 0; i < 34; i++) {
-    await page.mouse.move(spot.x, spot.y);
-    await page.waitForTimeout(1050);
-    await page.mouse.move(spot.x + 70, spot.y + 40);
-    await page.waitForTimeout(260);
+  for (let attempt = 1; attempt <= ATTEMPTS && !dealt; attempt++) {
+    const ctx = await fresh();
+    const page = await ctx.newPage();
+    await page.goto(BASE + '/', { waitUntil: 'load' });
+    await page.waitForTimeout(700);
+    /*
+     * **Treats in hand, never thrown — added 1.4.** §2 makes a loss "every claim taken **and**
+     * nothing left to throw", and this section deliberately provokes without ever *finishing* a
+     * hold, so it frees nothing while the cat takes ground on every landed pounce and every
+     * regrow. Arming removes the loss without touching what is being measured.
+     */
+    const held = await armAmmo(page, { hops: 5, pool: 6, dwell: 650, settle: 800, home: '/' });
+    if (attempt === 1) {
+      ok('treats in hand, so provoking cannot lose the fight (§2)', held >= 3, `${held} found`);
+    }
+    const stance = await stanceDeal(page, 'trickster');
+    if (attempt === 1) fixture('rolled a trickster', stance);
+    await page.evaluate(RECORDER);
+
+    const spot = await bandSpot(page);
+    await lureCat(page, spot);
+    /*
+     * Provoke over and over without ever finishing: hold past the 0.35 that provokes, break the
+     * hold before it completes, and do it again — what a nervous player looks like.
+     */
+    for (let i = 0; i < 34; i++) {
+      await page.mouse.move(spot.x, spot.y);
+      await page.waitForTimeout(1050);
+      await page.mouse.move(spot.x + 70, spot.y + 40);
+      await page.waitForTimeout(260);
+    }
+    const stillOn = await page.evaluate(`!document.querySelector('#cat-card-panel').hidden`);
+    const leftNow = await page.evaluate(CLAIMS);
+    const log = await page.evaluate(() => window.__phases);
+    const winds = log.filter((p) => p.phase === 'telegraph');
+    console.log(
+      `      · attempt ${attempt}: fight ${stillOn ? 'still on' : 'ENDED early'}, ${leftNow} claims, ` +
+        `${log.length} phase records, ${winds.length} wind-ups`,
+    );
+
+    if (winds.length >= NEEDED) {
+      dealt = { value: { log, winds }, deal: attempt, deals: ATTEMPTS };
+    }
+    await ctx.close();
   }
-  const stillOn = await page.evaluate(`!document.querySelector('#cat-card-panel').hidden`);
-  const leftNow = await page.evaluate(CLAIMS);
-  console.log(`      · fight ${stillOn ? 'still on' : 'ENDED early'}, ${leftNow} claims, ` +
-    `${(await page.evaluate(() => window.__phases.length))} phase records`);
-  const log = await page.evaluate(() => window.__phases);
-  const winds = log.filter((p) => p.phase === 'telegraph');
-  const bluffs = winds.filter((p) => p.feint);
-  // a bluff is a telegraph followed by a stalk instead of a leap
-  const followed = winds.map((w) => log.find((p) => p.t > w.t)?.phase);
-  ok('it winds up plenty', winds.length >= 6, `${winds.length} wind-ups`);
-  ok(
-    'and some of them are bluffs',
-    bluffs.length > 0,
-    `${bluffs.length} of ${winds.length} marked as feints`,
-  );
-  ok(
-    'a bluff goes back to stalking instead of leaping',
-    followed.filter((f) => f === 'stalk').length > 0,
-    followed.join('→'),
-  );
-  ok(
-    'and it is a minority of them — a tell you can learn, not a coin toss',
-    winds.length >= 6 && bluffs.length < winds.length,
-    `${bluffs.length}/${winds.length} bluffed (${((bluffs.length / winds.length) * 100).toFixed(0)}%, spec says 30%)`,
-  );
-  await ctx.close();
+
+  if (
+    fixture(
+      `provoking produced at least ${NEEDED} wind-ups to judge`,
+      dealt,
+      dealt ? `${dealt.value.winds.length} wind-ups` : 'a fight that ends early records no phases',
+    )
+  ) {
+    const { log, winds } = dealt.value;
+    const bluffs = winds.filter((p) => p.feint);
+    // a bluff is a telegraph followed by a stalk instead of a leap
+    const followed = winds.map((w) => log.find((p) => p.t > w.t)?.phase);
+    ok(
+      'and some of them are bluffs',
+      bluffs.length > 0,
+      `${bluffs.length} of ${winds.length} marked as feints`,
+    );
+    ok(
+      'a bluff goes back to stalking instead of leaping',
+      followed.filter((f) => f === 'stalk').length > 0,
+      followed.join('→'),
+    );
+    ok(
+      'and it is a minority of them — a tell you can learn, not a coin toss',
+      bluffs.length < winds.length,
+      `${bluffs.length}/${winds.length} bluffed (${((bluffs.length / winds.length) * 100).toFixed(0)}%, spec says 30%)`,
+    );
+  }
 }
 
 // ---- 5. the loadout: a bell and a biscuit are not the same treat
