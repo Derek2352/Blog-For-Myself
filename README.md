@@ -192,35 +192,85 @@ extra). Three surfaces, one source of truth:
 
 Tune counts and shot lists freely in `photo-rules.mjs` — it's a nudge, never a build gate.
 
-### Drawn covers — `art:`, for the entry whose photographs are never coming
+### Drawn covers — `art:`
 
-Every entry starts on a **plate**: a warm ledger-ruled placeholder `npm run covers` draws from the
-category's hue. It is a slot held open, and for almost everything that is the right answer — the
-photographs exist, they just have not been scanned yet.
-
-One kind of entry is different. The AlipayHK competition's deck and prototype are deliberately
-withheld, so no photograph is ever arriving; a permanent placeholder is the wrong outcome and a
-mocked-up screenshot is a worse one. For that, add one line to the frontmatter:
+Every entry has a **drawn cover**: an editorial illustration `npm run covers` generates in SVG from
+the category's hue. One line of frontmatter picks which drawing:
 
 ```yaml
-art: "split-bill"
+art: "ridge-line"
 ```
 
-then run `npm run covers`. The cover becomes a **drawn illustration** instead of a plate, and the
-entry page treats it as the finished thing rather than as a gap: full height instead of the
-placeholder's 13rem crop, an `alt` that describes the drawing, and a credit line under it —
-*"Editorial concept illustration, drawn for this page. Not the original competition prototype."*
-That last one is not decoration. A picture of a bill-splitting app, on the page about a
-bill-splitting app you designed, will be read as a screenshot of what you built unless something
-says otherwise.
+The alternative is the **plate** — a warm ledger-ruled placeholder, which is what an entry gets with
+no `art:` line at all. A plate is a slot held open for a photograph; a drawing is the finished cover,
+so the entry page treats the two differently. A drawing runs full height instead of the placeholder's
+13rem crop, its `alt` describes the picture, and it carries a credit line under it — *"Editorial
+concept illustration, drawn for this page. Not a photograph of the trip."*
 
-Drawings live in `scripts/cover-art.mjs`, one per named template, drawn in SVG from the category's
-hue plus the site's two brand colours. Today there is one; a second costs a `draw()` function and
-three strings (`alt`, `credit`, `label`). The name is validated against the registry, so a typo
-fails the build rather than quietly leaving a placeholder.
+That credit is not decoration. A picture of a bill-splitting app, on the page about a bill-splitting
+app you designed, will be read as a screenshot of what you built unless something says otherwise.
+Every template's credit names what its drawing is **not**, and a test fails if one stops doing so.
 
-Remove the line and run `npm run covers` again and the entry goes back to a plate. Drop a real
-`cover.jpg` in and everything above switches itself off — the page reads the file, not the field.
+#### The fifteen templates
+
+| Template | Draws | Used by |
+|---|---|---|
+| `artboard` | a design canvas mid-edit, shape selected | design assistant |
+| `blueprint` | a dimensioned plan with a title block | The Blueprint of Tomorrow |
+| `book-stack` | books inside a turning arrow | Read-Cycling |
+| `cohort` | a group of figures, two picked out | ambassadors, Honours Academy |
+| `collection-bag` | a sealed bag on a strap, and a sticker sheet | flag day |
+| `conversation` | two sides of an exchange | the three career advisory entries |
+| `crates` | a hand-set stack of crates and a bag | food distribution |
+| `film-strip` | a tilted strip whose frames each hold a scene | the three films |
+| `ledger-page` | a ruled sheet with a total | BOCHK internship |
+| `model-graph` | sparse layers of nodes over tokens | DataEdge |
+| `pipeline` | sources → clusters → a cited profile | Market Analysis Pipeline |
+| `pitch-deck` | a fan of slides | YDC |
+| `ridge-line` | mountain ridges in mist, with a location chip | Wuyishan, Hubei |
+| `skyline` | towers over water, with a location chip | Guangzhou, Shenzhen, Three Cities |
+| `split-bill` | two handsets and a bill dividing into shares | 夾單 · 阿夾 |
+| `trading-desk` | a terminal: candles or a filled line | Bloomberg |
+
+#### How two entries on one template stay different
+
+Two things vary, and they do different jobs.
+
+**The seed** — the entry's slug — fills the drawing in: how tall the peaks are, how many books, where
+the mist sits, which way the market went. Continuous, and different for every entry.
+
+**The ordinal** — this entry's position among those sharing the template, numbered in slug order —
+picks the *composition* from a small named family. `conversation` has four (`trade`, `listen`,
+`volley`, `close`), `film-strip` has three (three, four or five frames), `skyline` has three horizon
+heights. The first entry gets the first, the second the second, and so on.
+
+The split matters because chance is not good enough at this. Picking one of four layouts from a hash
+gives three entries three *different* layouts only 3 times in 8 — the three career-advisory covers
+came out identical twice before this was structural rather than probable. `npm test` asserts that no
+two committed covers are the same file.
+
+#### Adding a template
+
+Add an entry to `ART_TEMPLATES` in `scripts/cover-art.mjs`: a `draw()` returning SVG body markup,
+plus `alt`, `credit`, `label` and `aspect` (and `compositions` if it has a family). Everything else
+follows — `ART_NAMES` is derived from the keys, the schema validates `art:` against it so a typo
+fails the build, and the test suite will draw the new one at every site hue and check it.
+
+Two rules the existing drawings all keep, and the reason for each:
+
+- **Ground and ink come from `placeholderSVG`'s measured values.** The dark theme reaches every
+  drawn cover through one `invert(1) hue-rotate(180deg)` rule, and those two numbers are what make
+  it land on the dark surface token instead of glowing. `scratchpad/art-sink.mjs` measures all of
+  them rather than trusting it.
+- **No legible text beyond the mono stamp** (and the location chip, which is real frontmatter). An
+  SVG loaded through `<img>` gets no webfont, and a cover that renders as a plausible screenshot is
+  exactly what the credit line then has to spend itself denying.
+
+#### Getting rid of one
+
+Remove the `art:` line and run `npm run covers` — the entry goes back to a plate. Or just drop a real
+`cover.jpg` beside the markdown: everything above switches itself off, because the page reads the
+file, not the field.
 
 ### C. New tab (category)
 

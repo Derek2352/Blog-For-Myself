@@ -7,6 +7,9 @@ organization: "BBA-FAFT Programme Office, HSUHK"
 location: "Shenzhen"
 summary: "The National Supercomputing Center Shenzhen and Shenzhen Zhicheng Computing Network Technology's Smart City & Big Data Center, up close."
 cover: "./images/cover.svg"
+# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.
+# Replaced automatically the day a real cover.jpg lands beside this file.
+art: "skyline"
 gallery: []
 tags: ["supercomputing", "smart-city", "fintech"]
 links: []

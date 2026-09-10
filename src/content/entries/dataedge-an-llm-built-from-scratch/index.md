@@ -14,6 +14,9 @@ updated: 2026-07-28
 summary: "A decoder-only transformer written by hand in PyTorch — GQA, RoPE, SwiGLU, RMSNorm — specialised for data analytics and designed to run offline on a phone. Architected at 2.5B parameters; prototyped small enough to train on a laptop CPU, then debugged until it stopped answering with blank lines."
 note: "Loss fell for five epochs, exactly as promised. Then I typed a question and it answered with nothing at all."
 cover: "./images/cover.svg"
+# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.
+# Replaced automatically the day a real cover.jpg lands beside this file.
+art: "model-graph"
 gallery: []
 tags: ["llm", "pytorch", "python", "ai-infrastructure"]
 links: []

@@ -1,13 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="presentation">
-  <defs>
-    <pattern id="ledger" width="88" height="88" patternUnits="userSpaceOnUse">
-      <path d="M88 0H0v88" fill="none" stroke="hsl(26 18% 34%)" stroke-opacity="0.11" stroke-width="1.5"/>
-    </pattern>
-  </defs>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img" data-cover-art="ridge-line">
+  <title>Concept illustration: layered mountain ridges receding into mist, with the trip’s location on a small chip.</title>
   <rect width="1600" height="1000" fill="hsl(26 18% 88%)"/>
-  <rect width="1600" height="1000" fill="url(#ledger)"/>
+  <circle cx="1085" cy="226" r="58" fill="#8e2f45" fill-opacity="0.16"/><polygon points="0 1000 0 625 313 551 470 421 584 571 774 402 935 578 1128 470 1600 625 1600 1000" fill="hsl(26 22% 34%)" fill-opacity="0.16"/><polygon points="0 1000 0 694 237 652 347 483 477 609 594 574 802 641 909 467 1199 626 1323 489 1600 694 1600 1000" fill="hsl(26 22% 34%)" fill-opacity="0.28500000000000003"/><polygon points="0 1000 0 763 116 707 244 642 406 697 501 592 652 711 741 627 926 708 1010 633 1287 724 1367 677 1600 763 1600 1000" fill="hsl(26 22% 34%)" fill-opacity="0.41000000000000003"/><defs><linearGradient id="mist763" x1="0" x2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="0.22" stop-color="#fff" stop-opacity="0.62"/><stop offset="0.78" stop-color="#fff" stop-opacity="0.62"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><rect x="-3" y="750" width="912" height="17" rx="6" fill="url(#mist763)"/><rect x="122" y="759" width="1059" height="10" rx="6" fill="url(#mist763)"/><polygon points="0 1000 0 831 182 775 278 690 426 774 508 696 572 793 660 670 837 784 947 745 1030 756 1101 737 1272 755 1370 663 1600 831 1600 1000" fill="hsl(26 22% 34%)" fill-opacity="0.535"/><polygon points="0 1000 0 900 124 850 212 746 340 837 415 809 548 860 644 788 717 839 796 770 887 863 962 759 1093 842 1182 783 1264 838 1358 803 1600 900 1600 1000" fill="hsl(26 22% 34%)" fill-opacity="0.66"/><rect x="96" y="92" width="338" height="54" rx="10" fill="none" stroke="hsl(26 22% 34%)" stroke-opacity="0.3" stroke-width="2"/><path d="M120 124l14-14M124 110h10v10" fill="none" stroke="hsl(26 22% 34%)" stroke-width="3" stroke-opacity="0.5" stroke-linecap="round"/><text x="148" y="128" fill="hsl(26 22% 34%)" fill-opacity="0.62" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="22" letter-spacing="2.4">WUYISHAN, FUJIAN</text>
   <rect x="28" y="28" width="1544" height="944" fill="none" stroke="hsl(26 22% 58%)" stroke-width="2" rx="18"/>
-  <line x1="28" y1="145" x2="1572" y2="145" stroke="hsl(26 22% 58%)" stroke-width="2" stroke-dasharray="2 26"/>
-  <line x1="28" y1="855" x2="1572" y2="855" stroke="hsl(26 22% 58%)" stroke-width="2" stroke-dasharray="2 26"/>
-  <path d="M787 500h26M800 487v26" stroke="#8e2f45" stroke-opacity="0.7" stroke-width="3"/>
+  <text x="96" y="916" fill="hsl(26 12% 99%)" fill-opacity="0.8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="22" letter-spacing="3.5">EDITORIAL CONCEPT</text>
 </svg>

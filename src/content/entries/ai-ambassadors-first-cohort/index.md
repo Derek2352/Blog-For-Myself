@@ -7,6 +7,9 @@ role: "AI Ambassador — First Cohort"
 organization: "HSUHK School of Business"
 summary: "Part of the first “#BE AI-Ready” cohort — translating cloud architecture, generative AI and local-LLM expertise into accessible campus knowledge, with faculty and peers (through May 2027, expected)."
 cover: "./images/cover.svg"
+# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.
+# Replaced automatically the day a real cover.jpg lands beside this file.
+art: "cohort"
 gallery: []
 tags: ["ai-advocacy", "campus", "leadership"]
 links: []

@@ -19,6 +19,9 @@ endDate: 2026-05-20
 updated: 2026-07-28
 summary: "A research tool that turns public online discussion into cited personas and journey maps — a register of 19 regions and 104 sources, 36 of them implemented, local embeddings and clustering, synthesis where every claim must name its source, and a web UI to run it from. Built in a four-day sprint."
 cover: "./images/cover.svg"
+# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.
+# Replaced automatically the day a real cover.jpg lands beside this file.
+art: "pipeline"
 gallery: []
 tags: ["nlp", "embeddings", "clustering", "python", "llm"]
 links:

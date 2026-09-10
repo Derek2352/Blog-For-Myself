@@ -6,6 +6,9 @@ date: 2025-11-01 # date approximate
 role: "Volunteer"
 summary: "Volunteering with Read-Cycling — giving books a second life."
 cover: "./images/cover.svg"
+# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.
+# Replaced automatically the day a real cover.jpg lands beside this file.
+art: "book-stack"
 gallery: []
 tags: ["volunteering", "sustainability"]
 links: []

@@ -114,6 +114,24 @@ const scored = rows
   .map((r) => ({ ...r, worst: worst(r.d) }))
   .sort((a, b) => b.worst - a.worst);
 
+/*
+ * **There may be no plates left to measure, and that is a result rather than a run.**
+ *
+ * Every entry now carries a drawn illustration (`art:` in its frontmatter), so this file's subject
+ * has moved: the covers it was written for are gone, and the palette question it answered is
+ * answered for the illustrations by `scratchpad/art-sink.mjs`, which samples all of them. What
+ * still uses `placeholderSVG` is the `/about/` portrait and any entry created from here on before
+ * somebody gives it a template.
+ *
+ * Said out loud rather than left to arithmetic. Without this the run printed `median undefined ·
+ * max -Infinity · over 8: 0 of 0` and exited zero — a harness reporting success for having measured
+ * nothing, which is the failure mode this fleet's fixture/assertion split exists to make visible.
+ */
+if (scored.length === 0) {
+  console.log('\n  FIXTURE  no plates on any entry page — every entry carries drawn art now.');
+  console.log('           the same question for illustrations is scratchpad/art-sink.mjs.\n');
+  process.exit(1);
+}
 console.log(`\n  ${scored.length} plates, dark surface rgb(${SURFACE.join(' ')})\n`);
 console.log('  worst  slug                                        light L   dark plate      Δ r g b');
 for (const r of scored) {

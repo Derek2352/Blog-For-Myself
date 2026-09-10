@@ -24,6 +24,9 @@ summary: "A sixty-second animated short about a first-year who feels invisible �
 note: "The two character models lived in my folders as “Sad Theo” and “Confident Theo”. The whole film is one becoming the other."
 # video: ""  # paste the film link — it will screen here in place of the cover
 cover: "./images/cover.svg"
+# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.
+# Replaced automatically the day a real cover.jpg lands beside this file.
+art: "film-strip"
 gallery: []
 tags: ["ai-film", "award", "deans-recommendation", "generative-video"]
 links: []

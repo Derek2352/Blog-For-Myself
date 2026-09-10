@@ -6,6 +6,9 @@ date: 2026-03-01 # date approximate
 role: "Volunteer"
 summary: "Street-level flag day fundraising in Hong Kong."
 cover: "./images/cover.svg"
+# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.
+# Replaced automatically the day a real cover.jpg lands beside this file.
+art: "collection-bag"
 gallery: []
 tags: ["volunteering", "fundraising"]
 links: []

@@ -7,6 +7,9 @@ role: "Selected Participant, representing HSUHK"
 organization: "Bloomberg"
 summary: "A global trading simulation on the Bloomberg Terminal — financial-analysis and risk-management strategies applied in volatile scenarios."
 cover: "./images/cover.svg"
+# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.
+# Replaced automatically the day a real cover.jpg lands beside this file.
+art: "trading-desk"
 gallery: []
 tags: ["trading", "risk", "bloomberg"]
 links: []

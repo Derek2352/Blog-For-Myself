@@ -42,6 +42,16 @@ for (const target of TARGETS) {
     await page.goto(`${BASE}${target.path}`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(500);
 
+    /* **There may be no plate on this page any more.** Every entry names a drawing in `art:`, so the
+       covers here are illustrations and carry `data-drawn="art"`. Said out loud and skipped rather
+       than waited for: without this the run ended in a Playwright `TimeoutError` stack trace after
+       thirty seconds, which reads like the harness is broken when what it means is that its subject
+       has moved. The equivalent question for illustrations is `scratchpad/art-sink.mjs`. */
+    if ((await page.locator('[data-drawn="plate"]').count()) === 0) {
+      console.log(`  FIXTURE  ${target.name}/${theme}: no plate on this page — it carries drawn art.`);
+      await ctx.close();
+      continue;
+    }
     // Put the plate in the frame the way a visitor scrolling the page would see it.
     await page.locator('[data-drawn="plate"]').first().scrollIntoViewIfNeeded();
     await page.waitForTimeout(500);

@@ -31,6 +31,9 @@ organization: "Alibaba Cloud — 2025 AI Video for Business Competition"
 updated: 2026-07-28
 summary: "A fifteen-second conceptual coffee commercial, generated end to end and placed third globally — built on a pun, since AI and 愛 (love) are the same sound."
 cover: "./images/cover.svg"
+# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.
+# Replaced automatically the day a real cover.jpg lands beside this file.
+art: "film-strip"
 gallery: []
 # video: ""  # paste the YouTube/Vimeo/Bilibili link — the film plays on this page
 tags: ["ai-film", "award", "prompt-engineering", "generative-video"]

@@ -35,6 +35,14 @@ export interface ArtTemplate {
   credit: string;
   /** The mono label drawn into the artwork itself. */
   label: string;
+  /** Set when the drawing reaches the bottom-left corner, so the label is drawn light on it. */
+  labelOnInk?: boolean;
+  /**
+   * How many distinct compositions this template hands out, in turn, to the entries using it —
+   * see `cycle()` in cover-art.mjs. Absent means the template has one composition and varies only
+   * on the seed, which is correct for a drawing only one entry uses.
+   */
+  compositions?: number;
   draw(t: ArtTones): string;
 }
 
@@ -45,4 +53,6 @@ export declare function coverArtSVG(opts: {
   template: string;
   hue?: number;
   seed?: string;
+  /** The entry's own frontmatter, plus its position among the entries sharing this template. */
+  data?: { location?: string; ordinal?: number };
 }): string;

@@ -28,6 +28,21 @@
 > was kept nearly verbatim** — "Editorial concept illustration. Not the original competition
 > prototype." — because it was the best single sentence in either zip.
 >
+> That grew into the cover system every entry now uses. The drops' remaining four "cover types" had
+> nothing to port — a flat background colour, a flat colour with a Lucide icon, and two `:after`
+> gradients over photographs that were not in either zip — but three of their *compositions* were
+> worth having and are here as drawings: the `coffee` title lockup (mono kicker, display mass,
+> italic tail) which `film-strip` and `pitch-deck` use as bars; the `mountains` location chip, which
+> is the one place a cover shows real frontmatter; and their `.cover-mountains .artwork-label {
+> color: #fff }`, which is exactly the fix a drawing that reaches the bottom-left corner needs and
+> which `ridge-line` re-derived before I noticed they had got there first.
+>
+> **Their `coverType` was one line of substring matching on slugs** — `slug.includes('alipay') ?
+> 'alipay' : slug.includes('cherry') ? 'coffee' : …` — which is why five types covered twenty-six
+> entries and twenty-one of them landed on the same flat panel. Here the template is named in the
+> frontmatter, validated against the registry, and there are fifteen of them for twenty-four
+> entries, with the shared ones handing out distinct compositions in turn.
+>
 > **Deliberately not adopted, and why:**
 >
 > - **PostgreSQL, Drizzle and the appreciations/reactions API.** Every page here is derivable at

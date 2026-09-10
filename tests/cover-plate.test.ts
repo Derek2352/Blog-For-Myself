@@ -71,6 +71,40 @@ describe('the cover detectors are reading the repository', () => {
     }
   });
 
+  it('gives no two entries the same cover', () => {
+    /*
+     * The requirement, stated as plainly as it can be: twenty-four entries, twenty-four different
+     * pictures. Asserted on the committed files rather than on the generator, because that is the
+     * thing a visitor sees and it stays true only as long as every part of the pipeline holds — the
+     * template assignments in the frontmatter, the ordinals `npm run covers` numbers them with, and
+     * the seeded variation inside each drawing. A test against `coverArtSVG` would check one of
+     * those three.
+     *
+     * It is also the check that would have caught, in one line, both of the near-misses this system
+     * had: three career-advisory covers that came out identical from a correlated generator, and
+     * then two of the three identical from an honest 3-in-8 collision.
+     */
+    const byBytes = new Map<string, string[]>();
+    for (const id of entryDirs) {
+      let svg: string;
+      try {
+        svg = readFileSync(
+          path.join(process.cwd(), 'src', 'content', 'entries', id, 'images', 'cover.svg'),
+          'utf8',
+        );
+      } catch {
+        continue;
+      }
+      /* Compared without the template name and the title, so two covers that differ only in which
+         template wrote its name into the root element do not count as different. */
+      const body = svg.replace(/data-cover-art="[^"]*"/, '').replace(/<title>[\s\S]*?<\/title>/, '');
+      byBytes.set(body, [...(byBytes.get(body) ?? []), id]);
+    }
+    const shared = [...byBytes.values()].filter((ids) => ids.length > 1);
+    expect(shared, `entries sharing one drawing: ${shared.map((g) => g.join(' = ')).join('; ')}`).toEqual([]);
+    expect(byBytes.size).toBe(counts.plates + counts.art);
+  });
+
   it('agrees with the frontmatter that asked for a drawing', () => {
     // The two are allowed to disagree — that is the whole point of reading the file, and the day a
     // photograph lands over an illustration they must. What may not happen is an entry asking for

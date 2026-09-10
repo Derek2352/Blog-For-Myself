@@ -7,6 +7,9 @@ date: 2025-09-01 # TODO: verify dates
 organization: "HSUHK"
 summary: "Participation and assessment in HSUHK's Honours Academy."
 cover: "./images/cover.svg"
+# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.
+# Replaced automatically the day a real cover.jpg lands beside this file.
+art: "cohort"
 gallery: []
 tags: ["honours", "academic"]
 links: []

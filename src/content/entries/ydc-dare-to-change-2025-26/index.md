@@ -6,6 +6,9 @@ endDate: 2026-04-30
 role: "Participant — Team FORCES"
 summary: "A pitch on the technical feasibility and ethical implementation of automated financial decision-making, using LLM-driven market and competitor synthesis to find the startup gap."
 cover: "./images/cover.svg"
+# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.
+# Replaced automatically the day a real cover.jpg lands beside this file.
+art: "pitch-deck"
 gallery: []
 tags: ["pitch", "fintech", "strategy"]
 links: []

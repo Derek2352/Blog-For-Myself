@@ -13,6 +13,13 @@
  * the shape of a fault that shows on one hue and not its neighbours, and exactly why it needs
  * the whole set rather than the one that got shot.
  */
+/*
+ * **As of the drawn-cover pass this reports nothing, because there are no plates on entry pages.**
+ * Every entry names a template in `art:`, so the covers this walks are illustrations and it skips
+ * them. Kept because the plate generator is still what a new entry gets before somebody gives it a
+ * drawing, and because `/about/`'s portrait is still one. See the note in plate-sink.mjs.
+ */
+
 import { launch, BASE, fresh } from './lib/fixture.mjs';
 
 /** slug → hue, from src/data/categories.ts. Read here rather than imported: this is a `.mjs`. */

@@ -26,6 +26,9 @@ location: "Wuyishan, Fujian"
 summary: "A seven-day youth cultural exchange in Wuyishan — rafts, tea, Zhu Xi's academy, and one evening at 《印象大紅袍》. I am going as group leader, and the trip owes a film; before leaving I wrote the study and the ink-wash storyboard it gets built from."
 note: "The show ends by asking the audience three times what they have put down. I have been thinking about that question longer than I expected to."
 cover: "./images/cover.svg"
+# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.
+# Replaced automatically the day a real cover.jpg lands beside this file.
+art: "ridge-line"
 gallery: []
 tags: ["ai-film", "generative-video", "leadership", "youth-exchange"]
 links: []

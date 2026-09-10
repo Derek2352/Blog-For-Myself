@@ -7,6 +7,9 @@ organization: "Lingnan University · Saint Francis University · HYAB · YDC"
 location: "Wuhan · Xiangyang"
 summary: "Wuhan's AI Computing and Supercomputing Centers, the Wuhan National Laboratory for Optoelectronics at HUST, then Xiangyang's municipal science museums and the Hubei Longzhong Laboratory."
 cover: "./images/cover.svg"
+# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.
+# Replaced automatically the day a real cover.jpg lands beside this file.
+art: "ridge-line"
 gallery: []
 tags: ["ai-infrastructure", "cloud", "optoelectronics"]
 links: []

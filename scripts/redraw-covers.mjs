@@ -26,7 +26,30 @@ import { coverArtSVG } from './cover-art.mjs';
 
 const ROOT = fileURLToPath(new URL('../src/content/entries/', import.meta.url));
 const { cats } = await loadCategories();
-const dirs = (await readdir(ROOT, { withFileTypes: true })).filter((d) => d.isDirectory()).map((d) => d.name);
+const dirs = (await readdir(ROOT, { withFileTypes: true })).filter((d) => d.isDirectory()).map((d) => d.name).sort();
+
+/*
+ * Number the entries that share a template, in slug order, before drawing any of them.
+ *
+ * `cycle()` in cover-art.mjs uses this to hand out a template's discrete compositions one each — the
+ * three career-advisory entries get three different shapes of conversation rather than three draws
+ * from the same hat. Read in a first pass because an ordinal is a fact about the *set*, and a
+ * single pass can only know how many have come before, not how many there are.
+ *
+ * Sorted, so the numbering is stable: `readdir` order is filesystem order and would renumber every
+ * cover on a different machine, putting twenty-four rewritten files in a diff that changed nothing.
+ */
+const ordinals = new Map();
+const seenPerTemplate = new Map();
+for (const slug of dirs) {
+  const md = join(ROOT, slug, 'index.md');
+  if (!existsSync(md)) continue;
+  const tpl = (await readFile(md, 'utf8')).match(/^art:\s*"([^"]+)"/m)?.[1];
+  if (!tpl) continue;
+  const n = seenPerTemplate.get(tpl) ?? 0;
+  ordinals.set(slug, n);
+  seenPerTemplate.set(tpl, n + 1);
+}
 
 let done = 0, skipped = 0;
 for (const slug of dirs) {
@@ -65,7 +88,18 @@ for (const slug of dirs) {
    * cover that quietly reverts to a placeholder.
    */
   const art = front.match(/^art:\s*"([^"]+)"/m)?.[1];
-  await writeFile(cover, art ? coverArtSVG({ template: art, hue }) : placeholderSVG({ seed: slug, hue }));
+  /* What a drawing is allowed to know about its entry. `location` only, and only because the travel
+     templates put it in a chip — see the `data` note on `coverArtSVG`. Read with the same
+     line-anchored match as `category` and `art`, which is this script's whole frontmatter parser and
+     is enough: these three keys are single-line scalars in every entry, written by `new-entry.mjs`
+     and by the studio, both of which quote them. */
+  const location = front.match(/^location:\s*"([^"]+)"/m)?.[1];
+  await writeFile(
+    cover,
+    art
+      ? coverArtSVG({ template: art, hue, seed: slug, data: { location, ordinal: ordinals.get(slug) ?? 0 } })
+      : placeholderSVG({ seed: slug, hue }),
+  );
   console.log(
     `  ${art ? 'draw  ' : 'redraw'} ${slug.padEnd(42)} ${String(category).padEnd(14)} hue ${hue ?? '(hashed)'}${art ? `  art: ${art}` : ''}`,
   );

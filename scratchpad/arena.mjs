@@ -26,6 +26,30 @@
  * reclaim drops the claim count by one, drifting more than STILL_PX resets it, a win is
  * still the ambient cat's `notched`, and the truces (idle, hidden-tab) keep their clocks.
  */
+/*
+ * ## Known: the three snapshot checks are unreliable, and it is not the game's fault
+ *
+ * `the card never touches the page while it plays`, `the page is byte-identical after the card
+ * closes` and `off is a full restore too` fail on roughly four runs in five, giving 52/55. Measured
+ * at this commit **and at the one before it** (five runs each side, 55 once and 52 the other four)
+ * — so it is not a regression from the covers work, and the 55/55 recorded in that commit message
+ * was the lucky run rather than the normal one. Recorded here so nobody re-diagnoses it from
+ * scratch, and so the next person does not read a green 55 as proof of anything.
+ *
+ * **The failure text is misleading and the number is meaningless.** It reports "245 differences,
+ * first: 47:BODY:… → 47:SCRIPT::". `snapshotOf` records elements by *index*, so one extra element
+ * in `<head>` re-indexes everything after it and every subsequent entry compares against its
+ * neighbour. There is one difference, not 245: the two snapshots disagree about how many children
+ * `<head>` has.
+ *
+ * **What adds it is not established.** Two probes (`scratchpad/headdiff.mjs`, `headdiff2.mjs`)
+ * driving pointer movement, scrolling and a full deal saw `<head>` stay at 46 children and the
+ * document stay at 406 elements, so whatever inserts it happens on a path those did not take. The
+ * honest fix is to key the snapshot on something stable rather than on position — but that is a
+ * change to the instrument every arena harness shares, and it should be made deliberately rather
+ * than in passing.
+ */
+
 import {
   BASE,
   deal,

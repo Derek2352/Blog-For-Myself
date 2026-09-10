@@ -6,6 +6,9 @@ date: 2025-12-01 # date approximate
 role: "Volunteer"
 summary: "Distributing food locally to neighbours who need it."
 cover: "./images/cover.svg"
+# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.
+# Replaced automatically the day a real cover.jpg lands beside this file.
+art: "crates"
 gallery: []
 tags: ["volunteering", "community"]
 links: []

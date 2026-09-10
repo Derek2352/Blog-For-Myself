@@ -17,6 +17,9 @@ location: "Hong Kong"
 summary: "Interview technique, from someone who hires for a living — and one instruction I'm still carrying out: watch how the bank actually works, don't just finish the tasks you're given."
 note: "I kept what he meant and lost how he said it. Writing this four weeks into the internship he was talking about."
 cover: "./images/cover.svg"
+# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.
+# Replaced automatically the day a real cover.jpg lands beside this file.
+art: "conversation"
 gallery: []
 tags: ["mentorship", "career", "banking"]
 links: []

@@ -17,6 +17,9 @@ organization: "Student Affairs Office, HSUHK"
 location: "Shanghai · Yiwu · Hangzhou"
 summary: "An intensive tour across Shanghai, Yiwu and Hangzhou — analysing cross-border FinTech and digital-economy collaboration with industry leaders and mainland peers."
 cover: "./images/cover.svg"
+# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.
+# Replaced automatically the day a real cover.jpg lands beside this file.
+art: "skyline"
 gallery: []
 tags: ["cross-border", "fintech", "digital-economy", "e-commerce"]
 links: []

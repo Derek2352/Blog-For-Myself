@@ -296,4 +296,54 @@ ok(
 );
 note(`${PATCH}×${PATCH} medians at ${Object.keys(POINTS).join(', ')}, both themes`);
 
+/*
+ * ## Every other drawn cover, on the dark theme
+ *
+ * Everything above is measured on `split-bill`, which is the calibration drawing: it is the one
+ * whose palette was derived from `placeholderSVG`'s measured values, and the four points are named
+ * shapes inside it. That settles the *palette*. It does not settle the *set* — there are twenty-four
+ * drawn covers now across fifteen templates and eight category hues, and a template is free to draw
+ * anything at all in the top-left corner of the frame.
+ *
+ * So the ground of every one of them is sampled, on the dark theme, against the surface token. It is
+ * the one point every template leaves clear (the frame's inset corner, above and left of whatever
+ * the drawing is) and the one property the shared CSS rule depends on. A template that filled that
+ * corner would report a wrong colour here rather than looking wrong on somebody's screen — which is
+ * the correct failure, because "the ground sinks" is the claim, and a drawing with no visible ground
+ * is not making it.
+ */
+const browser2 = await launch();
+const dctx = await fresh(browser2, { viewport: { width: 1280, height: 1000 } });
+const dpage = await dctx.newPage();
+await dpage.goto(BASE + '/', { waitUntil: 'load' });
+await dpage.evaluate(() => localStorage.setItem('theme', 'dark'));
+const { readdir } = await import('node:fs/promises');
+const all = (await readdir('src/content/entries', { withFileTypes: true }))
+  .filter((d) => d.isDirectory())
+  .map((d) => d.name)
+  .sort();
+const off = [];
+let measured = 0;
+for (const slug of all) {
+  const res = await dpage.goto(BASE + `/entry/${slug}/`, { waitUntil: 'load' });
+  if (!res || res.status() >= 400) continue; // drafts do not build
+  await dpage.evaluate(() => document.documentElement.classList.add('dark'));
+  await dpage.waitForTimeout(260);
+  const kind = await dpage.evaluate(() => document.querySelector('[data-drawn]')?.dataset.drawn ?? '');
+  if (kind !== 'art') continue;
+  const got = await sampleAt(dpage, ...POINTS.ground.at);
+  if (!got) continue;
+  measured++;
+  const worst = Math.max(...got.map((c, i) => Math.abs(c - DARK_SURFACE[i])));
+  if (worst > SINK_TOL) off.push(`${slug} rgb(${got.join(' ')}) worst ${worst}`);
+}
+await dctx.close();
+await browser2.close();
+fixture('every drawn cover was sampled on the dark theme', measured || null, `${measured} of ${all.length} entries carry art and built`);
+ok(
+  `every drawn cover's ground sinks into --color-surface (±${SINK_TOL})`,
+  off.length === 0,
+  off.length ? off.join(' · ') : `${measured} covers, all within ${SINK_TOL}`,
+);
+
 process.exit(done() ? 0 : 1);

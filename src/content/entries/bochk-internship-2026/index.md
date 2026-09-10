@@ -46,6 +46,9 @@ location: "Hong Kong"
 summary: "Two months inside the operations side of a major bank — loan documentation, reconciliation and reporting — and, unexpectedly, a brief to survey where AI could help across the department and draft an agent workflow for it. The survey turned out to be a departmental deliverable rather than an intern exercise."
 note: "They gave the newest person in the department the job of finding where the work is still done by hand."
 cover: "./images/cover.svg"
+# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.
+# Replaced automatically the day a real cover.jpg lands beside this file.
+art: "ledger-page"
 gallery: []
 tags: ["banking", "operations", "loans", "ai-workflow"]
 links: []

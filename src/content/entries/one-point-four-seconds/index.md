@@ -6,6 +6,9 @@ date: 2026-02-01 # TODO: verify challenge dates
 organization: "World Aquatics × Alibaba Cloud — #DiveIntoYourWorld AI Creative Challenge"
 summary: "A stop-motion-aesthetic animated short with a companion data-visualization report, made for the #DiveIntoYourWorld AI Creative Challenge."
 cover: "./images/cover.svg"
+# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.
+# Replaced automatically the day a real cover.jpg lands beside this file.
+art: "film-strip"
 gallery: []
 tags: ["ai-film", "stop-motion", "data-viz"]
 links: []

@@ -15,6 +15,9 @@ location: "Hong Kong"
 summary: "A conversation about what to study after the CFA — which turned out to be the wrong question. Hong Kong licensing, ESG certification, and a government scheme that pays most of the cost, mapped out by an adviser who holds about twenty qualifications and advised against collecting them."
 note: "I asked which qualifications to collect. He holds roughly twenty, and told me to sequence them instead."
 cover: "./images/cover.svg"
+# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.
+# Replaced automatically the day a real cover.jpg lands beside this file.
+art: "conversation"
 gallery: []
 tags: ["mentorship", "career", "esg"]
 links: []

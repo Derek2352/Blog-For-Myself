@@ -7,6 +7,9 @@ organization: "GAO, HSUHK"
 location: "Guangzhou — Nansha & Tianhe"
 summary: "Industry hubs across Nansha and Tianhe — Designest Innovation Consulting, Guangdong Medical Valley, Blue Bay Future Sci-Tech Camp (drone tech), and the GBA Youth Innovation & Entrepreneurship Center."
 cover: "./images/cover.svg"
+# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.
+# Replaced automatically the day a real cover.jpg lands beside this file.
+art: "skyline"
 gallery: []
 tags: ["gba", "innovation", "startups"]
 links: []

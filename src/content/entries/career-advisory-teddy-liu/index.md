@@ -15,6 +15,9 @@ location: "Hong Kong"
 summary: "An internal auditor told me to keep a record and to write the reflection, not just the résumé line — and to build somewhere the personality shows. This site is what came of it, which makes this a slightly strange entry to be writing."
 note: "He suggested I build a blog. You are currently standing in the answer."
 cover: "./images/cover.svg"
+# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.
+# Replaced automatically the day a real cover.jpg lands beside this file.
+art: "conversation"
 gallery: []
 tags: ["mentorship", "career"]
 links: []

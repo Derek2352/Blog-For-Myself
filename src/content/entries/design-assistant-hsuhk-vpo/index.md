@@ -8,6 +8,9 @@ organization: "HSUHK"
 location: "Hong Kong"
 summary: "Built an AI-integrated design process for Academic & Career web visuals, standardized AI-prompt and design-system documentation for 100% brand alignment and traceability, and digitized 300+ bilingual records into audit-ready datasets."
 cover: "./images/cover.svg"
+# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.
+# Replaced automatically the day a real cover.jpg lands beside this file.
+art: "artboard"
 gallery: []
 tags: ["ai-workflow", "design-ops", "data"]
 links: []

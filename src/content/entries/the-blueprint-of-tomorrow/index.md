@@ -37,6 +37,9 @@ summary: "A solo AI-animated short film that won Champion against university-wid
 note: "Shot 35 took the longest and shows the least — the model kept handing me a tree growing out of a skyscraper."
 # video: ""  # paste the film link — it will screen here in place of the cover
 cover: "./images/cover.svg"
+# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.
+# Replaced automatically the day a real cover.jpg lands beside this file.
+art: "blueprint"
 gallery: []
 # "champion" was here too, which printed a CHAMPION chip next to a #CHAMPION tag
 # on the mobile entry header — the role above already says it.

@@ -167,6 +167,53 @@ describe('the art the generator draws', () => {
     expect(() => coverArtSVG({ template: 'no-such-drawing', hue: 12 })).toThrow(/Unknown cover art/);
   });
 
+  it('hands a shared template a different composition to each entry that uses it', () => {
+    // The mechanism behind this is `cycle()`, and it exists because two attempts at seeded choice
+    // gave the three career-advisory entries the same picture — first all three (a generator whose
+    // first output correlates across similar seeds), then two of three (the honest 3/8 chance that
+    // three draws from four collide). Distinctness had to stop being probable and start being
+    // structural, so it is asserted here on the site's real sets rather than hoped for.
+    //
+    // Compared on the *drawing*, with the mark and the label stripped: two covers that differ only
+    // in which template name is written into the root element are not two covers.
+    // Scoped to the templates that *declare* a family. A template only one entry uses has one
+    // composition and varies on the seed alone, which is correct — and the first version of this
+    // test asserted four distinct drawings from every template, which asked ten of them to promise
+    // something they never claimed. `compositions` makes the claim explicit so the test can check
+    // the claim rather than an assumption about it, and the second half below checks that a
+    // template without the field really does ignore the ordinal, so the field cannot go stale.
+    const strip = (svg: string) => svg.replace(/data-cover-art="[^"]*"/, '').replace(/<title>[\s\S]*?<\/title>/, '');
+    for (const name of ART_NAMES) {
+      const n = ART_TEMPLATES[name].compositions;
+      const draw = (ordinal: number) =>
+        strip(coverArtSVG({ template: name, hue: 26, seed: 'fixed', data: { ordinal } }));
+      if (n) {
+        const drawings = Array.from({ length: n }, (_, i) => draw(i));
+        expect(new Set(drawings).size, `${name} declares ${n} compositions`).toBe(n);
+        // And it wraps: the (n+1)th entry gets the first composition back, filled in by its own
+        // seed. Asserted so that a family silently growing past its own size is visible here.
+        expect(draw(n)).toBe(draw(0));
+      } else {
+        expect(draw(0), `${name} declares no compositions`).toBe(draw(3));
+      }
+    }
+  });
+
+  it('varies on the seed too, so two entries at the same ordinal still differ', () => {
+    // The other half of the split: `cycle` fixes the composition, the seed fills it in. Without
+    // this, adding a fifth entry to a four-member family would give it the first member's cover
+    // exactly — the ordinal wraps, and nothing else would be different.
+    for (const name of ART_NAMES) {
+      const a = coverArtSVG({ template: name, hue: 26, seed: 'one', data: { ordinal: 0 } });
+      const b = coverArtSVG({ template: name, hue: 26, seed: 'two', data: { ordinal: 0 } });
+      // `split-bill` is the one template that deliberately ignores its seed: it is a specific
+      // illustration of a specific product and there is one entry using it. Documented on the
+      // template itself, and named here so that stops being a silent exception.
+      if (name === 'split-bill') expect(a).toBe(b);
+      else expect(a).not.toBe(b);
+    }
+  });
+
   it('offers the same names the registry has, so the schema cannot validate against a stale list', () => {
     expect(ART_NAMES).toEqual(Object.keys(ART_TEMPLATES).sort());
     expect(ART_NAMES.length).toBeGreaterThan(0);
@@ -177,9 +224,15 @@ describe('the art the generator draws', () => {
       const meta = artMeta(name);
       expect(meta).not.toBeNull();
       // The alt must describe the drawing, and the credit must say what the cover is not — that
-      // sentence is the entire reason art is a different kind of object from a plate.
+      // disclaimer is the entire reason art is a different kind of object from a plate.
+      //
+      // Case-insensitive, because it is the disclaimer being checked and not a sentence shape: most
+      // credits here are two sentences and open the second with "Not …", but `conversation`'s reads
+      // "It depicts a conversation, not anything said in one", which is the same promise made in one
+      // sentence and is better English for that drawing. A test that failed it would be enforcing
+      // punctuation while claiming to enforce honesty.
       expect(meta!.alt.length).toBeGreaterThan(40);
-      expect(meta!.credit).toMatch(/\bNot\b/);
+      expect(meta!.credit).toMatch(/\bnot\b/i);
     }
     expect(artMeta('no-such-drawing')).toBeNull();
   });
