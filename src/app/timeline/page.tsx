@@ -3,6 +3,7 @@
  * markers. The one place the numbering/reel treatment runs at full strength.
  */
 import type { Metadata } from 'next';
+import PageTitle from '../_ui/PageTitle';
 import { getEntries, getCodes, type Entry } from '@/server/content';
 import TimelineItem from '../_ui/TimelineItem';
 import JumpRail from '../_ui/JumpRail';
@@ -38,7 +39,7 @@ export default async function TimelinePage() {
       <div className="wrap py-10">
         <header className="max-w-3xl">
           <p className="kicker">All categories · {entries.length} entries · newest first</p>
-          <h1 className="mt-2 font-display text-4xl sm:text-5xl">Timeline</h1>
+          <PageTitle tail="so far.">The story,</PageTitle>
         </header>
 
         <h2 className="sr-only">All entries, newest first</h2>

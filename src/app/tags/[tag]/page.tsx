@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import PageTitle from '../../_ui/PageTitle';
 import Link from 'next/link';
 import { getEntries, getLogs, getCodes, allTags, toFeed } from '@/server/content';
 import EntryCard from '../../_ui/EntryCard';
@@ -35,7 +36,7 @@ export default async function TagPage({ params }: { params: Promise<{ tag: strin
       <div className="wrap py-10">
         <header>
           <p className="kicker">tag</p>
-          <h1 className="mt-2 font-display text-4xl sm:text-5xl">#{tag}</h1>
+          <PageTitle>#{tag}</PageTitle>
           <p className="rail mt-3">
             {items.length} {items.length === 1 ? 'item' : 'items'} ·{' '}
             <Link href="/tags/">all tags</Link>

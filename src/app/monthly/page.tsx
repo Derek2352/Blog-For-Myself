@@ -4,6 +4,7 @@
  * automatically.
  */
 import type { Metadata } from 'next';
+import PageTitle from '../_ui/PageTitle';
 import { getEntries, getLogs, getCodes, toFeed, groupByPeriod } from '@/server/content';
 import PeriodGroup from '../_ui/PeriodGroup';
 import JumpRail from '../_ui/JumpRail';
@@ -26,7 +27,7 @@ export default async function MonthlyPage() {
       <div className="wrap py-10">
         <header className="max-w-3xl">
           <p className="kicker">Period → month → item</p>
-          <h1 className="mt-2 font-display text-4xl sm:text-5xl">Monthly log &amp; highlights</h1>
+          <PageTitle tail="month by month.">Monthly log,</PageTitle>
           <p className="mt-3 text-lg leading-relaxed text-muted">
             The full roll: substantial entries and small monthly things, side by side. Months group
             into named periods (like Summer 2026) where one is defined, and stand alone where not.

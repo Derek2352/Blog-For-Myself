@@ -144,13 +144,29 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
             {entry.data.title}
           </h1>
           <p className="mt-4 text-lg leading-relaxed text-muted">{entry.data.summary}</p>
+          {/* The `note` is the most personal sentence on the page — the author's own aside, not
+              the summary's description of the work — and it was rendered as a small tilde-prefixed
+              margin line, at the same weight as a caption. The Next.js drops set theirs as a
+              centred display pull-quote, which is the one place their entry page is plainly better
+              than this one: it gives the line the weight its content already has.
+
+              Taken, with the quotation marks made real. Curly quotes rather than a tilde because
+              the line *is* a quotation — Derek quoting himself — and `“ ”` says that to a reader
+              where `~` says only "aside". They stay outside the text so the frontmatter never has
+              to carry punctuation that is really presentation, and `aria-hidden` keeps a screen
+              reader from announcing them around a sentence it is already reading as one. */}
           {entry.data.note && (
-            <p className="mt-4 font-display text-xl italic leading-snug">
-              <span className="text-signal-text" aria-hidden="true">
-                ~{' '}
-              </span>
-              {entry.data.note}
-            </p>
+            <blockquote className="entry-note mt-6">
+              <p className="font-display text-2xl italic leading-snug sm:text-[1.7rem]">
+                <span className="text-secondary" aria-hidden="true">
+                  “
+                </span>
+                {entry.data.note}
+                <span className="text-secondary" aria-hidden="true">
+                  ”
+                </span>
+              </p>
+            </blockquote>
           )}
           {/* mobile: key facts up top; desktop shows them in the rail instead */}
           {(entry.data.role || entry.data.tags.length > 0) && (

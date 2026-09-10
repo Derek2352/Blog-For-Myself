@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import PageTitle from '../_ui/PageTitle';
 import { site, resume } from '@/data/site';
 import { personSchema } from '@/lib/schema';
 import { isPlateAsset } from '@/lib/cover-plate';
@@ -35,7 +36,7 @@ export default async function AboutPage() {
       <div className="wrap py-10" data-pagefind-body>
         <header className="max-w-3xl">
           <p className="kicker">about</p>
-          <h1 className="mt-2 font-display text-4xl sm:text-5xl">Nice to meet you, properly.</h1>
+          <PageTitle tail="properly.">Nice to meet you,</PageTitle>
           <p className="mt-3 text-lg leading-relaxed text-muted">
             {site.name} — {site.tagline}.
           </p>

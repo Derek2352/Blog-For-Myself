@@ -10,6 +10,7 @@
  * Recorded here rather than in a task list, because this is the file that would be lying.
  */
 import type { Metadata } from 'next';
+import PageTitle from '../_ui/PageTitle';
 import { categories } from '@/data/categories';
 import { resolveWash } from '@/lib/wash';
 import PageWash from '../_chrome/PageWash';
@@ -40,7 +41,7 @@ export default function ColophonPage() {
       <div className="wrap max-w-4xl py-10">
         <header>
           <p className="kicker">colophon</p>
-          <h1 className="mt-2 font-display text-4xl sm:text-5xl">How this site is made</h1>
+          <PageTitle tail="is made.">How this site</PageTitle>
           <p className="mt-3 max-w-prose text-lg leading-relaxed text-muted">
             A portfolio should feel like the person. This one is built to feel like a contact sheet
             someone annotated by hand — photographs first, quiet margin notes underneath, nothing

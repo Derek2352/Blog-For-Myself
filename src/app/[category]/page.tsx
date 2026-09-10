@@ -4,6 +4,7 @@
  * grid, then that category's monthly log grouped period → month.
  */
 import type { Metadata } from 'next';
+import PageTitle from '../_ui/PageTitle';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { categories, RESERVED_SLUGS, categoryBySlug } from '@/data/categories';
@@ -104,7 +105,7 @@ export default async function CategoryPage({
       <div className="wrap py-10">
         <header className="max-w-3xl">
           <p className="kicker">Index / {category.slug}</p>
-          <h1 className="mt-2 font-display text-4xl sm:text-5xl">{category.label}</h1>
+          <PageTitle>{category.label}</PageTitle>
           {category.blurb && (
             <p className="mt-3 text-lg leading-relaxed text-muted">{category.blurb}</p>
           )}

@@ -1110,3 +1110,29 @@ summary:active,
   inherits: false;
   initial-value: 0px;
 }
+
+/* ------------------------------------------------------------------ *
+ * The entry note, as a pull-quote.
+ *
+ * `note` carries the author's own aside — the line a CV has no room for — and it used to render at
+ * caption weight beside the summary. It is a quotation now, and it is given the width and the rule
+ * a quotation gets: indented from the prose, marked by a rule rather than by a box, and capped
+ * short of the summary's measure so the eye reads it as a different kind of sentence rather than
+ * as a longer one.
+ *
+ * The rule is `--color-secondary` — taxonomy's colour — because a pull-quote is not a link and not
+ * a warning; it is a different *kind* of text, which is exactly the distinction that token exists
+ * to draw.
+ * ------------------------------------------------------------------ */
+@layer components {
+  .entry-note {
+    margin: 0;
+    max-width: 46ch;
+    border-inline-start: 2px solid var(--color-secondary);
+    padding-inline-start: 1.1rem;
+  }
+  .entry-note p {
+    margin: 0;
+    text-wrap: pretty;
+  }
+}

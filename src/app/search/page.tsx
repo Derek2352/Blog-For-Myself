@@ -4,6 +4,7 @@
  * `next dev`.
  */
 import type { Metadata } from 'next';
+import PageTitle from '../_ui/PageTitle';
 import Link from 'next/link';
 import { getCategoryIndex, getEntries, getLogs, tagCounts } from '@/server/content';
 import TagChip from '../_ui/TagChip';
@@ -52,7 +53,7 @@ export default async function SearchPage() {
       <div className="wrap max-w-3xl py-10">
         <header>
           <p className="kicker">search</p>
-          <h1 className="mt-2 font-display text-4xl sm:text-5xl">Find it again</h1>
+          <PageTitle tail="again.">Find it</PageTitle>
           <p className="mt-3 text-muted">
             Every entry and log, searchable — competitions, trips, tools, places.
           </p>

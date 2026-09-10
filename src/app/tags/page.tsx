@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import PageTitle from '../_ui/PageTitle';
 import { tagCounts } from '@/server/content';
 import TagChip from '../_ui/TagChip';
 import PageWash from '../_chrome/PageWash';
@@ -37,7 +38,7 @@ export default async function TagsPage() {
       <div className="wrap max-w-3xl py-10">
         <header>
           <p className="kicker">tags</p>
-          <h1 className="mt-2 font-display text-4xl sm:text-5xl">Threads that run through</h1>
+          <PageTitle tail="run through.">Threads that</PageTitle>
           <p className="mt-3 text-muted">
             The same interests keep surfacing across categories. Pull a thread:
           </p>
