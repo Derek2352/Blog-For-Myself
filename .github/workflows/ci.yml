@@ -17,5 +17,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # `next build` type-checks as part of building, but running tsc first means a type error
+      # reports as a type error rather than as a failed build twelve lines into webpack output.
+      - run: npm run typecheck
       - run: npm test
       - run: npm run build

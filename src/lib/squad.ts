@@ -82,7 +82,7 @@ export const KITTEN_SPEED = 250;
 /**
  * `[PH 26]` px — how close counts as arrived.
  *
- * The same 26px `hunt()` in `SiteCat.astro` has always used for "beside you", reused rather than
+ * The same 26px `hunt()` in `site-cat.ts` has always used for "beside you", reused rather than
  * re-picked. A kitten that has to land exactly on a centre point jitters on arrival, and one
  * with a loose tolerance starts holding from off the edge of the thing it is holding.
  */

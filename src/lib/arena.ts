@@ -48,7 +48,7 @@ export const PROTECTED =
  * belongs to the fight otherwise (§5.4).
  *
  * Conflating this with `PROTECTED` was a real bug, found in 0.7 and invisible until then:
- * `Base.astro` renders `<main id="main" tabindex="-1">` as the skip-link target, `[tabindex]`
+ * the root layout renders `<main id="main" tabIndex={-1}>` as the skip-link target, `[tabindex]`
  * matched it, and so **every click anywhere in the page content silently refused to throw** —
  * while the crosshair cursor promised the opposite. The whole content area looked throwable
  * and only the thin strips outside `main` were. Worse, the step-3 harness hid it: it scanned
@@ -340,7 +340,7 @@ export const LEAP_MS = 260;
  */
 export const RECOVER_MS = 700;
 
-/** `[PH 90]` px. ~2.5× the existing `chase` trigger (34px) in `SiteCat.astro`. */
+/** `[PH 90]` px. ~2.5× the existing `chase` trigger (34px) in `site-cat.ts`. */
 export const POUNCE_RANGE = 90;
 
 /**
@@ -840,7 +840,7 @@ export const THROW_ARC_MS = 320;
 /**
  * `[PH 186]` px/s going to a treat — noticeably faster than the `STALK_SPEED` 170.
  *
- * Lifted from `SiteCat.astro`'s own fetch speed, where the comment reads "it can see
+ * Lifted from `site-cat.ts`'s own fetch speed, where the comment reads "it can see
  * food; a stroll across the room read as a stall". Same animal, same appetite, and
  * the contrast with stalking is characterisation: it hurries for food and takes its
  * time with you.

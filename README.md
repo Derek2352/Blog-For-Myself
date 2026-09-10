@@ -8,8 +8,9 @@ talks, certificates) that roll up by month and by period (e.g. July + Aug → *S
 period means adding a file — never editing component or page code. If a nav item, section,
 category, or period ever ends up hardcoded in a page/component, that's a bug.
 
-Built with [Astro](https://astro.build) content collections, TypeScript, Tailwind (v4
-tokens), MDX, and `astro:assets`. No database, no CMS — the repo *is* the backend.
+Built with [Next.js](https://nextjs.org) (App Router, static export), React, TypeScript and
+Tailwind (v4 tokens). No database, no CMS — the repo *is* the backend. Entries are Markdown files
+read at build time; every page, feed, sitemap and share card is derived from them.
 
 ---
 
@@ -87,7 +88,7 @@ npm test           # 36 unit tests
 
 ### S-06 · Deploy
 
-Set your real URL in `astro.config.mjs` (`site:`) **and** the `Sitemap:` line in
+Set your real URL in `src/lib/site-url.ts` (`SITE_URL`) **and** the `Sitemap:` line in
 `public/robots.txt`, then connect the repo to Cloudflare Pages (build command
 `npm run build`, output `dist`, `NODE_VERSION=20`). Every push then auto-deploys. Full
 host details — Netlify, Vercel, draft previews — are in [**Deploy**](#deploy) below.
@@ -282,7 +283,7 @@ Parts). The page itself is already declared `lang="en"`, so only the exceptions 
   the header once there are at least `MONTHLY_NAV_MIN_LOGS` (4) published logs — below that
   it and `/timeline/` are nearly the same list, so showing both just makes a visitor click
   twice to find out. It appears by itself as you write logs; the number is one constant at
-  the top of `src/components/Header.astro`.
+  the top of `src/app/_chrome/Header.tsx`.
 - `npm run photos` also flags **images over 2 MB** — resize to ~2000px on the long edge
   before committing.
 - **Orientation is automatic**: drop in any photo — landscape, portrait, or square — and
@@ -300,7 +301,7 @@ Parts). The page itself is already declared `lang="en"`, so only the exceptions 
   margin note under the summary. Use it where the CV voice isn't enough.
 - **`src/data/now.ts` is currently unused.** It fed a "now →" line on the homepage that has
   since been removed, so editing it changes nothing today. The file is kept because the
-  lines in it are yours; wire it back into `src/pages/index.astro` if you want that line
+  lines in it are yours; wire it back into `src/app/page.tsx` if you want that line
   again, or delete it.
 - **Scrapbook galleries:** gallery prints rest at slight angles (straightening on hover)
   with italic serif captions — write captions like you'd caption a photo album, not a
@@ -311,7 +312,7 @@ Parts). The page itself is already declared `lang="en"`, so only the exceptions 
   bottom of the page and it will chase, pounce, and sit beside its catch until the
   "mouse" moves again. It persists across page transitions (one cat per visit), is
   `aria-hidden`, and sits still under reduced motion. To retire it, remove `<SiteCat />`
-  from `Base.astro`.
+  from `src/app/layout.tsx`.
   On a **mouse** the cat is a real click target, so booping it doesn't also trigger
   whatever is behind it. On **touch** it deliberately isn't: a phone has no cursor for it
   to run from, so a hit-testable cat parked at the bottom edge would swallow taps meant for
@@ -359,7 +360,7 @@ site for the living design page (palette, type, the index-rail signature).
   (PingFang TC / Microsoft JhengHei / Noto Sans TC).
 - Dark mode: class-driven, persisted, defaults to system preference, derived from the same
   tokens.
-- **Motion as linkage:** client-side page transitions (Astro ClientRouter) — pages glide,
+- **Motion as linkage:** client-side navigation (the App Router keeps the layout mounted) — pages glide,
   a card's cover morphs into its entry page, the active tab underline slides between
   tabs, timeline/monthly items fade in as they arrive, and prev/next launches a small
   paper plane in the direction of travel. Everything stands down under
@@ -367,13 +368,19 @@ site for the living design page (palette, type, the index-rail signature).
 
 ## Deploy
 
-Static output — any static host works. Update `site` in `astro.config.mjs` **and** the
+Static output — any static host works. Update `SITE_URL` in `src/lib/site-url.ts` **and** the
 `Sitemap:` line in `public/robots.txt` to your real domain first.
 
 - **Cloudflare Pages (default):** create a Pages project from this repo; build command
   `npm run build`, output directory `dist`. Done.
 - **Netlify:** build `npm run build`, publish `dist`.
-- **Vercel:** framework preset "Astro" (build `npm run build`, output `dist`).
+- **Vercel:** framework preset "Next.js" (build `npm run build`, output `dist`).
+- **Google AI Studio / Cloud Run:** serve `dist/` as static files; no Node runtime is needed.
+
+> **The build still writes to `dist/`.** Next's static export always emits `out/`, and
+> `scripts/finish-build.mjs` renames it at the end of `npm run build` — so the build command and
+> the publish directory are exactly what they were before the framework changed, and no hosting
+> configuration needed touching.
 
 Never commit secrets — there are none required today; keep it that way (`.env` is
 gitignored).
@@ -381,7 +388,7 @@ gitignored).
 ## Future enhancements (hooks left, not implemented)
 
 - **Bilingual i18n (EN / 繁中):** content model is ready — `lang` handling and CJK-safe
-  fonts are in from day one; add Astro i18n routing when the time comes.
+  fonts are in from day one; add Next i18n routing when the time comes.
 - **"Ask my portfolio" AI chat:** would need an API key + a small serverless endpoint over
   entries/logs; deliberately stubbed out (no key committed).
 - **View/like counts:** needs a tiny external store (e.g. Cloudflare KV); the static build

@@ -1,5 +1,5 @@
 /**
- * The root layout — `Base.astro`'s head, chrome and boot script.
+ * The root layout — the head, the persistent chrome, and the pre-paint boot script.
  *
  * Three things here are not line-for-line translations, and each is a real difference between the
  * two frameworks rather than a preference:

@@ -83,7 +83,7 @@ function readTabs(): string[] {
 /**
  * Which tab this page belongs to, if any.
  *
- * Read from `data-cat-tab` on the body, which Base.astro stamps from the page's
+ * Read from `data-cat-tab` on the body, which `PageWash` stamps from the page's
  * own category. This used to take the first path segment, so only the seven
  * category index pages hid anything — and those are pages a visitor passes
  * through on the way to an entry, not pages they stop on. Most visits never

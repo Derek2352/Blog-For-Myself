@@ -7,7 +7,7 @@
  *
  * Adding a toggle = adding one object here. The popover markup, the
  * apply-on-navigation loop (A11yControls.astro) and the pre-paint loop
- * (Base.astro) all derive from this list, so they can never drift apart —
+ * (the root layout's boot script) all derive from this list, so they can never drift apart —
  * previously the same key list was written out in all three places.
  */
 export interface A11yPref {

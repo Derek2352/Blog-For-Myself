@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Serve `out/` the way a static host serves it, so the harness fleet can be pointed at the Next
- * build with `BASE_URL`.
+ * Serve the built site the way a static host serves it.
  *
  * Two behaviours are the whole reason this is not `npx serve`: **directory index resolution** and
  * **the 404 page**. Every internal link on this site ends in a slash (`trailingSlash: true`, to
- * keep the URLs Astro published), so `/about/` has to resolve to `out/about/index.html`; and an
- * unmatched path has to answer with `out/404.html` and a 404 status, because that is what
+ * keep the URLs the site has always published), so `/about/` has to resolve to
+ * `dist/about/index.html`; and an unmatched path has to answer with `dist/404.html` and a 404
+ * status, because that is what
  * Cloudflare Pages, Netlify and a static Cloud Run service all do — and two harnesses assert on a
  * real 404 rather than on a redirect.
  */
@@ -14,8 +14,8 @@ import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
-const ROOT = path.join(process.cwd(), 'out');
-const PORT = Number(process.env.PORT ?? 4417);
+const ROOT = path.join(process.cwd(), 'dist');
+const PORT = Number(process.env.PORT ?? 4416);
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -41,7 +41,7 @@ const send = (res, code, body, type) => {
 
 createServer(async (req, res) => {
   const url = decodeURIComponent((req.url ?? '/').split('?')[0]);
-  /* Never escape `out/`: resolve, then confirm the result is still inside it. */
+  /* Never escape the build directory: resolve, then confirm the result is still inside it. */
   const target = path.normalize(path.join(ROOT, url));
   if (!target.startsWith(ROOT)) return send(res, 403, Buffer.from('forbidden'), 'text/plain');
 
@@ -61,4 +61,4 @@ createServer(async (req, res) => {
   } catch {
     return send(res, 404, Buffer.from('not found'), 'text/plain');
   }
-}).listen(PORT, () => console.log(`serving out/ on http://localhost:${PORT}`));
+}).listen(PORT, () => console.log(`serving dist/ on http://localhost:${PORT}`));

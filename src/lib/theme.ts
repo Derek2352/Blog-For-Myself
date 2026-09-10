@@ -25,10 +25,10 @@ export function darkChosen(): boolean {
  * Reads the live token rather than hardcoding hexes, which keeps the values in
  * one place (`--color-ground` in global.css).
  *
- * Base.astro carries an inline copy of this for the pre-paint pass, since an
- * `is:inline` script cannot import. Keep the two in step. That copy also has to
- * retry on DOMContentLoaded, because it runs before the stylesheet applies and
- * would otherwise read an empty token.
+ * `src/app/layout.tsx` carries an inline copy of this for the pre-paint pass, since a script
+ * that must run before first paint cannot be an effect and cannot import. Keep the two in step.
+ * That copy also has to retry on DOMContentLoaded, because it runs before the stylesheet applies
+ * and would otherwise read an empty token.
  */
 export function syncThemeColor(): void {
   const ground = getComputedStyle(document.documentElement)
