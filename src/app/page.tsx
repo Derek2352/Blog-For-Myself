@@ -18,7 +18,7 @@ import { byPinnedOrder } from '@/lib/sort';
 import { categoryBySlug } from '@/data/categories';
 import { orientation } from '@/lib/images';
 import { personSchema } from '@/lib/schema';
-import { isGeneratedPlate } from '@/lib/cover-plate';
+import { isGeneratedPlate, isCoverArt } from '@/lib/cover-plate';
 import { monthKey } from '@/lib/format';
 import { balancedCols } from '@/lib/layout';
 import { SITE_URL } from '@/lib/site-url';
@@ -54,9 +54,18 @@ export default async function HomePage() {
   /* The same plate handling as the card and the entry page, and this is the copy that got missed
      in Astro: the hero is the largest cover on the site and the first one anyone sees, so a plate
      here unfiltered was a pale rectangle glowing out of the dark theme while every card below it
-     sat correctly sunk into the ground. `data-plate` is what `global.css` filters on, and `blurup`
-     comes off with it, because a flat drawn plate has nothing to preview. */
-  const heroPlate = hero ? isGeneratedPlate(hero.id) : false;
+     sat correctly sunk into the ground. `data-drawn` is what `global.css` filters on, and `blurup`
+     comes off with it, because a flat drawn plate has nothing to preview.
+
+     An illustration takes the same two, for the same two reasons: it is drawn in the plate's own
+     measured ground so the filter lands, and it is flat, so there is nothing to blur up from. */
+  const heroDrawn = hero
+    ? isGeneratedPlate(hero.id)
+      ? 'plate'
+      : isCoverArt(hero.id)
+        ? 'art'
+        : undefined
+    : undefined;
   const strip = (featured.length > 1 ? featured : entries).filter((e) => e !== hero).slice(0, 3);
 
   const catIndex = index.filter((c) => c.entryCount + c.logCount > 0);
@@ -126,8 +135,8 @@ export default async function HomePage() {
           <figure className="reveal-2">
             <Link href={entryHref(hero)} className="card group block">
               <div
-                className={`frame card-cover overflow-hidden${!heroPlate ? ' blurup' : ''}`}
-                data-plate={heroPlate ? '' : undefined}
+                className={`frame card-cover overflow-hidden${heroDrawn ? '' : ' blurup'}`}
+                data-drawn={heroDrawn}
               >
                 <img
                   src={hero.data.cover.src}

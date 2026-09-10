@@ -112,7 +112,7 @@ export default async function AboutPage() {
           </div>
 
           <aside className="self-start lg:sticky lg:top-6">
-            <figure className="frame overflow-hidden" data-plate={portraitPlate ? '' : undefined}>
+            <figure className="frame overflow-hidden" data-drawn={portraitPlate ? 'plate' : undefined}>
               <img
                 src={portrait.src}
                 alt="Portrait of Derek Yung (placeholder — photo coming)"

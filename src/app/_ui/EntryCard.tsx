@@ -22,7 +22,7 @@ import { entryHref } from '@/lib/content-core';
 import { categoryBySlug } from '@/data/categories';
 import { humanRange } from '@/lib/format';
 import { orientation } from '@/lib/images';
-import { isGeneratedPlate } from '@/lib/cover-plate';
+import { isGeneratedPlate, isCoverArt } from '@/lib/cover-plate';
 
 export interface EntryCardProps {
   entry: Entry;
@@ -47,8 +47,11 @@ export default function EntryCard({
   const range = humanRange(entry.data.date, entry.data.endDate);
   // wide covers fill the card frame; tall/square ones sit matted on the surface
   const coverFit = orientation(entry.data.cover) === 'wide' ? 'object-cover' : 'object-contain';
-  // A cover still wearing the drawn plate; the dark theme sinks it into the ground (global.css).
-  const plate = isGeneratedPlate(entry.id);
+  /* A cover this project drew rather than photographed — the plate, or an illustration. Both are
+     drawn in the same measured palette, so the dark theme sinks both into the ground with the same
+     filter (see the `[data-drawn]` rule in global.css). The card does not care which it is; the
+     entry page does, and asks separately. */
+  const drawn = isGeneratedPlate(entry.id) ? 'plate' : isCoverArt(entry.id) ? 'art' : undefined;
   const cover = entry.data.cover;
 
   if (compact) {
@@ -57,7 +60,7 @@ export default function EntryCard({
         <Link href={href} className="flex items-center gap-4 p-3">
           <div
             className="card-cover h-16 w-24 shrink-0 overflow-hidden rounded-(--radius-chip) border border-line"
-            data-plate={plate ? '' : undefined}
+            data-drawn={drawn}
           >
             <img
               src={cover.src}
@@ -91,7 +94,7 @@ export default function EntryCard({
        fit the longest role and the card pushes past the viewport on a phone. */
     <article className="card lift group min-w-0">
       <Link href={href} className="block">
-        <div className="frame card-cover overflow-hidden" data-plate={plate ? '' : undefined}>
+        <div className="frame card-cover overflow-hidden" data-drawn={drawn}>
           <img
             src={cover.src}
             alt=""

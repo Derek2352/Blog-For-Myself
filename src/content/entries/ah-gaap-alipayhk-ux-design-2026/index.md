@@ -21,6 +21,10 @@ updated: 2026-07-28
 note: "The best deck I made is one nobody ever saw."
 summary: "A post-payment ledger for the AlipayHK super app, in three parts — 夾單 to split a bill, 阿夾 an AI agent that keeps the record, 後數 a standing ledger between people who share costs constantly. Two personas traced back to scraped Cantonese posts, 36 design frames, built solo."
 cover: "./images/cover.svg"
+# The one entry whose photographs are never arriving — the decks and the prototype are withheld —
+# so its cover is a drawing rather than a slot held open for one. Drawn by `npm run covers` from
+# scripts/cover-art.mjs; the entry page credits it as an illustration, not a screenshot.
+art: "split-bill"
 gallery:
   - src: "./images/frame-01.svg"
     alt: "Placeholder frame — persona board from the research pipeline (replace with a real screenshot)"

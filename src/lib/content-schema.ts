@@ -29,6 +29,7 @@
  */
 import { z } from 'zod';
 import { categorySlugs } from '@/data/categories';
+import { ART_NAMES } from '../../scripts/cover-art.mjs';
 
 /**
  * A validator for an image field. Astro passes its own `image()`; the filesystem loader passes a
@@ -83,6 +84,33 @@ export const entrySchema = <T extends ImageField>(image: T) =>
         })
         .optional(),
       cover: image,
+      /**
+       * Ask `npm run covers` to draw an *illustration* here instead of the placeholder plate.
+       *
+       * Optional, and absent on twenty-three of twenty-four entries, because it should be: an
+       * entry whose photographs have simply not been scanned yet wants the plate, which is a slot
+       * held open. This field is for the entry whose photograph is never arriving — the AlipayHK
+       * competition, whose deck and prototype are deliberately withheld — where a permanent
+       * placeholder is the wrong answer and a fake screenshot is a worse one.
+       *
+       * **Why a frontmatter field here when `cover-plate.ts` argues against exactly that.** The
+       * argument there is about *detection*: whether a cover is currently a drawing of ours is
+       * read from the file, never from a flag, because a flag survives somebody dropping a real
+       * photograph in and the site would then invert their photograph. That still holds — nothing
+       * below changes it. This field is an *instruction to the generator*, in the same class as
+       * `category` (which is how the plate learns its hue): it says what to draw, it is read by
+       * `scripts/redraw-covers.mjs` at authoring time, and the moment a real file lands on top the
+       * detectors stop agreeing with it and the site follows the file, not the frontmatter.
+       *
+       * Validated against the registry's own keys rather than a copied list, so a template renamed
+       * in `cover-art.mjs` fails the build here instead of silently drawing nothing.
+       */
+      art: z
+        .string()
+        .refine((s) => ART_NAMES.includes(s), {
+          message: `Unknown cover art template. Use one of [${ART_NAMES.join(', ')}] or add one to scripts/cover-art.mjs`,
+        })
+        .optional(),
       gallery: z
         .array(z.object({ src: image, alt: z.string(), caption: z.string().optional() }))
         .default([]),

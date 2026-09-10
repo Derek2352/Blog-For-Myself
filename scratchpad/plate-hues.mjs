@@ -41,7 +41,7 @@ const HUES = {
  */
 const sample = async (page) => {
   const rect = await page.evaluate(() => {
-    const host = document.querySelector('[data-plate]');
+    const host = document.querySelector('[data-drawn="plate"]');
     if (!host) return null;
     const r = host.getBoundingClientRect();
     // Inset past the border and the card's own rounding, so nothing but the plate is in frame.

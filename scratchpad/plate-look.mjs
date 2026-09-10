@@ -2,7 +2,7 @@
  * The cover plate in both themes — the only way to judge a filter is to look at one.
  *
  * `npm run covers` and the schema can both tell you a plate is a plate. Neither can tell you the
- * dark one belongs in the room, which is the entire claim the `[data-plate]` rule in global.css
+ * dark one belongs in the room, which is the entire claim the `[data-drawn="plate"]` rule in global.css
  * makes. So this shoots both places a plate appears, on both themes, and prints the pixel the plate
  * actually lands on, rather than the pixel the arithmetic in that comment predicts.
  *
@@ -43,11 +43,11 @@ for (const target of TARGETS) {
     await page.waitForTimeout(500);
 
     // Put the plate in the frame the way a visitor scrolling the page would see it.
-    await page.locator('[data-plate]').first().scrollIntoViewIfNeeded();
+    await page.locator('[data-drawn="plate"]').first().scrollIntoViewIfNeeded();
     await page.waitForTimeout(500);
 
     samples[`${target.name}/${theme}`] = await page.evaluate(() => {
-      const wrap = document.querySelector('[data-plate]');
+      const wrap = document.querySelector('[data-drawn="plate"]');
       const img = wrap.querySelector('img');
       const r = img.getBoundingClientRect();
       // Read the plate off the composited page, not off the file: the filter lives outside the SVG,

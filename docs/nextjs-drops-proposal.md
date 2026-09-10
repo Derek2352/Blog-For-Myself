@@ -10,6 +10,24 @@
 > proposed, at `#647554`, because `#697b58` measures 4.19:1 on this ground and would have been the
 > only sub-AA colour in the palette.
 >
+> A second pass in September took three things from the drops' *design* rather than their stack:
+> the entry `note` set as a display pull-quote instead of a small tilde-prefixed margin line; the
+> italic-tail headline (`The story, `*`so far.`*) across every page that has one; and category
+> filters with a sort on the timeline, which was the one genuinely functional idea in either zip.
+>
+> **The one piece of hand-drawn art in either zip was ported.** Among five declared "cover types",
+> four were a flat background colour or a gradient over JPEGs the zips did not contain; the fifth
+> was a bill-splitting phone scene built as thirty absolutely positioned `<div>`s and about seventy
+> lines of hand-written CSS, and it was genuinely good. It is now `scripts/cover-art.mjs`, redrawn
+> in SVG at the site's own hue, with an `art:` field in the frontmatter to ask for it. Three things
+> changed in the port and each is argued in that file: the AlipayHK wordmark is gone (on a personal
+> portfolio it reads as an official asset of a company Derek merely competed with), the interface
+> copy is gone (theirs, and a cover that renders as a plausible screenshot is what the credit line
+> then has to spend itself denying), and the whole thing is a file rather than a React component,
+> so it can be a card cover and an entry cover and a thing anybody can open. **Their credit line
+> was kept nearly verbatim** — "Editorial concept illustration. Not the original competition
+> prototype." — because it was the best single sentence in either zip.
+>
 > **Deliberately not adopted, and why:**
 >
 > - **PostgreSQL, Drizzle and the appreciations/reactions API.** Every page here is derivable at

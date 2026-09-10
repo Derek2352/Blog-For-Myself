@@ -1,6 +1,23 @@
 /**
  * parity — the same page, built two ways, shot side by side.
  *
+ * ## Obsolete: one of the two builds no longer exists
+ *
+ * **This harness cannot pass and is not meant to.** It compares an Astro build on 4416 against a
+ * Next build on 4417; the Astro build was deleted when the migration finished, and `build:next` went
+ * with it. Run today it reports `FIXTURE  /: both builds served the page — next did not serve it`,
+ * which is the honest answer: nothing was measured, because there is no longer a second thing to
+ * measure against.
+ *
+ * It is kept rather than deleted because it is the record of *how* the migration was checked —
+ * thirty pages, both themes, titles and canonical links and anchor counts compared, which is why the
+ * cutover was defensible. Restoring it would mean checking out a pre-cutover commit and serving it
+ * on 4416, which is a real thing somebody might want to do and is exactly what the two lines below
+ * describe.
+ *
+ * **It is not part of the fleet.** A harness that always reports zero teaches everyone reading the
+ * log to ignore a red line, which costs more than it is worth. Do not run it in a gate.
+ *
  * The migration's claim is that the Next build renders the site the Astro build renders. Type
  * checks and unit tests cannot see that claim: both builds can be internally correct and still
  * disagree about what a reader sees, because the disagreement would live in CSS, in markup order,

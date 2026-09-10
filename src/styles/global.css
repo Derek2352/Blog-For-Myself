@@ -658,9 +658,9 @@
   .jump-rail a:hover,
   .jump-rail a.here { color: var(--color-accent); border-color: var(--color-accent); }
 
-  /* ---- the drawn cover plate, on the dark theme ----
-     A plate is a static SVG behind <img>, so no rule in here reaches its ground, its grid or its
-     crosshair — and it is drawn in one fixed light sand. Twenty-four of them on a category page in
+  /* ---- the drawn covers, on the dark theme ----
+     A drawn cover is a static SVG behind <img>, so no rule in here reaches its ground, its grid or
+     its crosshair — and it is drawn in one fixed light sand. Twenty-four of them on a category page in
      a candlelit room is twenty-four lightboxes. The plate was left that way once already, recorded
      as a known limitation with the argument that photographs will have the same property. They
      will. The difference is that a photograph is *content* and its brightness is the author's; the
@@ -674,9 +674,25 @@
      #efa397 — the same rose, a shade cooler. It reads as the plate redrawn for the dark theme
      because the dark tokens are themselves close to the light ones inverted.
 
-     Scoped to `[data-plate]`, which src/lib/cover-plate.ts sets only for covers carrying the
-     generator's own mark: a filter this strong across somebody's photograph is a negative. */
-  html.dark [data-plate] img { filter: invert(1) hue-rotate(180deg); }
+     Scoped to `[data-drawn]`, which the pages set only for covers carrying one of the generators'
+     own marks (src/lib/cover-plate.ts reads them out of the files): a filter this strong across
+     somebody's photograph is a negative.
+
+     **It reaches illustrations too, and that is a designed property rather than a lucky one.** The
+     attribute used to be `[data-plate]` and matched only the placeholder. When drawn *art* arrived
+     the obvious move was a second selector beside this one — two names for one behaviour, which is
+     how the two answers to one question that `cover-plate.mjs` warns about get created. The
+     behaviour is single: this filter applies to any cover this project drew itself. It can, because
+     scripts/cover-art.mjs derives its ground and its ink from `placeholderSVG`'s own values — the
+     ones fixed by measuring twenty-one plates against this surface token — rather than picking a
+     palette of its own. `scratchpad/art-sink.mjs` measures the result instead of trusting it. An
+     illustration in some other palette would need its own answer, and the honest place to put that
+     is a new value on this attribute, not a filter that happens to be pointed at it.
+
+     The value (`plate` or `art`) is not used by any rule here. It is in the DOM because a reader
+     of the page, or a harness sampling one, otherwise cannot tell which kind of cover it is looking
+     at — and the two are meant to be told apart. */
+  html.dark [data-drawn] img { filter: invert(1) hue-rotate(180deg); }
 
   /* ---- image blur-up: LQIP background, sharp image fades in ---- */
   .blurup { background-size: cover; background-position: center; }

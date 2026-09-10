@@ -234,7 +234,7 @@ export async function promptCategory(rl) {
  * mode is class-driven rather than `prefers-color-scheme`, so an in-SVG media query
  * would desync the moment somebody used the toggle against their OS setting — a
  * bright rectangle *and* a wrong one. What ships instead is a filter on the page side:
- * `html.dark [data-plate] img` in `global.css` reverses the lightness and returns the
+ * `html.dark [data-drawn] img` in `global.css` reverses the lightness and returns the
  * hue, which lands the sand on the dark surface token. The one thing the drawing owes
  * that filter is a way to be recognised, and `PLATE_MARK` in `scripts/cover-plate.mjs`
  * is it — the `<pattern id="ledger">` below. **A redesign here may change every colour

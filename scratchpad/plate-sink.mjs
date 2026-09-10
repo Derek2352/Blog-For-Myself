@@ -23,11 +23,26 @@ const SURFACE = [39, 33, 25]; // #272119
 
 const median = (a) => a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)];
 
-/** Median over the plate's interior — see plate-hues.mjs for why a single pixel lies. */
-const sample = async (page, sel) => {
-  const rect = await page.evaluate((s) => {
-    const host = document.querySelector(s);
-    if (!host) return null;
+/**
+ * Median over the plate's interior — see plate-hues.mjs for why a single pixel lies.
+ *
+ * **It takes the entry's own cover, not the first plate on the page**, and that distinction arrived
+ * the hard way. This used to be `document.querySelector('[data-plate]')` on the reasoning that the
+ * cover is the first one in the DOM. True while every cover was a plate. The day one entry's cover
+ * became a drawn *illustration*, the first `[data-drawn="plate"]` on that page was a card in the
+ * related-entries section 6,711px down — outside the viewport, so Playwright refused the clip with
+ * "clipped area is either empty or outside the resulting image" and the whole run died on entry one
+ * of twenty-four. A harness that dies is not a harness that failed; it measured nothing at all.
+ *
+ * The cover is the first `[data-drawn]` element of *any* kind on the page, which is a property of
+ * the layout rather than of what happens to be drawn today. If that first one is not a plate, this
+ * page has nothing for this file to measure and returns null — which is a skip, not a failure.
+ * `scrollIntoViewIfNeeded` follows plate-look.mjs: a clip is only valid inside the viewport.
+ */
+const sample = async (page) => {
+  const rect = await page.evaluate(() => {
+    const host = document.querySelector('[data-drawn]');
+    if (!host || host.dataset.drawn !== 'plate') return null;
     const r = host.getBoundingClientRect();
     const inset = 14;
     if (r.width < 40 || r.height < 40) return null;
@@ -37,7 +52,7 @@ const sample = async (page, sel) => {
       width: Math.round(r.width - inset * 2),
       height: Math.round(r.height - inset * 2),
     };
-  }, sel);
+  });
   if (!rect) return null;
   const buf = await page.screenshot({ clip: rect });
   return page.evaluate(async (b64) => {
@@ -76,7 +91,12 @@ for (const theme of ['light', 'dark']) {
     if (!res || res.status() >= 400) continue; // drafts do not build
     if (theme === 'dark') await page.evaluate(() => document.documentElement.classList.add('dark'));
     await page.waitForTimeout(320);
-    const med = await sample(page, '[data-plate]');
+    await page
+      .locator('[data-drawn]')
+      .first()
+      .scrollIntoViewIfNeeded()
+      .catch(() => {});
+    const med = await sample(page);
     if (!med) continue;
     let row = rows.find((r) => r.slug === slug);
     if (!row) rows.push((row = { slug }));

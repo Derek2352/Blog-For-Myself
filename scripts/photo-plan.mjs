@@ -38,6 +38,9 @@ async function collect(kind) {
       featured: flag(fm, 'featured'),
       draft: flag(fm, 'draft'),
       cover: str(fm, 'cover') ?? '',
+      /* `art:` means this entry asked for a drawn cover rather than a photograph — see the README
+         section on it. Read here so the report stops telling Derek to replace a cover he chose. */
+      art: str(fm, 'art') ?? '',
       hasImage: /^image:\s*"/m.test(fm),
       galleryCount: (fm.match(/^\s+- src:/gm) ?? []).length,
     });
@@ -51,7 +54,11 @@ const logs = await collect('logs');
 const rows = [];
 for (const e of entries) {
   const plan = photoPlan({ category: e.category, featured: e.featured });
-  const placeholderCover = e.cover.endsWith('.svg');
+  /* An SVG cover is a placeholder *unless* the entry asked for a drawing. Getting this wrong is not
+     cosmetic: the whole point of `art:` is that this entry's photographs are never arriving, so
+     counting it as one shot short would keep it near the top of a report sorted by most-missing,
+     for good, recommending a swap that must not happen. */
+  const placeholderCover = e.cover.endsWith('.svg') && !e.art;
   const missing = Math.max(0, plan.targetGallery - e.galleryCount) + (placeholderCover ? 1 : 0);
   rows.push({ ...e, plan, placeholderCover, missing });
 }
@@ -76,6 +83,7 @@ for (const r of rows) {
     continue;
   }
   if (r.placeholderCover) console.log('   cover: placeholder → swap in a real frame');
+  else if (r.art) console.log(`   cover: drawn (art: ${r.art}) → nothing to shoot`);
   if (r.galleryCount < r.plan.targetGallery) {
     console.log(
       `   gallery: ${r.galleryCount}/${r.plan.targetGallery} → add ${r.plan.targetGallery - r.galleryCount}`,

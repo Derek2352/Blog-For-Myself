@@ -22,7 +22,8 @@ import { renderMarkdown } from '@/server/markdown';
 import { categoryBySlug } from '@/data/categories';
 import { resolveWash } from '@/lib/wash';
 import { isPlaceholderCover, orientation } from '@/lib/images';
-import { isGeneratedPlate } from '@/lib/cover-plate';
+import { artMeta } from '../../../../scripts/cover-art.mjs';
+import { isGeneratedPlate, isCoverArt } from '@/lib/cover-plate';
 import { entrySchema, breadcrumbSchema } from '@/lib/schema';
 import { SITE_URL, absolute } from '@/lib/site-url';
 import MetadataRail from '../../_ui/MetadataRail';
@@ -96,6 +97,18 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
      the flash. `blurup` goes with it: the class is what holds the image invisible, and without a
      background to hold it over there is nothing to fade in from. */
   const plate = isGeneratedPlate(entry.id);
+
+  /* The other kind of drawn cover: an illustration, for the entry whose photographs are never
+     arriving. Everything below that treats it differently from a plate is listed on `isCoverArt`
+     itself; the short version is that a plate is a slot and this is the finished thing, so it is
+     not cropped, it says what it depicts, and it admits in a caption that it is a drawing.
+
+     `art` is read from the file, `entry.data.art` is the instruction that asked for it. Both are
+     required: the frontmatter names the template, which is where `alt` and the credit line live,
+     and the file says the drawing is actually there. Drop a photograph over it and the file
+     disagrees, the frontmatter is ignored, and the page reverts on its own. */
+  const drawn = plate ? 'plate' : isCoverArt(entry.id) ? 'art' : undefined;
+  const art = drawn === 'art' && entry.data.art ? artMeta(entry.data.art) : null;
 
   const schemas = [
     entrySchema(entry, {
@@ -185,9 +198,9 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
 
         {entry.data.video ? (
           /* The poster inside is the cover, so a filmed entry whose photographs have not landed is
-             still showing a plate — `data-plate` rides on the wrapper and the rule reaches the
+             still showing a plate — `data-drawn` rides on the wrapper and the rule reaches the
              poster through it, with no need for VideoEmbed to learn what an entry id is. */
-          <div className="mt-8" data-plate={plate ? '' : undefined}>
+          <div className="mt-8" data-drawn={drawn}>
             <VideoEmbed
               url={entry.data.video}
               title={entry.data.title}
@@ -195,14 +208,28 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
             />
           </div>
         ) : (
-        <figure
-          className={`frame mt-8 overflow-hidden${!plate ? ' blurup' : ''}`}
-          data-plate={plate ? '' : undefined}
-        >
+        <figure className="mt-8">
+          {/* The frame is on this wrapper rather than on the `<figure>` so the credit line can sit
+              *outside* the border — a caption inside the frame reads as part of the picture. The
+              wrapper is unconditional, and the first version of it was not: it was `display:
+              contents` for a plate, on the reasoning that a plate has no caption so it needs no
+              extra box. A `contents` element has no box *at all*, `getBoundingClientRect()` returns
+              zeros on it, and `plate-sink.mjs` — which clips a screenshot to the element carrying
+              `data-drawn` — died on "clipped area is either empty or outside the resulting image".
+              One shape for all three cases is both simpler and the only one the measuring
+              instruments can see. */}
+          <div
+            className={`frame overflow-hidden${drawn ? '' : ' blurup'}`}
+            data-drawn={drawn}
+          >
           {/* wide covers run full width; tall/square ones hang matted at a capped height */}
           <img
             src={entry.data.cover.src}
-            alt={`${entry.data.title} — cover image`}
+            /* An illustration describes itself. Repeating the title here would name the entry a
+               third time — after the `h1` and the summary — and tell a reader who cannot see the
+               image nothing they did not already have. The template's own `alt` says what was
+               drawn, which is the only thing on this page that does. */
+            alt={art ? art.alt : `${entry.data.title} — cover image`}
             width={entry.data.cover.width}
             height={entry.data.cover.height}
             className={[
@@ -211,14 +238,35 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
                  summary and the first sentence — more than a screen of scrolling before the
                  writing starts, on every entry. Placeholders keep their place as an anchor at a
                  fraction of the height. A real photograph is not capped: this reverts by itself
-                 the moment one lands, with no frontmatter change. */
-              placeholderCover ? 'max-h-[13rem] object-cover sm:max-h-[15rem]' : '',
+                 the moment one lands, with no frontmatter change.
+
+                 An illustration is not capped either, and for the same reason a photograph is not:
+                 `placeholderCover` tests the file extension, so it says yes to *any* SVG, and a
+                 drawing cropped to a 13rem strip loses two thirds of itself. `art` is the narrower
+                 question — is this SVG a drawing we made on purpose — and it is the one that
+                 belongs here. */
+              placeholderCover && !art ? 'max-h-[13rem] object-cover sm:max-h-[15rem]' : '',
             ]
               .filter(Boolean)
               .join(' ')}
             loading="eager"
             fetchPriority="high"
           />
+          </div>
+          {/* The credit. This is the whole reason a drawn cover is a different kind of object from
+              a plate: a picture of a bill-splitting app, on the page about a bill-splitting app
+              Derek designed for a competition, will be read as a screenshot of what he built. It
+              is not one — the deck and prototype are deliberately withheld — and a portfolio that
+              lets that misreading stand is claiming something it did not do. The line is the
+              drops' own, near enough verbatim, because they got this right first. */}
+          {art && (
+            /* `normal-case` against `.rail`, which uppercases. Every other rail on the site is a
+               label — a date, a code, a category — and shouting three words is fine. This is two
+               sentences of prose, and in all caps at 0.72rem it read as a warning notice rather than
+               as the quiet admission it is meant to be. Mono, muted and right-aligned is the drops'
+               own treatment and it was right; the uppercase was mine and it was not. */
+            <figcaption className="rail mt-2 text-right normal-case">{art.credit}</figcaption>
+          )}
         </figure>
         )}
 

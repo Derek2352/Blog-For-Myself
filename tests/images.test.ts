@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { isPlaceholderCover, orientation } from '@/lib/images';
 // @ts-expect-error — plain .mjs authoring helper
 import { placeholderSVG } from '../scripts/lib.mjs';
-import { isPlateSVG, PLATE_MARK } from '../scripts/cover-plate.mjs';
+import { isPlateSVG, isArtSVG, artTemplateOf, PLATE_MARK, ART_MARK } from '../scripts/cover-plate.mjs';
+import { coverArtSVG, artMeta, ART_NAMES, ART_TEMPLATES } from '../scripts/cover-art.mjs';
 
 describe('orientation', () => {
   it('classifies wide / tall / square', () => {
@@ -98,5 +99,88 @@ describe('the plate the generator draws', () => {
   it('does not answer for something that is not a plate', () => {
     expect(isPlateSVG('<svg xmlns="http://www.w3.org/2000/svg"><rect width="9" height="9"/></svg>')).toBe(false);
     expect(isPlateSVG('')).toBe(false);
+  });
+});
+
+/**
+ * The other generator, and the boundary between the two.
+ *
+ * A plate and an illustration drive opposite layout decisions on the entry page — a plate is capped
+ * at 13rem because it is a slot held open, an illustration is not because it is the finished cover —
+ * so a file that answered yes to both detectors would get the worst of each. `isPlateSVG` excludes
+ * art explicitly rather than relying on the drawings never overlapping, and this is what holds that
+ * to its word.
+ */
+describe('the art the generator draws', () => {
+  it('carries the mark its detector looks for, and names its template in it', () => {
+    for (const name of ART_NAMES) {
+      const svg = coverArtSVG({ template: name, hue: 12 });
+      expect(svg).toContain(ART_MARK);
+      expect(isArtSVG(svg)).toBe(true);
+      expect(artTemplateOf(svg)).toBe(name);
+    }
+  });
+
+  it('is never mistaken for a plate, and a plate is never mistaken for art', () => {
+    for (const name of ART_NAMES) {
+      expect(isPlateSVG(coverArtSVG({ template: name, hue: 12 }))).toBe(false);
+    }
+    expect(isArtSVG(placeholderSVG({ seed: 'x', hue: 12 }))).toBe(false);
+  });
+
+  it('stays art even if a template one day borrows the ledger pattern', () => {
+    // The entry this system exists for is literally about a ledger, so a future template reaching
+    // for `<pattern id="ledger">` is a plausible thing to do rather than a contrived one. The
+    // exclusion in `isPlateSVG` is what makes it safe; without it that template would silently
+    // reclassify itself as a placeholder and get cropped to a strip.
+    const both = coverArtSVG({ template: ART_NAMES[0], hue: 12 }).replace(
+      '<title>',
+      `<defs><pattern id="ledger" width="8" height="8"/></defs><title>`,
+    );
+    expect(both).toContain(PLATE_MARK);
+    expect(isArtSVG(both)).toBe(true);
+    expect(isPlateSVG(both)).toBe(false);
+  });
+
+  it('draws well-formed SVG at its declared aspect, on every hue the site uses', () => {
+    // The site's whole warm band, from src/data/categories.ts — a template is drawn once per entry
+    // and could land on any of them the day it is used a second time.
+    for (const name of ART_NAMES) {
+      const [w, h] = ART_TEMPLATES[name].aspect;
+      for (const hue of [12, 20, 26, 32, 38, 44, 340, 350]) {
+        const svg = coverArtSVG({ template: name, hue });
+        expect(svg.startsWith('<svg')).toBe(true);
+        expect(svg.trimEnd().endsWith('</svg>')).toBe(true);
+        expect(svg).toContain(`viewBox="0 0 ${w} ${h}"`);
+        // Every tag that opens closes. Not a parser, but it catches the failure a string-built
+        // drawing actually has: a helper that forgot its `/>`.
+        const opens = (svg.match(/<[a-z]/g) ?? []).length;
+        const closes = (svg.match(/\/>|<\/[a-z]/g) ?? []).length;
+        expect(closes).toBe(opens);
+      }
+    }
+  });
+
+  it('refuses a template it does not have, loudly', () => {
+    // Quietly falling back to a plate is the failure `redraw-covers.mjs` spent two rewrites making
+    // visible: a cover that looks drawn, is not, and reports success.
+    expect(() => coverArtSVG({ template: 'no-such-drawing', hue: 12 })).toThrow(/Unknown cover art/);
+  });
+
+  it('offers the same names the registry has, so the schema cannot validate against a stale list', () => {
+    expect(ART_NAMES).toEqual(Object.keys(ART_TEMPLATES).sort());
+    expect(ART_NAMES.length).toBeGreaterThan(0);
+  });
+
+  it('describes and credits every template', () => {
+    for (const name of ART_NAMES) {
+      const meta = artMeta(name);
+      expect(meta).not.toBeNull();
+      // The alt must describe the drawing, and the credit must say what the cover is not — that
+      // sentence is the entire reason art is a different kind of object from a plate.
+      expect(meta!.alt.length).toBeGreaterThan(40);
+      expect(meta!.credit).toMatch(/\bNot\b/);
+    }
+    expect(artMeta('no-such-drawing')).toBeNull();
   });
 });

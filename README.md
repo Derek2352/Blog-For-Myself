@@ -192,6 +192,36 @@ extra). Three surfaces, one source of truth:
 
 Tune counts and shot lists freely in `photo-rules.mjs` — it's a nudge, never a build gate.
 
+### Drawn covers — `art:`, for the entry whose photographs are never coming
+
+Every entry starts on a **plate**: a warm ledger-ruled placeholder `npm run covers` draws from the
+category's hue. It is a slot held open, and for almost everything that is the right answer — the
+photographs exist, they just have not been scanned yet.
+
+One kind of entry is different. The AlipayHK competition's deck and prototype are deliberately
+withheld, so no photograph is ever arriving; a permanent placeholder is the wrong outcome and a
+mocked-up screenshot is a worse one. For that, add one line to the frontmatter:
+
+```yaml
+art: "split-bill"
+```
+
+then run `npm run covers`. The cover becomes a **drawn illustration** instead of a plate, and the
+entry page treats it as the finished thing rather than as a gap: full height instead of the
+placeholder's 13rem crop, an `alt` that describes the drawing, and a credit line under it —
+*"Editorial concept illustration, drawn for this page. Not the original competition prototype."*
+That last one is not decoration. A picture of a bill-splitting app, on the page about a
+bill-splitting app you designed, will be read as a screenshot of what you built unless something
+says otherwise.
+
+Drawings live in `scripts/cover-art.mjs`, one per named template, drawn in SVG from the category's
+hue plus the site's two brand colours. Today there is one; a second costs a `draw()` function and
+three strings (`alt`, `credit`, `label`). The name is validated against the registry, so a typo
+fails the build rather than quietly leaving a placeholder.
+
+Remove the line and run `npm run covers` again and the entry goes back to a plate. Drop a real
+`cover.jpg` in and everything above switches itself off — the page reads the file, not the field.
+
 ### C. New tab (category)
 
 Append one object to `src/data/categories.ts`:
