@@ -1,0 +1,139 @@
+/**
+ * Log detail — generated only for logs that have a body, so a blurb-only log stays a terminal card
+ * and never produces a dead page.
+ *
+ * **This route produces zero pages today**, and is here anyway. Every log currently on the site is
+ * either a draft or blurb-only, so `logHasBody` is false for all of them and both builds emit
+ * nothing — verified, not assumed. But `logHref` still hands out `/log/<slug>/` the moment one
+ * gets a body, and a route that exists in the old build and not the new one is a 404 waiting for
+ * the next thing Derek writes. Porting it now costs a file; discovering it later costs a broken
+ * link on a live site.
+ */
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
+import KindBadge from '../../_ui/KindBadge';
+import TagChip from '../../_ui/TagChip';
+import ReadingAids from '../../_ui/ReadingAids';
+import PageWash from '../../_chrome/PageWash';
+import { getLogs, getLog, getCodes, logHasBody, categoryHref } from '@/server/content';
+import { renderMarkdown } from '@/server/markdown';
+import { categoryBySlug } from '@/data/categories';
+import { resolveWash } from '@/lib/wash';
+import { resolvePeriod } from '@/lib/periods';
+import { orientation } from '@/lib/images';
+import { isoDay, readingTime } from '@/lib/format';
+
+export async function generateStaticParams() {
+  return (await getLogs()).filter(logHasBody).map((log) => ({ slug: log.id }));
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const log = await getLog(slug);
+  if (!log) return {};
+  return {
+    title: log.data.title,
+    description: log.data.summary,
+    alternates: { canonical: `/log/${log.id}/` },
+    openGraph: {
+      type: 'article',
+      ...(log.data.image ? { images: [{ url: log.data.image.src }] } : {}),
+    },
+  };
+}
+
+export default async function LogPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const log = await getLog(slug);
+  if (!log || !logHasBody(log)) notFound();
+
+  const codes = await getCodes();
+  const code = codes.get(`logs:${log.id}`) ?? 'L-000';
+  const category = categoryBySlug(log.data.category);
+  const period = resolvePeriod(log.data.date);
+  const wash = resolveWash(category ?? { slug: log.data.category });
+  const readTime = log.body ? readingTime(log.body) : null;
+  const html = await renderMarkdown(log.body);
+
+  return (
+    <>
+      <PageWash hue={wash.hue} tab={log.data.category} />
+      <ReadingAids />
+      <article className="wrap max-w-3xl py-10" data-pagefind-body>
+        <span className="sr-only" data-pagefind-filter="type">
+          Log
+        </span>
+        <span className="sr-only" data-pagefind-filter="kind">
+          {log.data.kind}
+        </span>
+        <header>
+          <p className="kicker">
+            Log · {code}
+            {log.data.draft && <span className="text-signal-text"> · draft</span>}
+          </p>
+          <h1 className="mt-2 font-display text-3xl leading-tight sm:text-4xl">
+            {log.data.title}
+          </h1>
+          <p className="rail mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <span>{isoDay(log.data.date)}</span>
+            <KindBadge kind={log.data.kind} />
+            <Link href={`/monthly/#period-${period.id}`} className="hover:text-accent">
+              {period.label}
+            </Link>
+            {category && (
+              <Link
+                href={categoryHref(category.slug)}
+                className="hover:text-accent"
+                data-pagefind-filter="category"
+              >
+                {category.label}
+              </Link>
+            )}
+            {readTime && <span>{readTime}</span>}
+          </p>
+          {log.data.summary && (
+            <p className="mt-4 text-lg leading-relaxed text-muted">{log.data.summary}</p>
+          )}
+        </header>
+
+        {log.data.image && (
+          <figure className="frame blurup mt-8 overflow-hidden">
+            <img
+              src={log.data.image.src}
+              alt={`${log.data.title} — photo`}
+              width={log.data.image.width}
+              height={log.data.image.height}
+              className={
+                orientation(log.data.image) === 'wide' ? 'w-full' : 'mx-auto w-auto max-h-[70vh]'
+              }
+              loading="eager"
+            />
+          </figure>
+        )}
+
+        <div className="prose-reflection mt-8" dangerouslySetInnerHTML={{ __html: html }} />
+
+        <footer className="mt-10 flex flex-wrap items-center gap-2 border-t border-line pt-6">
+          {log.data.tags.map((tag) => (
+            <TagChip key={tag} tag={tag} />
+          ))}
+          {log.data.link && (
+            <a
+              href={log.data.link}
+              target="_blank"
+              rel="noopener"
+              className="rail transition-colors hover:text-accent"
+            >
+              External link ↗
+            </a>
+          )}
+        </footer>
+      </article>
+    </>
+  );
+}

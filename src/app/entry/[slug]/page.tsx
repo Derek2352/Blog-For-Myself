@@ -27,6 +27,7 @@ import { entrySchema, breadcrumbSchema } from '@/lib/schema';
 import { SITE_URL, absolute } from '@/lib/site-url';
 import MetadataRail from '../../_ui/MetadataRail';
 import Gallery from '../../_ui/Gallery';
+import VideoEmbed from '../../_ui/VideoEmbed';
 import EntryCard from '../../_ui/EntryCard';
 import TagChip from '../../_ui/TagChip';
 import ReadingAids from '../../_ui/ReadingAids';
@@ -166,6 +167,18 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
           )}
         </header>
 
+        {entry.data.video ? (
+          /* The poster inside is the cover, so a filmed entry whose photographs have not landed is
+             still showing a plate — `data-plate` rides on the wrapper and the rule reaches the
+             poster through it, with no need for VideoEmbed to learn what an entry id is. */
+          <div className="mt-8" data-plate={plate ? '' : undefined}>
+            <VideoEmbed
+              url={entry.data.video}
+              title={entry.data.title}
+              poster={entry.data.cover}
+            />
+          </div>
+        ) : (
         <figure
           className={`frame mt-8 overflow-hidden${!plate ? ' blurup' : ''}`}
           data-plate={plate ? '' : undefined}
@@ -191,6 +204,7 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
             fetchPriority="high"
           />
         </figure>
+        )}
 
         {/* Reflection comes first in the DOM so keyboard/reading order matches the mobile visual
             order (reflection, then rail); lg:order restores the rail to the left column. */}
