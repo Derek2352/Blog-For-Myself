@@ -1,0 +1,81 @@
+/*
+ * The gallery and its lightbox.
+ *
+ * Lifted out of `Gallery.astro`'s scoped `<style>` so both builds share it. One selector needed
+ * care in the move: the scrapbook tilt was written as a bare `li:nth-child(3n + 1)`, which was
+ * safe only because Astro scoped it to the component. Global, that would rotate every third list
+ * item on the site. It is anchored to `.gallery` here.
+ */
+
+/* scrapbook touch: prints rest at slight angles, straighten on hover */
+.gallery li:nth-child(3n + 1) [data-lb-open] { rotate: -1.2deg; }
+.gallery li:nth-child(3n + 2) [data-lb-open] { rotate: 0.9deg; }
+.gallery li:nth-child(3n) [data-lb-open] { rotate: -0.5deg; }
+[data-lb-open] {
+  box-shadow:
+    0 1px 2px rgb(20 18 12 / 0.05),
+    0 8px 18px -10px rgb(20 18 12 / 0.14);
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  [data-lb-open] { transition: rotate 0.25s ease; }
+  li:hover [data-lb-open] { rotate: 0deg; }
+}
+
+.lightbox {
+  width: min(96vw, 90rem);
+  max-height: 94vh;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  background: var(--color-ground);
+  color: var(--color-ink);
+  padding: 0;
+  margin: auto;
+}
+.lightbox::backdrop {
+  background: rgb(8 10 14 / 0.9);
+}
+.lightbox-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+}
+.lightbox-btn {
+  border: 1px solid var(--color-line);
+  padding: 0.35rem 0.7rem;
+  background: var(--color-surface);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.lightbox-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.lightbox-stage {
+  padding: 0 1rem;
+}
+.lightbox-stage img {
+  display: block;
+  margin-inline: auto;
+  max-height: 72vh;
+  max-width: 100%;
+  object-fit: contain;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .lightbox[open] {
+    animation: lb-fade 0.22s cubic-bezier(0.2, 0.6, 0.2, 1);
+  }
+  @keyframes lb-fade {
+    from {
+      opacity: 0;
+      transform: scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}

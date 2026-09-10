@@ -9,6 +9,7 @@ import { getNavCategories, getNavTree } from '@/server/content';
 import { resolveWash } from '@/lib/wash';
 import SiteCat from './SiteCat';
 import CatCard from './CatCard';
+import WelcomeNote from './WelcomeNote';
 
 /**
  * Four routes that are not categories but are still places to go, so the board can be made of
@@ -34,6 +35,7 @@ export default async function Chrome() {
     <>
       <SiteCat tabs={tabs.map((c) => c.slug)} />
       <CatCard poolJson={JSON.stringify(pool)} />
+      <WelcomeNote />
     </>
   );
 }

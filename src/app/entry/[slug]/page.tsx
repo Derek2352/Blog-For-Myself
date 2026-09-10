@@ -26,6 +26,7 @@ import { isGeneratedPlate } from '@/lib/cover-plate';
 import { entrySchema, breadcrumbSchema } from '@/lib/schema';
 import { SITE_URL, absolute } from '@/lib/site-url';
 import MetadataRail from '../../_ui/MetadataRail';
+import Gallery from '../../_ui/Gallery';
 import EntryCard from '../../_ui/EntryCard';
 import TagChip from '../../_ui/TagChip';
 import ReadingAids from '../../_ui/ReadingAids';
@@ -211,6 +212,18 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
           )}
           <MetadataRail entry={entry} code={code} />
         </div>
+
+        {entry.data.gallery.length > 0 && (
+          <section className="mt-16" aria-labelledby="gallery-h">
+            <p className="kicker">Gallery</p>
+            <h2 id="gallery-h" className="mt-1 font-display text-2xl">
+              Frames
+            </h2>
+            <div className="mt-5">
+              <Gallery images={entry.data.gallery} id={entry.id} />
+            </div>
+          </section>
+        )}
 
         {(prev || next) && (
           <nav

@@ -1,6 +1,11 @@
 ---
 /**
  * Photo gallery with lightbox.
+ *
+ * The lightbox behaviour moved to `src/lib/gallery-lightbox.ts` and the styles to
+ * `src/styles/gallery.css`, so the Next build shares both. One selector needed care in that move:
+ * the scrapbook tilt was a bare `li:nth-child(3n + 1)`, safe only because Astro scoped it — global,
+ * it would have rotated every third list item on the site. It is anchored to `.gallery` now.
  * - Thumbnails are optimized; full-res variants load only when the lightbox
  *   opens (src is swapped in from JSON on demand).
  * - Native <dialog> gives a real focus trap, Esc-to-close, and focus
@@ -101,161 +106,8 @@ const payload = JSON.stringify(
   <script type="application/json" data-lb-data is:inline set:html={payload} />
 </div>
 
-<style>
-  /* scrapbook touch: prints rest at slight angles, straighten on hover */
-  li:nth-child(3n + 1) [data-lb-open] { rotate: -1.2deg; }
-  li:nth-child(3n + 2) [data-lb-open] { rotate: 0.9deg; }
-  li:nth-child(3n) [data-lb-open] { rotate: -0.5deg; }
-  [data-lb-open] {
-    box-shadow:
-      0 1px 2px rgb(20 18 12 / 0.05),
-      0 8px 18px -10px rgb(20 18 12 / 0.14);
-  }
-  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
-    [data-lb-open] { transition: rotate 0.25s ease; }
-    li:hover [data-lb-open] { rotate: 0deg; }
-  }
-
-  .lightbox {
-    width: min(96vw, 90rem);
-    max-height: 94vh;
-    border: 1px solid var(--color-line);
-    border-radius: var(--radius-card);
-    background: var(--color-ground);
-    color: var(--color-ink);
-    padding: 0;
-    margin: auto;
-  }
-  .lightbox::backdrop {
-    background: rgb(8 10 14 / 0.9);
-  }
-  .lightbox-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 0.75rem 1rem;
-  }
-  .lightbox-btn {
-    border: 1px solid var(--color-line);
-    padding: 0.35rem 0.7rem;
-    background: var(--color-surface);
-    cursor: pointer;
-    transition: border-color 0.15s;
-  }
-  .lightbox-btn:hover {
-    border-color: var(--color-accent);
-    color: var(--color-accent);
-  }
-  .lightbox-stage {
-    padding: 0 1rem;
-  }
-  .lightbox-stage img {
-    display: block;
-    margin-inline: auto;
-    max-height: 72vh;
-    max-width: 100%;
-    object-fit: contain;
-    border: 1px solid var(--color-line);
-    background: var(--color-surface);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .lightbox[open] {
-      animation: lb-fade 0.22s cubic-bezier(0.2, 0.6, 0.2, 1);
-    }
-    @keyframes lb-fade {
-      from {
-        opacity: 0;
-        transform: scale(0.985);
-      }
-      to {
-        opacity: 1;
-        transform: none;
-      }
-    }
-  }
-</style>
-
 <script>
-  interface LightboxItem {
-    src: string;
-    alt: string;
-    caption: string;
-  }
-
-  function setupGallery(root: HTMLElement): void {
-    const dialog = root.querySelector<HTMLDialogElement>('[data-lb-dialog]');
-    const dataEl = root.querySelector('[data-lb-data]');
-    const img = root.querySelector<HTMLImageElement>('[data-lb-img]');
-    const caption = root.querySelector<HTMLElement>('[data-lb-caption]');
-    const counter = root.querySelector<HTMLElement>('[data-lb-counter]');
-    if (!dialog || !dataEl || !img || !caption || !counter) return;
-
-    const items: LightboxItem[] = JSON.parse(dataEl.textContent ?? '[]');
-    if (items.length === 0) return;
-    const total = String(items.length).padStart(2, '0');
-    let index = 0;
-
-    const show = (i: number): void => {
-      index = (i + items.length) % items.length;
-      const item = items[index]!;
-      img.src = item.src;
-      img.alt = item.alt;
-      caption.textContent = item.caption;
-      caption.hidden = item.caption.length === 0;
-      counter.textContent = `FRAME ${String(index + 1).padStart(2, '0')} / ${total}`;
-    };
-
-    root.querySelectorAll<HTMLButtonElement>('[data-lb-open]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        show(Number(btn.dataset.index ?? 0));
-        dialog.showModal();
-        document.body.style.overflow = 'hidden';
-      });
-    });
-
-    dialog.querySelector('[data-lb-close]')?.addEventListener('click', () => dialog.close());
-    dialog.querySelector('[data-lb-prev]')?.addEventListener('click', () => show(index - 1));
-    dialog.querySelector('[data-lb-next]')?.addEventListener('click', () => show(index + 1));
-
-    dialog.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowLeft') show(index - 1);
-      if (e.key === 'ArrowRight') show(index + 1);
-    });
-
-    // touch swipe left/right to navigate frames
-    if (items.length > 1) {
-      let startX = 0;
-      let startY = 0;
-      let swiping = false;
-      img.addEventListener(
-        'pointerdown',
-        (e) => {
-          if (e.pointerType === 'mouse') return;
-          swiping = true;
-          startX = e.clientX;
-          startY = e.clientY;
-        },
-        { passive: true },
-      );
-      img.addEventListener('pointerup', (e) => {
-        if (!swiping) return;
-        swiping = false;
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-        if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) show(index + (dx < 0 ? 1 : -1));
-      });
-    }
-
-    // click on the backdrop (the dialog element itself) closes
-    dialog.addEventListener('click', (e) => {
-      if (e.target === dialog) dialog.close();
-    });
-
-    dialog.addEventListener('close', () => {
-      document.body.style.overflow = '';
-    });
-  }
+  import { setupGallery } from '@/lib/gallery-lightbox';
 
   document.addEventListener('astro:page-load', () => {
     document.querySelectorAll<HTMLElement>('[data-gallery]').forEach(setupGallery);

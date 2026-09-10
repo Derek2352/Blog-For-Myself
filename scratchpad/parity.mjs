@@ -50,8 +50,14 @@ const facts = (page) =>
     imgs: document.querySelectorAll('img').length,
     /* An image without both dimensions reflows the page as it loads. Astro's `image()` guaranteed
        these; the Next loader has to reproduce it, and this is where that is checked on the real
-       rendered page rather than on the loader's return value. */
-    imgsMissingSize: [...document.querySelectorAll('img')].filter(
+       rendered page rather than on the loader's return value.
+       **The lightbox stage is exempt, and legitimately.** `<img data-lb-img>` ships with no src at
+       all — an empty `src=""` resolves to the page URL and triggers a spurious document fetch, so
+       the script sets src, alt and size on open. It has no intrinsic dimensions to state until a
+       frame is chosen. Astro's copy is identical, which is the point: this counter is compared
+       *between the builds* below, so exempting it here keeps the comparison about the port rather
+       than about an absolute nobody meets. */
+    imgsMissingSize: [...document.querySelectorAll('img:not([data-lb-img])')].filter(
       (i) => !i.getAttribute('width') || !i.getAttribute('height'),
     ).length,
     /* The authoring notes must never reach the page. Checked on the built HTML of both, because
@@ -113,8 +119,11 @@ for (const [path, got] of reached) {
     got.astro.h1 === got.next.h1 ? String(got.next.h1) : `astro "${got.astro.h1}" vs next "${got.next.h1}"`);
   ok(`${path}: canonical points at the same URL`, got.astro.canonical === got.next.canonical,
     `astro ${got.astro.canonical} / next ${got.next.canonical}`);
-  ok(`${path}: no image ships without dimensions (next)`, got.next.imgsMissingSize === 0,
-    `${got.next.imgsMissingSize} of ${got.next.imgs}`);
+  ok(
+    `${path}: no image ships without dimensions`,
+    got.next.imgsMissingSize === 0 && got.astro.imgsMissingSize === 0,
+    `astro ${got.astro.imgsMissingSize}, next ${got.next.imgsMissingSize}, of ${got.next.imgs} images`,
+  );
   ok(`${path}: no authoring comments reach the page (next)`, got.next.htmlComments === 0,
     `${got.next.htmlComments} comment(s) in the DOM`);
   note(`${path}: links astro ${got.astro.links} / next ${got.next.links}, images ${got.astro.imgs} / ${got.next.imgs}`);

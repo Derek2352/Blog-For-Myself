@@ -4,6 +4,9 @@
  * the page paints — a note left on the desk, not a gate. Native <dialog>
  * gives a real focus trap, Esc-to-close, and backdrop dismissal. The flag
  * is set the moment it opens, so nobody is ever nagged twice.
+ *
+ * The behaviour moved to `src/lib/welcome-note.ts` and the styles to `src/styles/welcome.css`, so
+ * the Next build shares both.
  */
 import { site } from '@/data/site';
 ---
@@ -41,109 +44,7 @@ import { site } from '@/data/site';
   <p class="sr-only">{site.tagline}</p>
 </dialog>
 
-<style>
-  .welcome {
-    margin: auto;
-    width: min(92vw, 27rem);
-    border: 1px solid var(--color-line);
-    border-radius: var(--radius-card);
-    background: var(--color-surface);
-    color: var(--color-ink);
-    padding: 1.75rem;
-    box-shadow: 0 24px 60px -24px rgb(30 20 10 / 0.35);
-  }
-  .welcome::backdrop {
-    background: rgb(28 22 14 / 0.45);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .welcome[open] {
-      animation: welcome-in 0.3s cubic-bezier(0.2, 0.6, 0.2, 1);
-    }
-    @keyframes welcome-in {
-      from {
-        opacity: 0;
-        transform: translateY(10px) scale(0.985);
-      }
-      to {
-        opacity: 1;
-        transform: none;
-      }
-    }
-  }
-</style>
-
 <script>
-  const KEY = 'welcomed';
-  /** How long the note stays before clearing itself, once it has opened. */
-  const AUTO_CLOSE_MS = 8000;
-  let handledThisVisit = false;
-
-  function maybeWelcome(): void {
-    if (handledThisVisit) return;
-    try {
-      if (localStorage.getItem(KEY)) return;
-    } catch {
-      return; // no storage → showing every time would nag; skip instead
-    }
-    const dialog = document.getElementById('welcome-note');
-    if (!(dialog instanceof HTMLDialogElement)) return;
-    handledThisVisit = true;
-
-    dialog.addEventListener('click', (e) => {
-      if (e.target === dialog) dialog.close();
-    });
-    dialog.querySelectorAll('[data-welcome-close]').forEach((el) => {
-      el.addEventListener('click', () => dialog.close());
-    });
-
-    // Scrolling is an answer: someone who has started reading doesn't need a
-    // map, and a real showModal() blocks the page — so get out of the way
-    // instead of making them dismiss it first. A scroll during the 700ms wait
-    // cancels the opening outright; after that it closes the note.
-    let scrolled = false;
-    const onScroll = () => {
-      scrolled = true;
-      dialog.close(); // no-op if it hasn't opened yet
-    };
-    window.addEventListener('scroll', onScroll, { passive: true, once: true });
-
-    // It also clears itself: a note nobody asked for shouldn't need dismissing.
-    // Engaging with it cancels the countdown — pulling it away mid-sentence
-    // would be worse than letting it sit. Focus can't be the signal, since
-    // showModal() puts focus on the button the moment it opens.
-    let countdown: number | undefined;
-    const holdOpen = () => {
-      if (countdown !== undefined) {
-        clearTimeout(countdown);
-        countdown = undefined;
-      }
-    };
-    dialog.addEventListener('pointerenter', holdOpen);
-    dialog.addEventListener('keydown', holdOpen);
-
-    // Dismissed any other way (button, Esc, backdrop, scroll) → stop listening
-    // and drop the countdown rather than leaving either armed for the session.
-    dialog.addEventListener(
-      'close',
-      () => {
-        window.removeEventListener('scroll', onScroll);
-        holdOpen();
-      },
-      { once: true },
-    );
-
-    setTimeout(() => {
-      // Either way this visit counts as welcomed: someone who scrolled straight
-      // past has found their own way in and shouldn't meet a modal next time.
-      try {
-        localStorage.setItem(KEY, '1');
-      } catch {}
-      if (scrolled) return;
-      if (document.getElementById('welcome-note') !== dialog) return;
-      dialog.showModal();
-      countdown = window.setTimeout(() => dialog.close(), AUTO_CLOSE_MS);
-    }, 700);
-  }
-
+  import { maybeWelcome } from '@/lib/welcome-note';
   document.addEventListener('astro:page-load', maybeWelcome);
 </script>

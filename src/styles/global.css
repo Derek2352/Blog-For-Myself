@@ -3,6 +3,8 @@
    copy. Safe as global: every selector in it is anchored to the cat's own ids and classes. */
 @import "./cat.css";
 @import "./cat-card.css";
+@import "./gallery.css";
+@import "./welcome.css";
 
 /* Dark mode is class-driven (persisted toggle), not media-only. */
 @custom-variant dark (&:where(.dark, .dark *));
