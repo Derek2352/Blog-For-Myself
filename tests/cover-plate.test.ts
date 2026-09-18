@@ -8,6 +8,7 @@ import {
   isPlateAsset,
   drawnCounts,
 } from '@/lib/cover-plate';
+import { coverKind } from '../scripts/cover-plate.mjs';
 import { entrySchema } from '@/lib/content-schema';
 import { ART_NAMES } from '../scripts/cover-art.mjs';
 
@@ -28,13 +29,15 @@ import { ART_NAMES } from '../scripts/cover-art.mjs';
  * The tests below ask the other question: **is it looking at anything?** A count is the only shape
  * of assertion that catches this, because the failure was not a wrong answer.
  */
+/** Every entry folder, shared by both suites below. */
+const entryDirs = readdirSync(path.join(process.cwd(), 'src', 'content', 'entries'), {
+  withFileTypes: true,
+})
+  .filter((d) => d.isDirectory())
+  .map((d) => d.name);
+
 describe('the cover detectors are reading the repository', () => {
   const counts = drawnCounts();
-  const entryDirs = readdirSync(path.join(process.cwd(), 'src', 'content', 'entries'), {
-    withFileTypes: true,
-  })
-    .filter((d) => d.isDirectory())
-    .map((d) => d.name);
 
   it('finds drawn covers at all', () => {
     // Not "some number I wrote down": every entry with a `cover.svg` on disk has to be sorted into
@@ -153,6 +156,54 @@ describe('the art field', () => {
     expect(bad.success).toBe(false);
     if (!bad.success) {
       expect(bad.error.issues[0].message).toContain(ART_NAMES[0]);
+    }
+  });
+});
+
+/**
+ * The authoring tools' half of the question.
+ *
+ * `npm run photos`, `npm run inbox` and the studio all need to know whether an entry's cover is a
+ * photograph, a drawing, or a slot still held open — and for a while each had its own copy of the
+ * rule, which is how the answers drifted: the photo plan trusted `art:` even when `cover:` pointed
+ * at a real image and told Derek "cover: drawn → nothing to shoot" for an entry that had a
+ * photograph. One function now, tested here.
+ */
+describe('coverKind — what the frontmatter says the cover is', () => {
+  it('calls a real image a photograph whatever art: says', () => {
+    // The ordering that fixes the bug: the file is the cover, the field is a request to the
+    // generator. A stale `art:` beside a photograph must never outvote the photograph.
+    expect(coverKind({ cover: './images/photo.jpg', art: 'book-stack' })).toBe('photo');
+    expect(coverKind({ cover: './images/photo.jpg' })).toBe('photo');
+    expect(coverKind({ cover: './images/frame.webp', art: 'skyline' })).toBe('photo');
+  });
+
+  it('separates a drawing from a held-open slot', () => {
+    expect(coverKind({ cover: './images/cover.svg', art: 'ridge-line' })).toBe('art');
+    expect(coverKind({ cover: './images/cover.svg' })).toBe('plate');
+    expect(coverKind({ cover: './images/cover.svg', art: '' })).toBe('plate');
+  });
+
+  it('survives being asked about nothing', () => {
+    // new-entry calls this before the file exists.
+    expect(coverKind()).toBe('photo');
+    expect(coverKind({})).toBe('photo');
+  });
+
+  it('agrees with every entry on disk', () => {
+    // The tools' answer and the site's answer are computed from different inputs — frontmatter
+    // versus the SVG's own bytes — and they have to come out the same. Two sources that must agree
+    // and no compiler between them is the arrangement this whole file exists to guard.
+    for (const id of entryDirs) {
+      const md = readFileSync(
+        path.join(process.cwd(), 'src', 'content', 'entries', id, 'index.md'),
+        'utf8',
+      );
+      const block = /^---\n([\s\S]*?)\n---/.exec(md)?.[1] ?? '';
+      const grab = (k: string) => new RegExp(`^${k}:\\s*"(.*)"`, 'm').exec(block)?.[1] ?? '';
+      const kind = coverKind({ cover: grab('cover'), art: grab('art') });
+      if (kind === 'art') expect(isCoverArt(id), `${id}: frontmatter says art`).toBe(true);
+      if (kind === 'plate') expect(isGeneratedPlate(id), `${id}: frontmatter says plate`).toBe(true);
     }
   });
 });

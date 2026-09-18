@@ -8,6 +8,7 @@
  */
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { photoPlan } from './photo-rules.mjs';
+import { coverKind } from './cover-plate.mjs';
 
 const ROOT = new URL('../src/content/', import.meta.url);
 const OVERSIZE_BYTES = 2 * 1024 * 1024; // resize anything bigger before committing
@@ -58,9 +59,23 @@ for (const e of entries) {
      cosmetic: the whole point of `art:` is that this entry's photographs are never arriving, so
      counting it as one shot short would keep it near the top of a report sorted by most-missing,
      for good, recommending a swap that must not happen. */
-  const placeholderCover = e.cover.endsWith('.svg') && !e.art;
+  /*
+   * Three states, and the *cover* decides which — not the `art:` field.
+   *
+   * This read `!e.art` alone, and so reported "cover: drawn → nothing to shoot" for an entry whose
+   * cover was a real photograph, any time an `art:` line had been left behind. The field says what
+   * the generator should draw; only the cover says what the entry is actually wearing, and a report
+   * about what still needs photographing has to be about the second one.
+   *
+   * Both the inbox and the studio now clear `art:` when a photograph lands, so the two agree in
+   * practice — but agreeing in practice is what a stale field always does right up until it does
+   * not, and this is the file that would announce it.
+   */
+  const kind = coverKind(e);
+  const generatedCover = kind !== 'photo';
+  const placeholderCover = kind === 'plate';
   const missing = Math.max(0, plan.targetGallery - e.galleryCount) + (placeholderCover ? 1 : 0);
-  rows.push({ ...e, plan, placeholderCover, missing });
+  rows.push({ ...e, plan, placeholderCover, generatedCover, missing });
 }
 for (const l of logs) {
   const plan = photoPlan({ isLog: true });
@@ -83,7 +98,8 @@ for (const r of rows) {
     continue;
   }
   if (r.placeholderCover) console.log('   cover: placeholder → swap in a real frame');
-  else if (r.art) console.log(`   cover: drawn (art: ${r.art}) → nothing to shoot`);
+  else if (r.generatedCover && r.art) console.log(`   cover: drawn (art: ${r.art}) → nothing to shoot`);
+  else if (r.art) console.log(`   cover: a photograph, but art: "${r.art}" is still set — stale, drop the line`);
   if (r.galleryCount < r.plan.targetGallery) {
     console.log(
       `   gallery: ${r.galleryCount}/${r.plan.targetGallery} → add ${r.plan.targetGallery - r.galleryCount}`,

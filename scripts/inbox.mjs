@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { loadCategories, makePrompter, yamlQuote } from './lib.mjs';
 import { photoPlan } from './photo-rules.mjs';
+import { coverKind } from './cover-plate.mjs';
 
 // see the note in studio.mjs: a file: URL's .pathname is "/C:/…" on Windows and
 // percent-encodes spaces everywhere, so path.join builds an unusable path
@@ -58,7 +59,17 @@ async function collectItems() {
         featured: fmFlag(block, 'featured'),
         isLog,
       });
-      const placeholderCover = (fmStr(block, 'cover') ?? '').endsWith('.svg');
+      /*
+       * An SVG cover is a placeholder **unless** the entry asked for a drawing.
+       *
+       * Without the second half this was true for all twenty-four entries, so the inbox opened with
+       * every single one listed as "needs cover" and sorted to the top by most-missing — a queue of
+       * work that does not exist, permanently, in the one screen whose whole job is to say what to
+       * do next. `photo-plan.mjs` had the same fault and was fixed; this is the same fix in the
+       * other place that asks the same question.
+       */
+      const art = fmStr(block, 'art') ?? '';
+      const placeholderCover = coverKind({ cover: fmStr(block, 'cover') ?? '', art }) === 'plate';
       const hasImage = /^image:\s*"/m.test(block);
       const missing = isLog
         ? hasImage
@@ -73,6 +84,7 @@ async function collectItems() {
         category: fmStr(block, 'category') ?? '',
         missing,
         placeholderCover,
+        art,
         galleryCount,
         target: plan.targetGallery,
       });
@@ -90,7 +102,12 @@ function describeItem(i) {
   const needs = [];
   if (i.placeholderCover) needs.push('cover');
   if (i.galleryCount < i.target) needs.push(`${i.target - i.galleryCount} gallery`);
-  return `${name}${needs.length ? `  (needs ${needs.join(' + ')})` : ''}`;
+  /* A drawn cover is not a gap, but it is worth saying — dropping a photo on this entry replaces a
+     deliberate illustration, which is a different decision from filling an empty slot, and the
+     person at this prompt should know which one they are making. */
+  const has = i.art ? `drawn: ${i.art}` : '';
+  const bits = [needs.length ? `needs ${needs.join(' + ')}` : '', has].filter(Boolean);
+  return `${name}${bits.length ? `  (${bits.join(', ')})` : ''}`;
 }
 
 /** Where a pick will put the file — shown BEFORE anything moves. */
@@ -138,6 +155,43 @@ async function placePhoto(srcPath, destPath) {
 
 // ---- frontmatter surgery (matches the template shape our scaffolds emit) ----
 const setCover = (md, rel) => md.replace(/^cover:\s*".*"$/m, `cover: "${rel}"`);
+
+/**
+ * The exact comment `npm run covers`'s assignment pass writes above `art:`. Matched in full, and
+ * only in full: removing a *generated* note along with the field it explains is tidying up after
+ * ourselves, and removing anything else is deleting the author's writing. Several entries here
+ * carry provenance notes recording corrections and deliberately withheld material — losing one of
+ * those to a photo drop is precisely the failure `frontmatter.mjs` was rewritten to prevent.
+ */
+const GENERATED_ART_NOTE = [
+  '# Drawn cover rather than the placeholder plate: see the `art:` section in README.md.',
+  '# Replaced automatically the day a real cover.jpg lands beside this file.',
+];
+
+/**
+ * Drop the `art:` line, because a real photograph has landed and the entry no longer wants a
+ * drawing. Returns the new markdown and whether a comment was left behind that may now be stale.
+ *
+ * **Why clearing it matters**, given the page already does the right thing without this: the site
+ * reads the file, so the photograph shows either way. What goes wrong is everything that reads the
+ * *field* — `npm run photos` reports "cover: drawn → nothing to shoot" for an entry that now has a
+ * photograph (reproduced before this was written), and the frontmatter claims a drawing that is not
+ * the cover. A field that no longer describes the entry is the kind of small lie the rest of this
+ * content model is built to avoid.
+ */
+function clearArt(md) {
+  const lines = md.split('\n');
+  const at = lines.findIndex((l) => /^art:\s*"/.test(l));
+  if (at < 0) return { md, staleComment: false };
+  // how far back the generated note runs, if it is the generated note
+  let from = at;
+  while (from > 0 && GENERATED_ART_NOTE.includes(lines[from - 1].trim())) from--;
+  const removedNote = from < at;
+  // a comment we did not write, directly above — left alone, and reported
+  const staleComment = !removedNote && at > 0 && lines[at - 1].trim().startsWith('#');
+  lines.splice(from, at - from + 1);
+  return { md: lines.join('\n'), staleComment };
+}
 
 function appendGallery(md, item) {
   const lines = [`  - src: "${item.src}"`, `    alt: ${yamlQuote(item.alt)}`];
@@ -366,14 +420,26 @@ for (const [idx, file] of media.entries()) {
 
   if (role === 'cover') {
     const old = fmStr(fm(md), 'cover');
+    const hadArt = fmStr(fm(md), 'art');
     md = setCover(md, rel);
+    /* A photograph supersedes the drawing, so the request for one goes with it. */
+    const cleared = clearArt(md);
+    md = cleared.md;
     await writeFile(item.indexPath, md);
     if (old === './images/cover.svg' && existsSync(path.join(imagesDir, 'cover.svg'))) {
       await unlink(path.join(imagesDir, 'cover.svg'));
-      console.log('  (removed the generated cover.svg placeholder)');
+      /* It was a placeholder plate or a drawing, and the two are different objects — saying which
+         matters here, because one of them somebody chose. */
+      console.log(`  (removed the generated cover.svg ${hadArt ? `drawing — ${hadArt}` : 'placeholder'})`);
+    }
+    if (hadArt) console.log(`  (cleared art: "${hadArt}" — this entry has a photograph now)`);
+    if (cleared.staleComment) {
+      console.log('  ! a comment above the old art: line is still there and may no longer be true —');
+      console.log(`    check the top of ${path.relative(ROOT, item.indexPath)}`);
     }
     console.log(`  ✓ ${path.basename(dest)} → ${item.slug} (cover, ${how})`);
     item.placeholderCover = false;
+    item.art = '';
   } else {
     let alt = (await rl.question("  Alt text (what's in the photo?): ")).trim();
     if (!alt) alt = `Photo from ${item.title}`;

@@ -266,11 +266,34 @@ Two rules the existing drawings all keep, and the reason for each:
   SVG loaded through `<img>` gets no webfont, and a cover that renders as a plausible screenshot is
   exactly what the credit line then has to spend itself denying.
 
+#### Choosing one in the studio
+
+`npm run studio` shows an **Artwork** picker under the cover, listing every template with a
+one-line description of what it draws (the same sentence a screen reader gets for that cover, read
+straight from the registry, so the picker cannot describe a drawing differently from the page).
+Change it and save: the frontmatter and the `cover.svg` are both rewritten in that one save, so the
+new drawing is on screen immediately rather than waiting for somebody to remember `npm run covers`.
+
+The picker only appears while the cover is still generated. Once a photograph is in, the template is
+not a choice that applies, and offering it would invite you to set one and wonder why nothing
+changed.
+
 #### Getting rid of one
 
-Remove the `art:` line and run `npm run covers` — the entry goes back to a plate. Or just drop a real
-`cover.jpg` beside the markdown: everything above switches itself off, because the page reads the
-file, not the field.
+Three ways, and they all end in the same place:
+
+- **Drop a real cover** — through `npm run inbox` or the studio's drop zone. The photograph replaces
+  the drawing, the generated `cover.svg` is deleted, and **`art:` is cleared for you**, because the
+  entry no longer wants a drawing. If a note you wrote sits directly above that line, it is left
+  alone and you are told it may now be stale — the tools delete their own generated comment and
+  never yours.
+- **Set the picker to "none"** in the studio — the line is dropped and the cover goes back to a plate.
+- **Delete the `art:` line** by hand and run `npm run covers`.
+
+Nothing here is load-bearing for display: the page reads the file, so a photograph shows as a
+photograph the moment it lands, whatever the frontmatter still says. What clearing the field fixes
+is everything that reads the *field* — `npm run photos` and `npm run inbox` would otherwise keep
+reporting a drawing the entry no longer has.
 
 ### C. New tab (category)
 

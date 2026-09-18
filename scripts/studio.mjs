@@ -24,6 +24,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { slugify, placeholderSVG, loadCategories, appendCategory, categoryHue } from './lib.mjs';
+import { ART_NAMES, ART_TEMPLATES, coverArtSVG } from './cover-art.mjs';
 import {
   SECTIONS,
   ENTRY_KEYS,
@@ -115,7 +116,11 @@ async function listInbox() {
 async function getState() {
   const { cats } = await loadCategories();
   const [entries, logs, inbox] = await Promise.all([collect('entries'), collect('logs'), listInbox()]);
-  return { categories: cats, kinds: KINDS, sections: SECTIONS, entries, logs, inbox };
+  /* `artTemplates` is the registry's own keys plus what each one draws, so the picker cannot offer
+     a template that does not exist and cannot go stale when one is added — the same reason
+     content-schema.ts validates `art:` against `ART_NAMES` rather than a copied list. */
+  const artTemplates = ART_NAMES.map((name) => ({ name, alt: ART_TEMPLATES[name].alt }));
+  return { categories: cats, kinds: KINDS, sections: SECTIONS, artTemplates, entries, logs, inbox };
 }
 
 /* ------------------------------- write ------------------------------ */
@@ -157,13 +162,32 @@ async function saveItem(payload) {
     const imagesDir = path.join(dir, 'images');
     await mkdir(imagesDir, { recursive: true });
     if (!existsSync(path.join(imagesDir, '.gitkeep'))) await writeFile(path.join(imagesDir, '.gitkeep'), '');
-    // generate a placeholder cover only when none is set yet
+    /*
+     * Draw the cover when none is set yet — and draw the *right* one.
+     *
+     * This wrote a plate unconditionally, which was correct while a plate was the only thing the
+     * generator made. Now an entry can name a drawing, and a studio that ignored `art:` would hand
+     * a newly-saved entry a placeholder, leave `npm run covers` to replace it on some later run,
+     * and show the author a plate in the meantime for a choice they had just made in the UI.
+     *
+     * Rewritten whenever the picker's value disagrees with the file, not only when the file is
+     * missing: changing the template is the one edit whose whole point is a different picture, and
+     * a change that does not show until somebody remembers to run a script has not happened as far
+     * as the person who made it is concerned.
+     */
     if (!data.cover || data.cover === './images/cover.svg') {
       data.cover = './images/cover.svg';
-      if (!existsSync(path.join(imagesDir, 'cover.svg'))) {
+      const coverPath = path.join(imagesDir, 'cover.svg');
+      const hue = categoryHue((await loadCategories()).cats, data.category);
+      const wanted = data.art && ART_NAMES.includes(data.art) ? data.art : '';
+      const current = existsSync(coverPath) ? await readFile(coverPath, 'utf8') : '';
+      const drawnNow = current.match(/data-cover-art="([^"]+)"/)?.[1] ?? '';
+      if (!current || drawnNow !== wanted) {
         await writeFile(
-          path.join(imagesDir, 'cover.svg'),
-          placeholderSVG({ seed: slug, hue: categoryHue((await loadCategories()).cats, data.category) }),
+          coverPath,
+          wanted
+            ? coverArtSVG({ template: wanted, hue, seed: slug, data: { location: data.location } })
+            : placeholderSVG({ seed: slug, hue }),
         );
       }
     }
@@ -217,11 +241,16 @@ async function placeUpload({ kind, id, role, filename, buffer, alt, caption }) {
     }
     const rel = isEntry ? `./images/${name}` : `./${name}`;
     if (role === 'cover') {
-      // remove the placeholder we are replacing
+      // remove the plate or drawing we are replacing
       if (data.cover === './images/cover.svg' && existsSync(path.join(imagesDir, 'cover.svg'))) {
         await rm(path.join(imagesDir, 'cover.svg')).catch(() => {});
       }
       data.cover = rel;
+      /* A photograph supersedes the drawing, so the request for one goes with it — same rule the
+         inbox follows, for the same reason: the page reads the file and would be right either way,
+         but everything that reads the *field* (`npm run photos`, this picker) would keep reporting
+         a drawing this entry no longer has. */
+      delete data.art;
     } else if (role === 'image') {
       data.image = rel;
     } else {

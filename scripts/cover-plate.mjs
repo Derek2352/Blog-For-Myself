@@ -70,3 +70,31 @@ export function artTemplateOf(svg) {
   const end = svg.indexOf('"', from);
   return end < 0 ? null : svg.slice(from, end);
 }
+
+/**
+ * The same question, asked of an entry's **frontmatter** rather than of an SVG's bytes.
+ *
+ * The two detectors above read a file and answer "what did the generator write here?", which is
+ * what the *site* needs: it renders what is on disk and a flag could be stale. The authoring tools
+ * need the other half — "what does this entry mean to have?" — because they run before the file
+ * exists, or in order to change it.
+ *
+ * It lives beside them because it is one question, and because it had briefly become three answers.
+ * `photo-plan.mjs`, `inbox.mjs` and the studio each grew their own `cover.endsWith('.svg') && !art`,
+ * and two of them were already subtly different: the photo plan trusted `art:` even when `cover:`
+ * pointed at a photograph, and reported "drawn → nothing to shoot" for an entry that had one. That
+ * is exactly how the caption detector went wrong in this file's first paragraph, one directory over.
+ *
+ * @param {{cover?: string, art?: string}} data the entry's frontmatter, as read
+ * @returns {'photo' | 'art' | 'plate'}
+ *   - `photo` — a real image is the cover; nothing here applies to it
+ *   - `art`   — a named illustration, which is the finished cover and needs no photograph
+ *   - `plate` — the generated placeholder, a slot still held open
+ *
+ * A `cover:` that is not an SVG is a photograph **whatever `art:` says** — the file is the cover and
+ * the field is only a request to the generator. That ordering is the whole fix.
+ */
+export function coverKind({ cover = '', art = '' } = {}) {
+  if (!String(cover).endsWith('.svg')) return 'photo';
+  return art ? 'art' : 'plate';
+}

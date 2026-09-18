@@ -278,10 +278,37 @@
       function thumb(rel) { return '<div class="thumb"><img src="' + previewSrc(rel) + '" alt=""></div>'; }
       function coverBox() {
         const c = current.data.cover || '';
-        const isPlaceholder = c.endsWith('.svg');
+        const drawn = c.endsWith('.svg');
+        const art = current.data.art || '';
         const preview = c ? '<div style="margin:.4rem 0">' + thumb(c) + '</div>' : '';
-        return preview + '<div class="hint">current: <code>' + escapeHtml(c || '(none)') + '</code>' + (isPlaceholder ? ' — placeholder' : '') + '</div>'
+        /* "placeholder" was the only word here, and with a drawing set it is the wrong one: a plate
+           is a slot held open and an illustration is the finished cover, which is the distinction
+           the whole art system exists to draw. Saying which one is on screen is the least this box
+           can do before offering to replace it. */
+        const what = !drawn ? '' : art ? ' — drawing: ' + escapeHtml(art) : ' — placeholder plate';
+        /* The picker only appears while the cover is still generated. Once a photograph is in, the
+           template is not a choice that applies — and offering it would invite somebody to set one
+           and wonder why nothing changed. */
+        let picker = '';
+        if (drawn) {
+          const opts = [{ v: '', t: '— none (plain placeholder plate) —' }]
+            .concat((state.artTemplates || []).map((a) => ({ v: a.name, t: a.name })));
+          picker = '<label style="margin-top:.6rem">Artwork</label>'
+            + '<select id="f_art">' + opts.map((o) => '<option value="' + o.v + '"' + (art === o.v ? ' selected' : '') + '>' + o.t + '</option>').join('') + '</select>'
+            + '<div class="hint" id="art-hint">' + escapeHtml(artHint(art)) + '</div>';
+        }
+        return preview + '<div class="hint">current: <code>' + escapeHtml(c || '(none)') + '</code>' + what + '</div>'
+          + picker
           + dropBox('cover', 'Drop a cover image, or click to browse');
+      }
+
+      /* What the chosen template actually draws, straight from the registry's own `alt` — the same
+         sentence a screen reader gets for that cover, so the picker cannot describe a drawing
+         differently from the page. */
+      function artHint(name) {
+        if (!name) return 'A warm ruled plate, held open for a photograph.';
+        const t = (state.artTemplates || []).find((a) => a.name === name);
+        return t ? t.alt : '';
       }
       function dropBox(role, text) {
         return '<div class="dropzone" data-role="' + role + '">' + text + '</div>';
@@ -360,6 +387,13 @@
           if (!el) return;
           el.oninput = () => { current.data[k] = el.value; setDirty(true); };
         });
+        const artSel = $('#f_art');
+        if (artSel) artSel.onchange = () => {
+          current.data.art = artSel.value;
+          const hint = $('#art-hint');
+          if (hint) hint.textContent = artHint(artSel.value);
+          setDirty(true);
+        };
         const draft = $('#f_draft'); if (draft) draft.onchange = () => { current.data.draft = draft.checked; setDirty(true); };
         const feat = $('#f_featured'); if (feat) feat.onchange = () => { current.data.featured = feat.checked; setDirty(true); };
         // sections

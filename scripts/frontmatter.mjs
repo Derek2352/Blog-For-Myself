@@ -21,7 +21,7 @@ export const SECTIONS = ['What it was', 'What I did', 'What I learned', 'How it 
 /** Canonical key order, used when inserting a key the file didn't have. */
 export const ENTRY_KEYS = [
   'title', 'category', 'date', 'endDate', 'updated', 'role', 'organization',
-  'location', 'summary', 'note', 'video', 'cover', 'gallery', 'tags', 'links',
+  'location', 'summary', 'note', 'video', 'cover', 'art', 'gallery', 'tags', 'links',
   'featured', 'draft', 'order',
 ];
 export const LOG_KEYS = ['title', 'category', 'date', 'kind', 'summary', 'image', 'link', 'tags', 'draft'];
@@ -30,6 +30,18 @@ export const LOG_KEYS = ['title', 'category', 'date', 'kind', 'summary', 'image'
 const OPTIONAL = new Set([
   'endDate', 'updated', 'role', 'organization', 'location', 'note', 'video',
   'order', 'image', 'link',
+  /* `art` names the drawing `npm run covers` generates for this entry's cover. Optional because
+     absent is a real state — it means "no drawing, use the plate", which is what a brand-new entry
+     wants and what an entry wants again the day a photograph replaces its illustration. Being in
+     this set is what lets the studio *clear* it: without it, an emptied field would be written back
+     as `art: ""`, which the schema then rejects as an unknown template and the build fails on a
+     field the author thought they had removed.
+
+     It survived not being managed at all — `rewriteFrontmatter` passes unknown keys through, which
+     is why the studio never deleted it from the twenty-four entries that carry it. But passing
+     through is not the same as being editable, and a field only a text editor can change is not
+     part of the portal. */
+  'art',
 ]);
 /** Keys whose value spans following indented lines. */
 const BLOCK_KEYS = new Set(['gallery', 'links']);

@@ -119,3 +119,63 @@ describe('frontmatter rewriting', () => {
     expect(out).toContain('summary: "changed"');
   });
 });
+
+/**
+ * `art:` through the studio's writer.
+ *
+ * It survived not being managed at all — `rewriteFrontmatter` passes unknown keys through, which is
+ * why the studio never deleted it from the twenty-four entries carrying it. But passing through is
+ * not the same as being editable: until it joined ENTRY_KEYS the field could only be changed in a
+ * text editor, which makes it not part of the portal.
+ */
+describe('the art field, through a studio save', () => {
+  const FILE = `---
+title: "An Entry"
+category: "study-trips"
+date: 2026-04-01
+summary: "A blurb."
+cover: "./images/cover.svg"
+# a provenance note the author wrote
+art: "ridge-line"
+tags: []
+---
+body
+`;
+
+  const save = (changes: Record<string, unknown>) => {
+    const { data, block } = parseFrontmatter(FILE);
+    return rewriteFrontmatter(block, { ...data, ...changes }, ENTRY_KEYS);
+  };
+
+  it('reads what is there and writes it back unchanged', () => {
+    expect(parseFrontmatter(FILE).data.art).toBe('ridge-line');
+    expect(save({})).toContain('art: "ridge-line"');
+  });
+
+  it('changes the template in place, keeping the comment above it', () => {
+    const out = save({ art: 'skyline' });
+    expect(out).toContain('art: "skyline"');
+    expect(out).not.toContain('ridge-line');
+    expect(out).toContain('# a provenance note the author wrote');
+  });
+
+  it('drops the line when cleared, rather than writing an empty one', () => {
+    /* Load-bearing, and the reason `art` is in OPTIONAL. A required-field-style write would emit
+       `art: ""`, and the schema validates `art:` against the registry's keys — so an author who
+       cleared the field in the UI would get a build failure naming a template they had just
+       removed. Dropping the line is what "no drawing" actually looks like on disk. */
+    const out = save({ art: '' });
+    expect(out).not.toMatch(/^art:/m);
+    expect(out).toContain('cover: "./images/cover.svg"');
+    expect(out).toContain('# a provenance note the author wrote');
+  });
+
+  it('inserts it in canonical order for a file that never had one', () => {
+    const plain = FILE.replace('# a provenance note the author wrote\nart: "ridge-line"\n', '');
+    const { data, block } = parseFrontmatter(plain);
+    const out = rewriteFrontmatter(block, { ...data, art: 'crates' }, ENTRY_KEYS);
+    expect(out).toContain('art: "crates"');
+    // right after `cover`, which is the field it qualifies
+    expect(out.indexOf('art:')).toBeGreaterThan(out.indexOf('cover:'));
+  });
+});
