@@ -337,6 +337,31 @@ readers to pronounce it correctly, wrap any inline non-English run — a word or
 passage — in a language span: `<span lang="zh-Hant">夾單</span>` (WCAG 3.1.2 Language of
 Parts). The page itself is already declared `lang="en"`, so only the exceptions need marking.
 
+## What runs automatically
+
+Four things, in `.github/`, deliberately split so each can fail without the others:
+
+| Workflow | When | What it does |
+|---|---|---|
+| `build` | every push and PR | typecheck → unit suite → static build. Fast, and required. |
+| `harness` | nightly, or on demand | builds, serves `dist/`, drives a real Chrome through eight browser harnesses. |
+| `content health` | Mondays | opens/updates one issue with what the content still needs. Never fails. |
+| Dependabot | Mondays | grouped PRs for npm packages and Action versions. |
+
+**`harness` is the one worth knowing about.** The site's real guarantees — the cat tracking the
+pointer, a drawn cover sinking into the dark theme, the timeline filter not orphaning a year marker,
+the card game leaving the page byte-identical — live in 38 harnesses under `scratchpad/`, and none of
+them ran anywhere but a laptop until that workflow existed. Eight run today: the ones measured green
+and timed first. The file lists every exclusion and the reason, including the three `arena` snapshot
+checks that fail four runs in five for a diagnosed-but-unfixed reason. Add one at a time, after a
+green run.
+
+**`content health` is deliberately incapable of failing.** Everything it reports — a missing
+photograph, an unwritten reflection, a stale draft, a date typed into the wrong year — is something
+the build is right not to break on. A red run for "you have not written this yet" is a red run you
+learn to scroll past, and a build nobody reads is how a real failure here once went unnoticed for
+five commits.
+
 ## Videos, search, share cards, CI
 
 - **Film embeds:** add `video: "https://…"` to an entry (YouTube / Vimeo / Bilibili /

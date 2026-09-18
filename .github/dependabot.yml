@@ -1,0 +1,46 @@
+# Dependency updates, grouped so they arrive as a handful of readable PRs rather than thirty.
+#
+# This repository pins a fast-moving stack — Next 16, React 19, Tailwind 4, sharp — and until now
+# nothing told anyone when any of it moved. The point is not to be on the newest of everything; it
+# is that a security patch or a breaking change should arrive as a PR with CI's verdict on it,
+# rather than being discovered months later during an unrelated task.
+#
+# Grouping is the whole reason this is worth having. Ungrouped, a weekly sweep of this dependency
+# tree opens a dozen single-package PRs, which is a notification problem rather than a maintenance
+# tool, and the usual outcome is that all of them are ignored.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # The framework moves as a unit; a Next bump without its React pair is rarely installable.
+      framework:
+        patterns: ['next', 'react', 'react-dom', '@types/react', '@types/react-dom', 'eslint-config-next']
+      # Build-time image and content tooling — sharp, resvg, satori, remark/rehype, gray-matter.
+      content-pipeline:
+        patterns: ['sharp', '@resvg/*', 'satori', 'remark*', 'rehype*', 'gray-matter', 'zod']
+      # Tests and the browser the harnesses drive.
+      tooling:
+        patterns: ['vitest', '@vitest/*', 'typescript', 'playwright-core', 'tsx', 'pagefind']
+      # Everything else, in one PR rather than one each.
+      the-rest:
+        patterns: ['*']
+        exclude-patterns:
+          ['next', 'react', 'react-dom', '@types/react', '@types/react-dom', 'eslint-config-next',
+           'sharp', '@resvg/*', 'satori', 'remark*', 'rehype*', 'gray-matter', 'zod',
+           'vitest', '@vitest/*', 'typescript', 'playwright-core', 'tsx', 'pagefind']
+
+  # The workflows' own actions. This is the category that went stale unnoticed: checkout@v4 and
+  # setup-node@v4 were warning about a deprecated Node on every run for months.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ['*']

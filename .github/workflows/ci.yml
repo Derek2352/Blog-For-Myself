@@ -1,6 +1,15 @@
 # Safety net for the monthly file-drop workflow: every push gets a full
 # type/schema check + static build (+ search index). A typo'd category or
 # broken frontmatter shows up here instead of silently breaking a deploy.
+#
+# This is the fast gate and it stays fast — it must be something you are willing to
+# wait for on every push. The slow instruments live in their own workflows:
+# `harness.yml` drives a real browser, `content-health.yml` runs weekly.
+#
+# `@v5` on both actions, not `@v4`: v4 targets Node 20, which GitHub is deprecating, and
+# every single run log carried two warnings saying so. Warnings nobody can act on are how
+# a log becomes something people stop reading — and this repository has already had one
+# genuine failure sit unread in CI for five commits.
 name: build
 
 on:
@@ -11,8 +20,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm

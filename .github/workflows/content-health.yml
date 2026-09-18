@@ -1,0 +1,64 @@
+# The weekly account of what the content still needs.
+#
+# Everything this reports is something the build is *right* not to fail on: a missing photograph, an
+# unwritten reflection, a draft nobody finished, a date typed into the wrong year. None of it breaks
+# the site. That is exactly what makes it easy to forget — the page renders, looks deliberate, and
+# says nothing.
+#
+# **It deliberately does not fail.** A red run for "you have not written this yet" is a red run you
+# learn to scroll past, and this repository has already had one genuine failure sit unread in CI for
+# five commits. The report goes to an issue instead, where it can be ignored for a week without
+# teaching anyone to ignore the build.
+name: content health
+
+on:
+  schedule:
+    # Monday 08:00 UTC — a list of small jobs is most useful at the start of a week, not the end.
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+
+# The only permission it needs. Everything else stays read-only.
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Build the report
+        run: npx tsx scripts/content-health.ts > report.md
+
+      - name: Keep one issue up to date
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # The label is how the issue is found again. Titles get edited by people; a label does not,
+          # and searching titles would eventually match something somebody else wrote.
+          gh label create content-health \
+            --description "Weekly automated content report" \
+            --color 0E8A16 2>/dev/null || true
+
+          num=$(gh issue list --state open --label content-health --limit 1 --json number --jq '.[0].number // empty')
+
+          if [ -n "$num" ]; then
+            # Edited rather than commented on. This is a standing checklist, not a conversation —
+            # a weekly comment on the same issue is fifty-two notifications a year saying roughly
+            # the same thing, which is how a useful report becomes noise. Editing keeps one page
+            # that is always current; the issue's own history has the diffs if anyone wants them.
+            gh issue edit "$num" --body-file report.md
+            echo "updated issue #$num"
+          else
+            gh issue create \
+              --title "Content health" \
+              --label content-health \
+              --body-file report.md
+          fi

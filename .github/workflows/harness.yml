@@ -1,0 +1,126 @@
+# The browser fleet — the checks that need a real page, not a module.
+#
+# `ci.yml` type-checks, runs the unit suite and builds. None of that can see the things this site is
+# actually made of: whether the cat looks at the pointer, whether a drawn cover sinks into the dark
+# theme, whether filtering the timeline orphans a year marker, whether the card game leaves the page
+# exactly as it found it. Those are measured by 38 harnesses in `scratchpad/`, and until this file
+# existed **not one of them ran anywhere but on somebody's laptop**.
+#
+# ## Why a separate workflow
+#
+# Because it is slow. A full pass is a build plus about six minutes of browser time, and a gate that
+# slow on every push is a gate people route around. `ci.yml` stays fast and stays required; this runs
+# nightly and on demand. Add `push: branches: [main]` here if you would rather have it on every
+# merge — it is one line, and the only reason it is not already there is the minute cost.
+#
+# ## Why only eight of the thirty-eight
+#
+# Because these eight are the ones **measured green on this repository**, timed, immediately before
+# this file was written: art-sink 16/16 (12s), gaze 14/14 (25s), timeline-filter 35/35 (4s), arena5
+# 22/22 (114s), arena8 27/27 (148s), first-run (39s), rail-spy 10/10 (3s), card-check 21/21 (7s).
+#
+# The rest are excluded on purpose, and there are three reasons, all of them recorded rather than
+# guessed:
+#
+#   - **`arena`, `arena4`** — their three snapshot checks fail about four runs in five, at this
+#     commit and at the one before it. The cause is a positional DOM snapshot being re-indexed by one
+#     extra `<head>` element; the diagnosis is written up at the top of `scratchpad/arena.mjs`. A
+#     check that red four times in five teaches everyone to ignore a red line, which costs more than
+#     the check is worth. They belong here once the snapshot is keyed on something stable.
+#   - **`parity`** — obsolete. It compares against the Astro build, which no longer exists.
+#   - **`plate-sink`, `plate-hues`, `plate-look`, `page-audit`, `crop`, `measure`, `fixed-in-shot`** —
+#     these report a fixture or write screenshots for a human to look at. They have no pass/fail to
+#     gate on.
+#
+# Everything else is simply unverified. Adding an unverified harness to a gate is how a workflow
+# starts failing for reasons nobody owns — so they go in one at a time, after a green run, with the
+# timing noted above.
+name: harness
+
+on:
+  schedule:
+    # 03:00 UTC — late enough that a day's pushes are all in.
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fleet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # No browser download: `scratchpad/lib/fixture.mjs` drives the system Chrome, and the runner
+      # image ships one. Checked in its own step so a missing browser fails here, by name, instead of
+      # inside the first harness as a bare `exit 2`.
+      - name: Find Chrome
+        run: |
+          set -euo pipefail
+          for p in /usr/bin/google-chrome /usr/bin/chromium /usr/bin/chromium-browser; do
+            if [ -x "$p" ]; then echo "CHROME_PATH=$p" >> "$GITHUB_ENV"; "$p" --version; exit 0; fi
+          done
+          echo "::error::No Chrome on the runner. fixture.mjs needs one; set CHROME_PATH."
+          exit 1
+
+      - run: npm run build
+
+      - name: Serve dist/ on 4416
+        run: |
+          node scripts/serve-out.mjs &
+          # Poll rather than sleep: a fixed wait is either too short on a slow runner or wasted
+          # time on a fast one, and the harnesses fail confusingly against a server that is not up.
+          for i in $(seq 1 40); do
+            curl -sf -o /dev/null http://localhost:4416/ && { echo "up after ${i} tries"; exit 0; }
+            sleep 0.5
+          done
+          echo "::error::dist/ never came up on 4416"
+          exit 1
+
+      - name: Run the fleet
+        run: |
+          set -uo pipefail
+          # Every harness runs even after one fails. Stopping at the first would hide the rest, and
+          # when several go red together *which* ones went red is the most useful fact available.
+          failed=()
+          echo "| harness | result | time |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| --- | --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+          for h in art-sink gaze timeline-filter rail-spy card-check first-run arena5 arena8; do
+            start=$(date +%s)
+            if out=$(timeout 420 node "scratchpad/$h.mjs" 2>&1); then
+              mark='✅'
+            else
+              mark='❌'; failed+=("$h")
+            fi
+            secs=$(( $(date +%s) - start ))
+            line=$(echo "$out" | grep -oE '[0-9]+/[0-9]+ checks passed|All first-run checks passed' | tail -1)
+            echo "| \`$h\` | $mark ${line:-no checks line} | ${secs}s |" >> "$GITHUB_STEP_SUMMARY"
+            echo "── $h  $mark  ${line:-no checks line}  ${secs}s"
+            # The full log only for the ones that failed — a green fleet is 400 lines of PASS.
+            [ "$mark" = '❌' ] && echo "$out"
+          done
+          if [ ${#failed[@]} -gt 0 ]; then
+            echo "::error::${#failed[@]} harness(es) failed: ${failed[*]}"
+            exit 1
+          fi
+          echo "all green"
+
+      # The harnesses write PNGs as they go; on a failure those are the difference between "a check
+      # went red" and being able to see what the page looked like when it did.
+      - name: Keep the screenshots from a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-screenshots
+          path: |
+            scratchpad/*.png
+            scratchpad/audit/**
+          if-no-files-found: ignore
+          retention-days: 14
