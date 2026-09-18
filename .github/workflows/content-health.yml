@@ -12,6 +12,9 @@
 name: content health
 
 on:
+  # TEMPORARY, throwaway branch only: proves this runs on a real runner before it is
+  # trusted on a schedule. Goes away with the branch.
+  push:
   schedule:
     # Monday 08:00 UTC — a list of small jobs is most useful at the start of a week, not the end.
     - cron: '0 8 * * 1'

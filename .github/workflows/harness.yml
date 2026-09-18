@@ -38,6 +38,9 @@
 name: harness
 
 on:
+  # TEMPORARY, throwaway branch only: proves this runs on a real runner before it is
+  # trusted on a schedule. Goes away with the branch.
+  push:
   schedule:
     # 03:00 UTC — late enough that a day's pushes are all in.
     - cron: '0 3 * * *'
