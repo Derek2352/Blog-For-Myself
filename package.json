@@ -3,10 +3,11 @@
   "type": "module",
   "version": "0.1.0",
   "private": true,
-  "description": "Derek Yung \u2014 portfolio & reflections blog. Content-driven: add files, not code.",
+  "description": "Derek Yung — portfolio & reflections blog. Content-driven: add files, not code.",
   "scripts": {
     "dev": "npm run stage:images && next dev",
     "build": "npm run stage:images && next build && npx tsx scripts/build-static-artifacts.ts && pagefind --site out && node scripts/finish-build.mjs",
+    "build:deploy": "npm run build && node scripts/precompress.mjs",
     "build:drafts": "SHOW_DRAFTS=1 npm run build",
     "preview": "node scripts/serve-out.mjs",
     "stage:images": "node scripts/stage-content-images.mjs",
@@ -17,7 +18,8 @@
     "photos": "node scripts/photo-plan.mjs",
     "inbox": "node scripts/inbox.mjs",
     "studio": "node scripts/studio.mjs",
-    "covers": "node scripts/redraw-covers.mjs"
+    "covers": "node scripts/redraw-covers.mjs",
+    "headers": "node scripts/write-headers.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.5",

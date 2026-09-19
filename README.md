@@ -499,6 +499,51 @@ site for the living design page (palette, type, the index-rail signature).
   paper plane in the direction of travel. Everything stands down under
   `prefers-reduced-motion`, and no interaction exceeds ~600ms.
 
+## Deploy — Cloud Run, via Google AI Studio
+
+The build is a directory of static files, so the container that serves it has **no dependencies at
+all**: `scripts/serve-out.mjs` uses `node:http`, `node:fs`, `node:crypto` and `node:path` and
+nothing else. The runtime stage copies three paths and installs nothing, which means no
+`node_modules` to patch and a cold start that is Node opening a socket — the number a reader feels
+when they arrive at a quiet moment and Cloud Run has scaled to zero.
+
+```bash
+gcloud run deploy blog --source . --region <region> --allow-unauthenticated
+```
+
+`--source .` finds the `Dockerfile` and builds it. Nothing else is needed: the container reads
+`$PORT`, binds `0.0.0.0`, and handles `SIGTERM` so a scale-down is a shutdown rather than a crash
+in the logs.
+
+### What "optimized" means here, in numbers
+
+| | before | after |
+|---|---|---|
+| a tag page over the wire | 193,715 B | **47,542 B** (Brotli) |
+| whole site, compressible part | 51.3 MB | **14.6 MB** |
+| repeat visit to an unchanged page | full download | **304, 0 bytes** |
+| hashed assets | revalidated every time | **cached a year, never asked for** |
+
+Three things get you that:
+
+- **`scripts/precompress.mjs`** writes `.br` and `.gz` beside every text file at build time, at the
+  slowest/best settings. Cloud Run bills CPU per request, and compressing the same page to the same
+  bytes on every request is a cost paid over and over for one result. It runs in
+  `npm run build:deploy`, not `npm run build` — it costs ~70s and only the deployed site benefits,
+  so no developer or CI run pays for it.
+- **`scripts/http-policy.mjs`** is the one place headers are defined. The server applies them and
+  `public/_headers` is generated from it.
+- **ETags**, so `must-revalidate` on HTML costs a round trip rather than 172 KB.
+
+### The bug this replaced
+
+Caching lived in `public/_headers` and matched `/_astro/*` — Astro's asset directory. Next puts
+hashed assets under `/_next/static/`, so after the migration the only caching rule the site had
+**matched nothing, on every deploy, for months**. And `_headers` is read by Cloudflare Pages and
+Netlify; on Cloud Run it is an inert file in the image, so the four security headers in it had never
+reached a browser either. `npm run headers` regenerates it now, and `tests/http-policy.test.ts`
+fails if it drifts from the policy or ever mentions `_astro` again.
+
 ## Deploy
 
 Static output — any static host works. Update `SITE_URL` in `src/lib/site-url.ts` **and** the

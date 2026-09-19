@@ -1,0 +1,15 @@
+# Everything the image does not need. The runtime stage copies only `dist/` and two scripts, but a
+# fat build context is uploaded to the daemon on every build and slows the loop for nothing.
+.git
+.github
+node_modules
+dist
+.next
+out
+scratchpad
+_inbox
+content
+docs
+*.log
+*.md
+!README.md
