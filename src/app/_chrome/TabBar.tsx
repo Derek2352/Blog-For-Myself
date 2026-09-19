@@ -94,6 +94,12 @@ export default function TabBar({ tabs }: { tabs: NavCategory[] }) {
               >
                 <Link
                   href={href}
+                  /* Viewport prefetch off, hover prefetch kept — the reasoning is on TagChip.
+                     These eight are the site's primary navigation and they render on *every* page,
+                     so viewport-prefetching them meant eight whole pages (~368 KB) downloaded
+                     speculatively on every single page view, phone or not. Hover still covers the
+                     desktop reader, who gets the instant navigation the moment they mean it. */
+                  prefetch={false}
                   aria-current={active ? 'page' : undefined}
                   aria-describedby={hasFlyout ? flyoutId : undefined}
                   className={[
@@ -116,20 +122,20 @@ export default function TabBar({ tabs }: { tabs: NavCategory[] }) {
                 {hasFlyout && (
                   <div className="tab-flyout" id={flyoutId}>
                     <div className="tab-flyout-inner">
-                      <Link className="flyout-head" href={href}>
+                      <Link className="flyout-head" href={href} prefetch={false}>
                         all →
                       </Link>
                       {tab.entries.length > 0 && (
                         <ul className="flyout-list">
                           {tab.entries.map((e) => (
                             <li key={e.id}>
-                              <Link href={entryHref(e)}>{e.data.title}</Link>
+                              <Link href={entryHref(e)} prefetch={false}>{e.data.title}</Link>
                             </li>
                           ))}
                         </ul>
                       )}
                       {tab.entryCount > tab.entries.length && (
-                        <Link className="flyout-more" href={href}>
+                        <Link className="flyout-more" href={href} prefetch={false}>
                           View all {tab.entryCount} entries →
                         </Link>
                       )}

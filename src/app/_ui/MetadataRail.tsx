@@ -42,7 +42,7 @@ export default function MetadataRail({ entry, code }: { entry: Entry; code: stri
         <div className="py-3">
           <dt className="rail">Period</dt>
           <dd className="mt-1">
-            <Link href={`/monthly/#period-${period.id}`} className="transition-colors hover:text-accent">
+            <Link href={`/monthly/#period-${period.id}`} prefetch={false} className="inline-block transition-colors [@media(pointer:coarse)]:py-1.5 hover:text-accent">
               {period.label}
             </Link>
           </dd>
@@ -57,7 +57,7 @@ export default function MetadataRail({ entry, code }: { entry: Entry; code: stri
           <div className="py-3">
             <dt className="rail">Category</dt>
             <dd className="mt-1">
-              <Link href={categoryHref(category.slug)} className="transition-colors hover:text-accent">
+              <Link href={categoryHref(category.slug)} prefetch={false} className="inline-block transition-colors [@media(pointer:coarse)]:py-1.5 hover:text-accent">
                 {category.label}
               </Link>
             </dd>

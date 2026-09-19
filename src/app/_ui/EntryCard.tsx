@@ -57,7 +57,7 @@ export default function EntryCard({
   if (compact) {
     return (
       <article className="card panel group transition-colors hover:border-muted">
-        <Link href={href} className="flex items-center gap-4 p-3">
+        <Link href={href} prefetch={false} className="flex items-center gap-4 p-3">
           <div
             className="card-cover h-16 w-24 shrink-0 overflow-hidden rounded-(--radius-chip) border border-line"
             data-drawn={drawn}
@@ -93,7 +93,7 @@ export default function EntryCard({
     /* min-w-0: the meta line below never wraps, so without it a grid track sized `1fr` grows to
        fit the longest role and the card pushes past the viewport on a phone. */
     <article className="card lift group min-w-0">
-      <Link href={href} className="block">
+      <Link href={href} prefetch={false} className="block">
         <div className="frame card-cover overflow-hidden" data-drawn={drawn}>
           <img
             src={cover.src}

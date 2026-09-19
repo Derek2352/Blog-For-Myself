@@ -46,7 +46,7 @@ export default function LogCard({
         </p>
         <h3 className="mt-1 text-[0.95rem] font-medium leading-snug">
           {href ? (
-            <Link href={href} className="transition-colors hover:text-accent">
+            <Link href={href} prefetch={false} className="transition-colors hover:text-accent">
               {log.data.title}
             </Link>
           ) : (

@@ -344,7 +344,7 @@ Four things, in `.github/`, deliberately split so each can fail without the othe
 | Workflow | When | What it does |
 |---|---|---|
 | `build` | every push and PR | typecheck → unit suite → static build. Fast, and required. |
-| `harness` | nightly, or on demand | builds, serves `dist/`, drives a real Chrome through eight browser harnesses. |
+| `harness` | nightly, or on demand | builds, serves `dist/`, drives a real Chrome through nine browser harnesses — including a 390×844 phone audit. |
 | `content health` | Mondays | opens/updates one issue with what the content still needs. Never fails. |
 | Dependabot | Mondays | grouped PRs for npm packages and Action versions. |
 
@@ -514,6 +514,30 @@ gcloud run deploy blog --source . --region <region> --allow-unauthenticated
 `--source .` finds the `Dockerfile` and builds it. Nothing else is needed: the container reads
 `$PORT`, binds `0.0.0.0`, and handles `SIGTERM` so a scale-down is a shutdown rather than a crash
 in the logs.
+
+### On a phone
+
+`scratchpad/phone-audit.mjs` drives a 390×844 touch profile over nine pages and checks the three
+things that actually break a phone: horizontal overflow, tap target size (WCAG 2.5.8 AA, 24×24 —
+with 44×44 reported as the AAA/HIG aspiration), and prose under 12px. It runs nightly in `harness`.
+
+| | before | after |
+|---|---|---|
+| `/tags/` on a phone | 98 requests, 952 KB | **33 requests, 545 KB** |
+| tap targets below WCAG AA | 36 across nine pages | **0** |
+| pages that scroll sideways | 0 | 0 |
+
+Most of that weight was **speculative**. Next's App Router prefetches every `<Link>` that scrolls
+into view, and in a static export each prefetch pulls a whole HTML page — 646 KB of the 952 KB on
+`/tags/`, for pages the reader never opens. The bulk components (`TagChip`, `EntryCard`,
+`TimelineItem`, `LogCard`) and the tab bar now set `prefetch={false}`, which turns off the
+*viewport* prefetch and keeps the one on **hover** — so a desktop reader still gets instant
+navigation the moment they show intent, and a phone, which has no hover, stops paying for a guess.
+
+Touch sizes are raised under `@media (pointer: coarse)` — the question is what is doing the
+pointing, not how wide the screen is, so a narrow desktop window is unaffected and a mouse never
+sees the change. Links inside a sentence are deliberately left alone: WCAG 2.5.8's *Inline*
+exception exists so that satisfying it does not mean pushing the words of a paragraph apart.
 
 ### What "optimized" means here, in numbers
 

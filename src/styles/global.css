@@ -439,6 +439,30 @@
     .tabbar-row-secondary .tab-group > a { padding-block: 0.4rem; }
   }
 
+  /* ---- touch: every navigation target reaches a fingertip ----
+     `pointer: coarse` rather than a width breakpoint, because the question is what is doing the
+     pointing, not how wide the screen is. A phone gets the bigger targets; a small desktop window
+     does not, and a mouse is unaffected anywhere — which is why this is safe to apply to the
+     header and the tab bar without redesigning either.
+
+     44px is Apple's HIG figure and roughly an adult fingertip. `scratchpad/phone-audit.mjs`
+     measured the utility nav at 56×28, the primary tabs at 41 and the secondary row at about 34 —
+     so the links a reader most often wants were the smallest things on the page. The padding
+     below is what closes each of those gaps, and the audit is what says whether it still does.
+
+     The utility nav and the tag chips are *not* here: they carry Tailwind utilities for their base
+     padding, which sit in a later layer than this one and win. Their touch sizes are declared in
+     the components, beside the base size — see the note in NavLinks.tsx. */
+  @media (pointer: coarse) {
+    .tab-group > a { padding-block: 0.85rem; }
+    .tabbar-row-secondary .tab-group > a { padding-block: 0.78rem; }
+    /* The footer's contact column: 18px tall as plain `.rail` links, which is under even the AA
+       minimum. Padding rather than a bigger font, so the footer keeps its quiet metadata voice —
+       what has to grow is the area under the thumb, not the type. `inline-block` because
+       padding-block does nothing to an inline box's hit area. */
+    .footer-nav a { display: inline-block; min-width: 1.5rem; padding-block: 0.4rem; }
+  }
+
   /* ---- hover flyout: each tab expands to its entries (sub-tabs) ---- */
   .tab-group { position: relative; }
   /* Hidden flyouts use display:none (not visibility:hidden) so a right-edge

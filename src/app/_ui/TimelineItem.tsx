@@ -24,7 +24,7 @@ export default function TimelineItem({ entry, code }: { entry: Entry; code: stri
       </div>
       <div className="min-w-0">
         <h3 className="font-display text-xl leading-snug sm:text-2xl">
-          <Link href={entryHref(entry)} className="transition-colors hover:text-accent">
+          <Link href={entryHref(entry)} prefetch={false} className="transition-colors hover:text-accent">
             {entry.data.title}
           </Link>
         </h3>

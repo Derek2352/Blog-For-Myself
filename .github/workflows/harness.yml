@@ -17,7 +17,13 @@
 #
 # Because these eight are the ones **measured green on this repository**, timed, immediately before
 # this file was written: art-sink 16/16 (12s), gaze 14/14 (25s), timeline-filter 35/35 (4s), arena5
-# 22/22 (114s), arena8 27/27 (148s), first-run (39s), rail-spy 10/10 (3s), card-check 21/21 (7s).
+# 22/22 (114s), arena8 27/27 (148s), first-run (39s), rail-spy 10/10 (3s), card-check 21/21 (7s),
+# phone-audit 3/3 (~35s).
+#
+# `phone-audit` joined with the mobile pass. It drives a 390×844 touch profile over nine pages and
+# checks the three things that actually break a phone: horizontal overflow, tap target size against
+# WCAG 2.5.8 AA, and prose under 12px. Proved able to fail the way the others were — delete the
+# `.footer-nav a` rule from the built CSS and it goes red naming the four footer links.
 #
 # The rest are excluded on purpose, and there are three reasons, all of them recorded rather than
 # guessed:
@@ -92,7 +98,7 @@ jobs:
           failed=()
           echo "| harness | result | time |" >> "$GITHUB_STEP_SUMMARY"
           echo "| --- | --- | --- |" >> "$GITHUB_STEP_SUMMARY"
-          for h in art-sink gaze timeline-filter rail-spy card-check first-run arena5 arena8; do
+          for h in art-sink gaze timeline-filter rail-spy card-check phone-audit first-run arena5 arena8; do
             start=$(date +%s)
             if out=$(timeout 420 node "scratchpad/$h.mjs" 2>&1); then
               mark='✅'

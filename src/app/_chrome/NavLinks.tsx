@@ -22,7 +22,11 @@ export default function NavLinks({ items }: { items: NavItem[] }) {
           title={item.title}
           aria-current={path === item.href ? 'page' : undefined}
           className={[
-            'py-1 transition-colors hover:text-accent',
+            /* `[@media(pointer:coarse)]:py-3` and not a rule in global.css: the first attempt put
+               `.nav-link { padding-block }` there and it lost to Tailwind's `py-1`, because
+               utilities sit in a later layer and both are single-class selectors. Declaring the
+               touch size beside the base size keeps them in one place and in the right order. */
+            'py-1 [@media(pointer:coarse)]:py-3 transition-colors hover:text-accent',
             path === item.href ? 'text-accent' : 'text-ink',
           ].join(' ')}
         >

@@ -20,7 +20,10 @@ export default function Footer() {
           <p className="font-display text-xl">Derek Yung</p>
           <p className="mt-1 max-w-[28ch] text-muted">{site.tagline}</p>
         </div>
-        <nav className="rail flex flex-col items-start gap-2" aria-label="Contact">
+        {/* `footer-nav` carries the touch padding — see the `pointer: coarse` block in global.css.
+          Measured at 18px tall before it: the contact links, the CV and the feed were the smallest
+          targets on the site, and they are the ones somebody reaching out actually presses. */}
+        <nav className="footer-nav rail flex flex-col items-start gap-2" aria-label="Contact">
           <a href={`mailto:${site.email}`}>{site.email}</a>
           <a href={site.github} target="_blank" rel="noopener">
             GitHub ↗
