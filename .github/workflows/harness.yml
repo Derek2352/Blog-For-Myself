@@ -8,17 +8,25 @@
 #
 # ## Why a separate workflow
 #
-# Because it is slow. A full pass is a build plus about six minutes of browser time, and a gate that
-# slow on every push is a gate people route around. `ci.yml` stays fast and stays required; this runs
-# nightly and on demand. Add `push: branches: [main]` here if you would rather have it on every
+# Because it is slow. A full pass is a build plus about twelve minutes of browser time, and a gate
+# that slow on every push is a gate people route around. `ci.yml` stays fast and stays required; this
+# runs nightly and on demand. Add `push: branches: [main]` here if you would rather have it on every
 # merge — it is one line, and the only reason it is not already there is the minute cost.
 #
-# ## Why only eight of the thirty-eight
+# ## Why only eleven of the thirty-eight
 #
-# Because these eight are the ones **measured green on this repository**, timed, immediately before
-# this file was written: art-sink 16/16 (12s), gaze 14/14 (25s), timeline-filter 35/35 (4s), arena5
-# 22/22 (114s), arena8 27/27 (148s), first-run (39s), rail-spy 10/10 (3s), card-check 21/21 (7s),
-# phone-audit 3/3 (~35s), arena 55/55 (~200s), arena4 39/39 (~150s).
+# Because these eleven are the ones **measured green on this repository**, timed: art-sink 16/16
+# (12s), gaze 14/14 (25s), timeline-filter 35/35 (4s), arena5 22/22 (114s), arena8 27/27 (148s),
+# first-run (39s), rail-spy 10/10 (3s), card-check 21/21 (7s), phone-audit 3/3 (~35s), arena 55/55
+# (~200s), arena4 39/39 (~150s).
+#
+# Those are laptop figures. Run 5 of this workflow gives the runner's, which are what the two
+# timeouts below have to cover, and they are the same within noise: art-sink 16s, gaze 25s,
+# timeline-filter 3s, rail-spy 3s, card-check 7s, phone-audit 6s, first-run 31s, arena5 112s,
+# arena8 133s — 336s for the nine. arena and arena4 should add about 350s, so expect the fleet step
+# to take twelve minutes or so. `timeout 420` per harness is roughly double the longest; the job's
+# 40 minutes is the backstop for several of them hanging at once rather than a figure the normal
+# run comes near.
 #
 # `phone-audit` joined with the mobile pass. It drives a 390×844 touch profile over nine pages and
 # checks the three things that actually break a phone: horizontal overflow, tap target size against
@@ -50,6 +58,13 @@ on:
     # 03:00 UTC — late enough that a day's pushes are all in.
     - cron: '0 3 * * *'
   workflow_dispatch:
+  # TEMPORARY, and removed in the commit after the run it is here to produce.
+  # `arena` and `arena4` have never executed on a runner. They are being added on the strength of
+  # laptop measurements, and this file's own rule is that a harness goes in after a green run —
+  # so it needs one, on the machine that will be running it nightly. `workflow_dispatch` is the
+  # intended way to get that and returns 403 for this token, so this is the way left.
+  push:
+    branches: [claude/portfolio-reflections-blog-8hqnwh]
 
 permissions:
   contents: read
