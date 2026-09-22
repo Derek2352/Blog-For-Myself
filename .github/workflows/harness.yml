@@ -18,7 +18,7 @@
 # Because these eight are the ones **measured green on this repository**, timed, immediately before
 # this file was written: art-sink 16/16 (12s), gaze 14/14 (25s), timeline-filter 35/35 (4s), arena5
 # 22/22 (114s), arena8 27/27 (148s), first-run (39s), rail-spy 10/10 (3s), card-check 21/21 (7s),
-# phone-audit 3/3 (~35s).
+# phone-audit 3/3 (~35s), arena 55/55 (~200s), arena4 39/39 (~150s).
 #
 # `phone-audit` joined with the mobile pass. It drives a 390×844 touch profile over nine pages and
 # checks the three things that actually break a phone: horizontal overflow, tap target size against
@@ -28,11 +28,13 @@
 # The rest are excluded on purpose, and there are three reasons, all of them recorded rather than
 # guessed:
 #
-#   - **`arena`, `arena4`** — their three snapshot checks fail about four runs in five, at this
-#     commit and at the one before it. The cause is a positional DOM snapshot being re-indexed by one
-#     extra `<head>` element; the diagnosis is written up at the top of `scratchpad/arena.mjs`. A
-#     check that red four times in five teaches everyone to ignore a red line, which costs more than
-#     the check is worth. They belong here once the snapshot is keyed on something stable.
+#   - ~~**`arena`, `arena4`**~~ — **in, as of the snapshot fix.** They were excluded because three
+#     of arena's checks failed about four runs in five on a positional DOM snapshot that reported one
+#     inserted element as 245 differences. Two things changed: `prefetch={false}` (done for mobile
+#     payload) removed the background page fetches that were racing the baseline, and `snapDiff` now
+#     aligns the two snapshots instead of zipping them. Measured 5/5 green each before the instrument
+#     fix and 3/3 after — arena 55/55 (~200s), arena4 39/39 (~150s). The history is at the top of
+#     `scratchpad/arena.mjs`; `tests/snap-diff.test.ts` fails if the positional compare returns.
 #   - **`parity`** — obsolete. It compares against the Astro build, which no longer exists.
 #   - **`plate-sink`, `plate-hues`, `plate-look`, `page-audit`, `crop`, `measure`, `fixed-in-shot`** —
 #     these report a fixture or write screenshots for a human to look at. They have no pass/fail to
@@ -55,7 +57,7 @@ permissions:
 jobs:
   fleet:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -98,7 +100,7 @@ jobs:
           failed=()
           echo "| harness | result | time |" >> "$GITHUB_STEP_SUMMARY"
           echo "| --- | --- | --- |" >> "$GITHUB_STEP_SUMMARY"
-          for h in art-sink gaze timeline-filter rail-spy card-check phone-audit first-run arena5 arena8; do
+          for h in art-sink gaze timeline-filter rail-spy card-check phone-audit first-run arena5 arena8 arena4 arena; do
             start=$(date +%s)
             if out=$(timeout 420 node "scratchpad/$h.mjs" 2>&1); then
               mark='✅'

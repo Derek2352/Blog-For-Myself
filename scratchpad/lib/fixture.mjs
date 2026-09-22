@@ -191,28 +191,101 @@ export const RIBBON = `(() => { const r = document.querySelector('[data-ribbon]'
  *
  * The exclusion list is an argument rather than a default on purpose — see the header. Pass the
  * cat's own overlays plus whatever this harness legitimately expects to differ.
+ *
+ * **No array index in the descriptor, and that is the fix for a real defect.** It used to read
+ * `i + ':' + el.tagName + …`, which made every entry's identity depend on its *position*. Paired
+ * with a `snapDiff` that compared index against index, a single element inserted anywhere near the
+ * top of the document re-labelled every element after it, and the report came out as "245
+ * differences, first: 47:BODY:… → 47:SCRIPT::" — one insertion, described as two hundred and
+ * forty-five changes, with the first one naming two elements that were never related.
+ *
+ * Position is still measured: the snapshot is a *sequence*, and `snapDiff` aligns the two
+ * sequences rather than zipping them. An element that moves shows up as a removal and an
+ * insertion, which is what a move is. What no longer happens is one change being reported as
+ * hundreds, which is the difference between a diagnosis and a wall of noise.
  */
 export const snapshotOf = (exclude) =>
   `(() => [...document.querySelectorAll('*')]
     .filter((el) => !el.closest(${JSON.stringify(exclude)}))
-    .map((el, i) => i + ':' + el.tagName + ':' + el.className + ':' + (el.getAttribute('style') ?? '')))()`;
+    .map((el) => el.tagName + ':' + el.className + ':' + (el.getAttribute('style') ?? '')))()`;
+
+/**
+ * Longest common subsequence of two arrays, as a list of edits.
+ *
+ * The standard dynamic-programming table. At ~400 elements it is 160k cells and a few milliseconds
+ * — nothing, next to the browser work either side of it — and it is the difference between "one
+ * element was inserted" and "everything after position 47 is different".
+ */
+function editsBetween(before, after) {
+  const n = before.length;
+  const m = after.length;
+  const width = m + 1;
+  const lcs = new Int32Array((n + 1) * width);
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      lcs[i * width + j] =
+        before[i] === after[j]
+          ? lcs[(i + 1) * width + j + 1] + 1
+          : Math.max(lcs[(i + 1) * width + j], lcs[i * width + j + 1]);
+    }
+  }
+  const edits = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (before[i] === after[j]) {
+      i++;
+      j++;
+    } else if (lcs[(i + 1) * width + j] >= lcs[i * width + j + 1]) {
+      edits.push({ op: '-', value: before[i++] });
+    } else {
+      edits.push({ op: '+', value: after[j++] });
+    }
+  }
+  while (i < n) edits.push({ op: '-', value: before[i++] });
+  while (j < m) edits.push({ op: '+', value: after[j++] });
+
+  /* A removal immediately followed by an insertion is one element whose class or style changed,
+     not two unrelated events — and saying so is the whole point of reporting *where*. */
+  const merged = [];
+  for (let k = 0; k < edits.length; k++) {
+    if (edits[k].op === '-' && edits[k + 1]?.op === '+') {
+      merged.push({ op: '~', before: edits[k].value, after: edits[k + 1].value });
+      k++;
+    } else {
+      merged.push(edits[k]);
+    }
+  }
+  return merged;
+}
 
 /**
  * How the page differs from a baseline, **and where**.
  *
  * A boolean "it differs" is a check that makes you write a second script to find out why, which is
- * exactly what happened twice. Reports the first difference.
+ * exactly what happened twice. So it reports the edits — and it reports them by *aligning* the two
+ * snapshots rather than comparing them position by position.
+ *
+ * That alignment is not a refinement, it is a correctness fix. The old version zipped the arrays:
+ * `clean[i] !== now[i]`. Insert one `<script>` into the head and every subsequent element is
+ * compared against its neighbour, so one event is reported as hundreds and the "first difference"
+ * names two elements that have nothing to do with each other. Three of arena's checks failed that
+ * way for months, and the message was misleading enough that the cause took two sessions and four
+ * probes to find.
+ *
+ * `n` still counts elements that differ, so `n === 0` means what it always meant and no caller
+ * changes.
  */
 export async function snapDiff(page, snap, clean) {
   const now = await page.evaluate(snap);
-  const diffs = [];
-  for (let i = 0; i < Math.max(clean.length, now.length); i++) {
-    if (clean[i] !== now[i]) diffs.push({ before: clean[i], after: now[i] });
-  }
+  const edits = editsBetween(clean, now);
+  const describe = (e) =>
+    e.op === '~' ? `changed ${e.before} → ${e.after}` : e.op === '+' ? `added ${e.value}` : `removed ${e.value}`;
   return {
-    n: diffs.length,
-    detail: diffs.length
-      ? `${diffs.length} differences, first: ${diffs[0].before} → ${diffs[0].after}`
+    n: edits.length,
+    edits,
+    detail: edits.length
+      ? `${edits.length} ${edits.length === 1 ? 'difference' : 'differences'}: ${edits.slice(0, 3).map(describe).join('; ')}`
       : 'identical',
   };
 }

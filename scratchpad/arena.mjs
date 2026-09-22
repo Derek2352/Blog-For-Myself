@@ -27,29 +27,38 @@
  * still the ambient cat's `notched`, and the truces (idle, hidden-tab) keep their clocks.
  */
 /*
- * ## Known: the three snapshot checks are unreliable, and it is not the game's fault
+ * ## Resolved: the three snapshot checks, and what actually fixed them
  *
  * `the card never touches the page while it plays`, `the page is byte-identical after the card
- * closes` and `off is a full restore too` fail on roughly four runs in five, giving 52/55. Measured
- * at this commit **and at the one before it** (five runs each side, 55 once and 52 the other four)
- * — so it is not a regression from the covers work, and the 55/55 recorded in that commit message
- * was the lucky run rather than the normal one. Recorded here so nobody re-diagnoses it from
- * scratch, and so the next person does not read a green 55 as proof of anything.
+ * closes` and `off is a full restore too` used to fail roughly four runs in five, giving 52/55.
+ * They now pass, and the history is worth keeping because neither half of it went the way it
+ * looked like it would.
  *
- * **The failure text is misleading and the number is meaningless.** It reports "245 differences,
- * first: 47:BODY:… → 47:SCRIPT::". `snapshotOf` records elements by *index*, so one extra element
- * in `<head>` re-indexes everything after it and every subsequent entry compares against its
- * neighbour. There is one difference, not 245: the two snapshots disagree about how many children
- * `<head>` has.
+ * **The flake was fixed by something else entirely.** It was measured at 52/55 on four of five runs
+ * at `0c32853` and again at `27c1a87`. It is 55/55 on five of five now, and nothing in this file or
+ * in the game changed in between — what changed is `prefetch={false}` on the bulk link components
+ * and the tab bar, done for mobile payload. Next was prefetching dozens of pages in the background,
+ * each arriving as a `<script>` at an unpredictable moment, and one of them landing between the
+ * baseline snapshot and the comparison is what the failure was. Removing the speculation removed
+ * the race. Recorded because "I fixed the mobile payload and three unrelated checks went green" is
+ * exactly the kind of coincidence that gets mis-attributed later.
  *
- * **What adds it is not established.** Two probes (`scratchpad/headdiff.mjs`, `headdiff2.mjs`)
- * driving pointer movement, scrolling and a full deal saw `<head>` stay at 46 children and the
- * document stay at 406 elements, so whatever inserts it happens on a path those did not take. The
- * honest fix is to key the snapshot on something stable rather than on position — but that is a
- * change to the instrument every arena harness shares, and it should be made deliberately rather
- * than in passing.
+ * **The instrument was wrong too, and that was fixed deliberately.** The report read "245
+ * differences, first: 47:BODY:… → 47:SCRIPT::". `snapshotOf` keyed each element by its array
+ * *index* and `snapDiff` compared index against index, so one element inserted near the top of the
+ * document re-labelled everything after it. One event, reported as two hundred and forty-five, with
+ * a first line naming two elements that were never related — a message misleading enough that
+ * finding the cause took two sessions and four probes.
+ *
+ * `snapDiff` now aligns the two snapshots (LCS) instead of zipping them, and the descriptor no
+ * longer carries a position. An insertion reports as one addition, a restyle as one change, a
+ * removal as one removal — verified in a browser against this page and unit-tested in
+ * `tests/snap-diff.test.ts`, which fails if the positional compare ever comes back.
+ *
+ * So the race is gone and the instrument would now describe it correctly if it returned. Both
+ * mattered: without the first these checks would still be red, and without the second the next
+ * insertion anywhere would produce the same unreadable wall.
  */
-
 import {
   BASE,
   deal,
