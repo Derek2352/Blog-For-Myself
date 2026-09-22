@@ -8,25 +8,35 @@
 #
 # ## Why a separate workflow
 #
-# Because it is slow. A full pass is a build plus about twelve minutes of browser time, and a gate
-# that slow on every push is a gate people route around. `ci.yml` stays fast and stays required; this
-# runs nightly and on demand. Add `push: branches: [main]` here if you would rather have it on every
-# merge — it is one line, and the only reason it is not already there is the minute cost.
+# Because it is slow. A full pass is a build plus eight minutes of browser time, and a gate that slow
+# on every push is a gate people route around. `ci.yml` stays fast and stays required; this runs
+# nightly and on demand. Add `push: branches: [main]` here if you would rather have it on every merge
+# — it is one line, and the only reason it is not already there is the minute cost.
 #
 # ## Why only eleven of the thirty-eight
 #
-# Because these eleven are the ones **measured green on this repository**, timed: art-sink 16/16
-# (12s), gaze 14/14 (25s), timeline-filter 35/35 (4s), arena5 22/22 (114s), arena8 27/27 (148s),
-# first-run (39s), rail-spy 10/10 (3s), card-check 21/21 (7s), phone-audit 3/3 (~35s), arena 55/55
-# (~200s), arena4 39/39 (~150s).
+# Because these eleven are the ones **measured green on this repository** — and, since run 6, on
+# the runner that actually executes them, which is the number that matters and was not the number
+# this comment used to carry. Runner first, laptop in brackets:
 #
-# Those are laptop figures. Run 5 of this workflow gives the runner's, which are what the two
-# timeouts below have to cover, and they are the same within noise: art-sink 16s, gaze 25s,
-# timeline-filter 3s, rail-spy 3s, card-check 7s, phone-audit 6s, first-run 31s, arena5 112s,
-# arena8 133s — 336s for the nine. arena and arena4 should add about 350s, so expect the fleet step
-# to take twelve minutes or so. `timeout 420` per harness is roughly double the longest; the job's
-# 40 minutes is the backstop for several of them hanging at once rather than a figure the normal
-# run comes near.
+#   art-sink 16/16 13s [12], gaze 14/14 24s [25], timeline-filter 35/35 3s [4], rail-spy 10/10 3s
+#   [3], card-check 21/21 6s [7], phone-audit 3/3 5s [5], first-run 32s [39], arena5 22/22 107s
+#   [113], arena8 27/27 132s [135], arena4 39/39 100s [103], arena 55/55 47s [54].
+#
+# 472s for the eleven — just under eight minutes. The runner is a shade faster than the container
+# these were developed in, harness for harness, with no outlier either way.
+#
+# **Two of those brackets were wrong when arena joined**, and badly: arena went in as "~200s" and
+# arena4 as "~150s", against 54s and 103s re-measured on an idle machine and 47s and 100s on the
+# runner. Where the inflated pair came from I cannot reconstruct — most likely a wall clock read
+# across the repeat runs that were establishing the flake was gone, rather than across one run —
+# and they went into this file and into a commit message as fact. Harmless, since both sit well
+# inside `timeout 420` either way. Recorded anyway, because a timing nobody can reproduce is the
+# same kind of claim as a check that cannot fail, and correcting it quietly would leave the habit
+# in place.
+#
+# `timeout 420` a harness is triple the longest. The job's 40 minutes is the backstop for several
+# hanging at once, not a figure a normal run comes near.
 #
 # `phone-audit` joined with the mobile pass. It drives a 390×844 touch profile over nine pages and
 # checks the three things that actually break a phone: horizontal overflow, tap target size against
@@ -41,8 +51,9 @@
 #     inserted element as 245 differences. Two things changed: `prefetch={false}` (done for mobile
 #     payload) removed the background page fetches that were racing the baseline, and `snapDiff` now
 #     aligns the two snapshots instead of zipping them. Measured 5/5 green each before the instrument
-#     fix and 3/3 after — arena 55/55 (~200s), arena4 39/39 (~150s). The history is at the top of
-#     `scratchpad/arena.mjs`; `tests/snap-diff.test.ts` fails if the positional compare returns.
+#     fix, 3/3 after, and green on the runner in run 6 — arena 55/55, arena4 39/39. The history is
+#     at the top of `scratchpad/arena.mjs`; `tests/snap-diff.test.ts` fails if the positional
+#     compare returns.
 #   - **`parity`** — obsolete. It compares against the Astro build, which no longer exists.
 #   - **`plate-sink`, `plate-hues`, `plate-look`, `page-audit`, `crop`, `measure`, `fixed-in-shot`** —
 #     these report a fixture or write screenshots for a human to look at. They have no pass/fail to
@@ -58,13 +69,6 @@ on:
     # 03:00 UTC — late enough that a day's pushes are all in.
     - cron: '0 3 * * *'
   workflow_dispatch:
-  # TEMPORARY, and removed in the commit after the run it is here to produce.
-  # `arena` and `arena4` have never executed on a runner. They are being added on the strength of
-  # laptop measurements, and this file's own rule is that a harness goes in after a green run —
-  # so it needs one, on the machine that will be running it nightly. `workflow_dispatch` is the
-  # intended way to get that and returns 403 for this token, so this is the way left.
-  push:
-    branches: [claude/portfolio-reflections-blog-8hqnwh]
 
 permissions:
   contents: read
