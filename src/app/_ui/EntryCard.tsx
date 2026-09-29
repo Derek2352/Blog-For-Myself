@@ -130,7 +130,7 @@ export default function EntryCard({
           </span>
         </p>
         <h3 className="mt-1.5 font-display text-[1.35rem] leading-tight transition-colors group-hover:text-accent">
-          {entry.data.title}
+          <span className="link-draw">{entry.data.title}</span>
         </h3>
         <p className="mt-1.5 text-sm leading-relaxed text-muted">{entry.data.summary}</p>
         {showCategory && category && <p className="rail mt-2 text-secondary">{category.label}</p>}

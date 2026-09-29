@@ -26,6 +26,7 @@ import { SITE_URL } from '@/lib/site-url';
 import { resolveWash } from '@/lib/wash';
 import EntryCard from './_ui/EntryCard';
 import InkWash from './_ui/InkWash';
+import HeroReel from './_ui/HeroReel';
 import SectionHead from './_ui/SectionHead';
 
 export const metadata: Metadata = { alternates: { canonical: '/' } };
@@ -118,8 +119,13 @@ export default async function HomePage() {
       />
       {/* Hero: photography leads; the rail annotates; the ink washes behind both. `isolate` is
           load-bearing now the canvas sits at z-index -1 — `relative` alone opens no stacking
-          context, so the wash would escape behind the page itself. */}
-      <section className="hero wrap relative isolate grid items-center gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:gap-14">
+          context, so the wash would escape behind the page itself.
+
+          The section is full-width and the column is a `.wrap` inside it, so the reel under the
+          grid can run edge to edge. The ink stays inside the column: its canvas is sized by its
+          parent, and its cost is proportional to its area (see `SLICE_MS` in ink-wash.ts). */}
+      <section className="hero relative isolate">
+        <div className="hero-grid wrap relative grid items-center gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:gap-14">
         <InkWash />
         {/* One element, two jobs, deliberately the same rectangle.
 
@@ -180,6 +186,13 @@ export default async function HomePage() {
             </div>
           </div>
         </div>
+        {/* The reel, twice, and only ever one of them shown. On a phone the grid is one column
+            and the featured cover comes a full screen after the words, so a reel under the grid
+            would be the third thing on the page rather than part of the banner; there it runs
+            between the words and the cover, where it catches the bottom of the first screen. On
+            a wide screen it runs along the banner's foot. `display: none` keeps the hidden one's
+            lazy images from loading at all. */}
+        <HeroReel entries={entries} codes={codes} className="reel-inline lg:hidden" />
         {hero && (
           <div className="hero-art">
             <figure className="reveal-2">
@@ -213,11 +226,13 @@ export default async function HomePage() {
             </figure>
           </div>
         )}
+        </div>
+        <HeroReel entries={entries} codes={codes} className="reel-foot hidden lg:block" />
       </section>
 
       {/* Featured entries */}
       {strip.length > 0 && (
-        <section className="wrap reveal-3 mt-4 sm:mt-6" aria-labelledby="featured-h">
+        <section className="wrap reveal-3 mt-8 sm:mt-10" aria-labelledby="featured-h">
           <SectionHead
             id="featured-h"
             kicker="best place to start"

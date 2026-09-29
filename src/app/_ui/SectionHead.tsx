@@ -12,6 +12,9 @@
  * begins. The action sits on the same baseline at the right, so "there is more of this" is said
  * where the eye already is rather than after the last card — by which point a reader who wanted
  * more has already scrolled past the chance.
+ *
+ * The rule is drawn by `.section-head` in global.css rather than a border, so it can carry the
+ * accent mark at its start and draw itself in when the section scrolls into view.
  */
 import Link from 'next/link';
 
@@ -29,7 +32,7 @@ export default function SectionHead({
   action?: { href: string; label: string };
 }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 border-b border-line pb-4">
+    <div className="section-head flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
       <div className="min-w-0">
         <p className="kicker">{kicker}</p>
         <h2 id={id} className="mt-1.5 font-display text-section text-pretty">

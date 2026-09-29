@@ -30,7 +30,10 @@ export default function NavLinks({ items }: { items: NavItem[] }) {
             path === item.href ? 'text-accent' : 'text-ink',
           ].join(' ')}
         >
-          {item.label}
+          {/* The label, not the link, carries the underline: on a touch screen the link is padded
+              to a fingertip's height, and a line at the foot of that box would sit well below the
+              word it belongs to. */}
+          <span className="link-draw">{item.label}</span>
         </Link>
       ))}
     </>

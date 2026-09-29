@@ -295,8 +295,219 @@
     border-radius: var(--radius-card);
   }
 
-  /* ---- the home hero's breathing room, fluid like the type in it ---- */
-  .hero { padding-block: clamp(2.5rem, 1.25rem + 4.5vw, 4.5rem); }
+  /* ---- the home hero's breathing room, fluid like the type in it ----
+     Less at the foot than at the head: the reel runs directly under the grid and is part of the
+     banner, so the space that used to separate the banner from the next section is its own. */
+  .hero-grid {
+    padding-top: clamp(2.5rem, 1.25rem + 4.5vw, 4.5rem);
+    padding-bottom: clamp(1rem, 0.5rem + 2vw, 2rem);
+  }
+
+  /* ---- the reel (src/app/_ui/HeroReel.tsx) ----
+     Real film proportions where they matter and none where they do not: a 16:10 gate, a rebate on
+     each side wide enough for a row of perforations and a line of edge print, perforations at a
+     fixed count per frame so the pattern is continuous across every frame and across the loop's
+     seam. The film base is the ink's own espresso, so the reel reads as more of the same ink rather
+     than a second, imported colour; the edge print is the palette's photo-chemical amber, which is
+     what that colour was named for. */
+  .reel {
+    --fw: clamp(7.25rem, 5.4rem + 6.2vw, 11rem);
+    --gut: 0.6rem;
+    --rail: 1.45rem;
+    --film-h: calc(var(--fw) * 0.625 + var(--rail) * 2);
+    --film: #231d17;
+    --hole: var(--color-ground);
+    --edge: var(--color-signal);
+    position: relative;
+    height: calc(var(--film-h) * 1.34);
+    overflow: clip;
+    pointer-events: none;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+  }
+  /* In the dark the film is blacker than the room and the perforations are lit from behind, which is
+     how film looks on a light table — and why the frames are *not* given the drawn-cover filter here:
+     a transparency glows. */
+  html.dark .reel {
+    --film: #0d0a08;
+    --hole: #4a3e31;
+  }
+  .reel-strip {
+    position: absolute;
+    left: -6%;
+    right: -6%;
+    top: 50%;
+    height: var(--film-h);
+    margin-top: calc(var(--film-h) / -2);
+    background: var(--film);
+    box-shadow:
+      0 1px 0 rgb(255 255 255 / 0.05) inset,
+      0 22px 40px -26px rgb(30 20 10 / 0.7);
+    transform: translateY(var(--lift, 0px)) rotate(var(--tilt, 0deg));
+  }
+  html.dark .reel-near {
+    box-shadow:
+      0 1px 0 rgb(255 255 255 / 0.04) inset,
+      0 0 46px -14px color-mix(in srgb, var(--color-signal) 30%, transparent);
+  }
+  .reel-near { --tilt: -2.4deg; --lift: 6%; z-index: 2; }
+  .reel-far {
+    --tilt: 2.2deg;
+    --lift: -22%;
+    z-index: 1;
+    scale: 0.78;
+    opacity: 0.58;
+  }
+  /* On a wide screen the reel tucks up into the grid's foot, so the near strip sits inside the
+     first screen at 1440×900 instead of being cut by its bottom edge. */
+  .reel-foot { margin-top: calc(var(--film-h) * -0.16); }
+  /* On a phone it runs inside the one-column grid, and breaks out of the column to the window's
+     edges. `.hero` clips horizontally, so a 100vw box cannot give the page a sideways scroll on a
+     system with a visible scrollbar. */
+  .reel-inline { margin-inline: calc(50% - 50vw); }
+  .hero { overflow-x: clip; }
+  html.dark .reel-frame img { filter: brightness(0.86) contrast(1.04); }
+  .reel-drift,
+  .reel-track { height: 100%; }
+  .reel-track {
+    display: flex;
+    width: max-content;
+  }
+  /* The far strip runs the other way, so its track starts well left of the window — otherwise the
+     scroll drift, which pushes it right, would open a gap of bare film at the left end. */
+  .reel-far .reel-track { margin-left: -30vw; }
+  .reel-run {
+    display: flex;
+    align-items: center;
+  }
+  .reel-frame {
+    position: relative;
+    flex: none;
+    width: var(--fw);
+    aspect-ratio: 16 / 10;
+    margin-inline: calc(var(--gut) / 2);
+  }
+  .reel-frame img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 2px;
+  }
+  /* Perforations: seven to a frame, top and bottom, in the rebate's outer half. */
+  .reel-frame::before,
+  .reel-frame::after {
+    content: "";
+    position: absolute;
+    left: calc(var(--gut) / -2);
+    right: calc(var(--gut) / -2);
+    height: 0.4rem;
+    background: linear-gradient(90deg, var(--hole) 0 52%, transparent 52%) 0 0 / calc(100% / 7) 100% repeat-x;
+  }
+  .reel-frame::before { top: calc(var(--rail) * -1 + 0.28rem); }
+  .reel-frame::after { bottom: calc(var(--rail) * -1 + 0.28rem); }
+  /* Edge print: the entry's code and month, in the rebate's inner half, where stock carries its own. */
+  .reel-edge {
+    position: absolute;
+    left: 0.15rem;
+    top: calc(100% + 0.16rem);
+    font-family: var(--font-mono);
+    font-size: 0.5rem;
+    line-height: 1;
+    letter-spacing: 0.14em;
+    color: var(--edge);
+    opacity: 0.9;
+    white-space: nowrap;
+  }
+
+  /* ---- the header's two icon buttons ----
+     They were the one square-cornered, unfilled thing on the site: a 1px grey box, the same weight
+     as a table cell. Rounded to the chip radius the tags and buttons already use, given the paper
+     fill of the panels, and lit on hover in the accent's direction rather than turning grey. */
+  .icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-chip);
+    background: color-mix(in srgb, var(--color-surface) 70%, transparent);
+    color: var(--color-muted);
+    transition:
+      color 0.2s ease,
+      border-color 0.2s ease,
+      box-shadow 0.3s ease;
+  }
+  .icon-btn:hover {
+    color: var(--color-ink);
+    border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-line));
+    box-shadow: 0 8px 18px -12px rgb(60 44 28 / 0.5);
+  }
+
+  /* ---- an underline that draws itself ----
+     For short links set in running type — the utility nav, the footer, card titles. A hairline in
+     the text's own colour grows from the left under the words on hover and shrinks back to the left
+     when the pointer leaves, so the line always travels in reading direction. A gradient background
+     rather than text-decoration because only a background's size can be animated; `clone` so a
+     title that wraps is underlined line by line. */
+  .link-draw {
+    background: linear-gradient(currentColor, currentColor) 0 100% / 0 1px no-repeat;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+    transition: background-size 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  a:hover .link-draw,
+  .group:hover .link-draw,
+  a:focus-visible .link-draw,
+  [aria-current="page"] .link-draw { background-size: 100% 1px; }
+  .footer-nav a {
+    background: linear-gradient(currentColor, currentColor) 0 100% / 0 1px no-repeat;
+    background-origin: content-box;
+    transition: background-size 0.45s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s ease;
+  }
+  .footer-nav a:hover { background-size: 100% 1px; color: var(--color-accent); }
+
+  /* ---- a section's rule, with its mark ----
+     The hairline under a section head (src/app/_ui/SectionHead.tsx) now starts with a short run of
+     the accent — the ledger's red margin rule, in miniature — and below the fold it draws itself in
+     from the left as the section arrives (the motion block at the foot of this file). */
+  .section-head { position: relative; padding-bottom: 1rem; }
+  .section-head::after,
+  .section-head::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 1px;
+    transform-origin: left;
+  }
+  .section-head::after { right: 0; background: var(--color-line); }
+  .section-head::before { width: 2.5rem; height: 2px; bottom: -0.5px; z-index: 1; background: var(--color-accent); }
+
+  /* ---- the sheen ----
+     One pass of light across a surface as the cursor arrives — on the primary call to action and on
+     every card's cover. Set at a steep angle and kept faint, so it reads as light moving over glossy
+     paper rather than as an effect. */
+  .cta-primary,
+  .card-cover { position: relative; }
+  .cta-primary { overflow: hidden; isolation: isolate; }
+  .cta-primary::after,
+  .card-cover::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      105deg,
+      transparent 38%,
+      rgb(255 255 255 / var(--sheen, 0.22)) 50%,
+      transparent 62%
+    );
+    transform: translateX(-130%);
+  }
+  .cta-primary::after { z-index: -1; --sheen: 0.3; }
+  html.dark .card-cover::after { --sheen: 0.08; }
 
   /* ---- calls to action ----
      The hero's two buttons were `px-4 py-2 text-sm`: 36px tall, the same weight as a tag chip,
@@ -683,7 +894,26 @@
     bottom: 0;
     height: 2px;
     background: var(--color-accent);
+    /* Named, so a page transition carries it from the old tab to the new one: the browser animates a
+       named element between its two positions, which is exactly a sliding underline. The Astro site
+       had this (`transition:name="active-tab"`) and lost it with its view transitions; see
+       RouteTransition.tsx for how they came back. */
+    view-transition-name: active-tab;
   }
+  /* Hover: a fainter line of the same shape grows from the middle, so the tab you are pointing at
+     previews where the underline would go. Not on the active tab, which already has the real one. */
+  .tab-group > a::after {
+    content: "";
+    position: absolute;
+    inset-inline: var(--tab-pad);
+    bottom: 0;
+    height: 2px;
+    background: color-mix(in srgb, var(--color-accent) 35%, transparent);
+    transform: scaleX(0);
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .tab-group > a:hover::after { transform: scaleX(1); }
+  .tab-group > a[aria-current="page"]::after { display: none; }
 
   @media (min-width: 768px) {
     .tabbar {
@@ -1092,6 +1322,7 @@
     --color-secondary: #333333;
   }
   .page-bg,
+  .reel,
   header nav,
   .tabbar,
   footer,
@@ -1182,6 +1413,63 @@
     to { opacity: 1; transform: none; filter: blur(0); }
   }
 
+  /* ---- the reel runs ----
+     About 30px a second on a desktop and 20 on a phone — the speed of film through a viewer, not of
+     a ticker — with the far strip slower and backwards. Compositor-only: a transform on one element
+     per strip. */
+  html:not(.a11y-motion) .reel-track { animation: reel-run 125s linear infinite; }
+  html:not(.a11y-motion) .reel-far .reel-track {
+    animation-duration: 170s;
+    animation-direction: reverse;
+  }
+  @keyframes reel-run {
+    to { transform: translate3d(-50%, 0, 0); }
+  }
+
+  /* ---- covers develop as they arrive ----
+     A cover scrolling into a grid used to fade up like any other block. It now comes up the way a
+     print does in the tray: soft and warm-toned first, then sharp and true. Applied to the cover's
+     wrapper rather than to the image, so it composes with the dark theme's filter on drawn covers
+     instead of replacing it. Only in grids that are revealed on scroll — never to a banner, which is
+     on screen before anything could develop. */
+  html.js:not(.a11y-motion) [data-io-stagger]:not(.io-in) > * :is(.card-cover, .subject-sheet) {
+    filter: blur(6px) sepia(0.6) saturate(0.7);
+  }
+  html.js:not(.a11y-motion) [data-io-stagger].io-in > * :is(.card-cover, .subject-sheet) {
+    transition: filter 1.3s cubic-bezier(0.16, 1, 0.3, 1) 0.1s;
+  }
+
+  /* ---- a section's rule draws in ----
+     Only for sections the reveal script tagged (below the fold); a section already on screen at load
+     keeps its rule drawn. */
+  html.js:not(.a11y-motion) [data-io-text]:not(.io-in) .section-head::after { transform: scaleX(0); }
+  html.js:not(.a11y-motion) [data-io-text]:not(.io-in) .section-head::before { transform: scaleX(0); }
+  html.js:not(.a11y-motion) [data-io-text].io-in .section-head::after {
+    transition: transform 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.15s;
+  }
+  html.js:not(.a11y-motion) [data-io-text].io-in .section-head::before {
+    transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.05s;
+  }
+
+  /* ---- page transitions: the underline slides ---- */
+  ::view-transition-group(active-tab) {
+    animation-duration: 0.5s;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* ---- the theme changes as a circle of light spreading from the switch ----
+     src/app/_chrome/ThemeToggle.tsx runs the change inside a view transition and animates the new
+     page's clip from the button outward. The two snapshots must not cross-fade while that happens,
+     and the header and the tab underline must not be lifted out into their own layers, or the circle
+     would pass under them and they would change colour on their own. */
+  html.theme-vt::view-transition-old(root),
+  html.theme-vt::view-transition-new(root) {
+    animation: none;
+    mix-blend-mode: normal;
+  }
+  html.theme-vt body > header,
+  html.theme-vt .tab-underline { view-transition-name: none; }
+
   /* ---- the banner's depth, as the page scrolls away from it ----
      Three layers, three speeds — the thing that makes an illustrated banner feel like a place rather
      than a picture. The featured cover is nearest and rises a little faster than the page; the
@@ -1211,6 +1499,16 @@
     @keyframes depth-near { to { transform: translate3d(0, var(--depth-near, -28px), 0); } }
     @keyframes depth-mid { to { transform: translate3d(0, var(--depth-mid, -8px), 0); } }
     @keyframes depth-far { to { transform: translate3d(0, var(--depth-far, 28px), 0); opacity: 0.3; } }
+    /* The reel is tied to the scroll as well as to the clock: scrolling a screen's height slides the
+       near strip a further fifth of the width left and the far one right. Film you can feel yourself
+       winding on is the difference between a background and a banner. */
+    html:not(.a11y-motion) .reel-drift {
+      animation: reel-drift linear both;
+      animation-timeline: scroll(root);
+      animation-range: 0px 100vh;
+    }
+    html:not(.a11y-motion) .reel-far .reel-drift { --drift: 12vw; }
+    @keyframes reel-drift { to { transform: translate3d(var(--drift, -20vw), 0, 0); } }
     /* Stacked on a phone, the cover sits under the words, so it may not travel far toward them. */
     @media (min-width: 1024px) {
       .hero { --depth-near: -56px; --depth-mid: -14px; --depth-far: 36px; }
@@ -1332,8 +1630,18 @@
      transition-duration to ~0, so without this the hover lifts still jumped
      into place for a reader who asked for less movement. */
   @media (hover: hover) {
-    html:not(.a11y-motion) .card-cover img { transition: transform 0.35s cubic-bezier(0.2, 0.6, 0.2, 1); }
-    html:not(.a11y-motion) .card:hover .card-cover img { transform: scale(1.02); }
+    html:not(.a11y-motion) .card-cover img { transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
+    html:not(.a11y-motion) .card:hover .card-cover img { transform: scale(1.045); }
+    /* The sheen crosses once per arrival: it runs on hover and is reset without a transition when
+       the pointer leaves, so leaving never sends the light back the way it came. */
+    html:not(.a11y-motion) :is(.card:hover .card-cover, .cta-primary:hover)::after {
+      transform: translateX(130%);
+      transition: transform 0.95s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    html:not(.a11y-motion) .subject::before { transition: opacity 0.45s ease; opacity: 0.7; }
+    html:not(.a11y-motion) .subject:hover::before { opacity: 1; }
+    html:not(.a11y-motion) .icon-btn svg { transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1); }
+    html:not(.a11y-motion) .icon-btn:hover svg { transform: rotate(-14deg) scale(1.06); }
 
     /* cards rise to meet the cursor */
     html:not(.a11y-motion) .lift {
@@ -1342,11 +1650,25 @@
         box-shadow 0.25s cubic-bezier(0.2, 0.6, 0.2, 1);
     }
     html:not(.a11y-motion) .lift:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 8px 25px -8px rgb(30 20 10 / 0.10);
+      transform: translateY(-4px);
+      box-shadow:
+        0 2px 4px -2px rgb(60 44 28 / 0.08),
+        0 22px 40px -22px rgb(60 44 28 / 0.32);
     }
     html.dark:not(.a11y-motion) .lift:hover {
-      box-shadow: 0 8px 25px -8px rgb(0 0 0 / 0.30);
+      box-shadow:
+        0 2px 4px -2px rgb(0 0 0 / 0.3),
+        0 22px 40px -20px rgb(0 0 0 / 0.6);
+    }
+    /* An entry card has no panel behind it — it is a cover and some words on the paper — so a shadow
+       on the card would draw a box round the text. The cover is the thing that lifts off the table. */
+    html:not(.a11y-motion) article.card.lift:hover { box-shadow: none; }
+    html:not(.a11y-motion) .card .card-cover { transition: box-shadow 0.45s cubic-bezier(0.16, 1, 0.3, 1); }
+    html:not(.a11y-motion) article.card:hover .card-cover {
+      box-shadow: 0 24px 42px -24px rgb(60 44 28 / 0.45);
+    }
+    html.dark:not(.a11y-motion) article.card:hover .card-cover {
+      box-shadow: 0 24px 42px -20px rgb(0 0 0 / 0.7);
     }
 
     /* Onward arrows lean the way they point. */

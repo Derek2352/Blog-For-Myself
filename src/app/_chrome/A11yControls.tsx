@@ -64,7 +64,7 @@ export default function A11yControls() {
     <div className={styles.a11y} data-a11y ref={root}>
       <button
         type="button"
-        className="tap-safe inline-flex size-8 items-center justify-center border border-line text-muted transition-colors hover:border-muted hover:text-ink"
+        className="icon-btn tap-safe"
         aria-label="Accessibility options"
         aria-expanded={open}
         aria-controls="a11y-menu"
