@@ -19,6 +19,7 @@ import {
   groupByPeriod,
 } from '@/server/content';
 import { resolveWash } from '@/lib/wash';
+import { roomOf } from '@/lib/rooms';
 import EntryCard from '../_ui/EntryCard';
 import PeriodGroup from '../_ui/PeriodGroup';
 import SectionHead from '../_ui/SectionHead';
@@ -86,6 +87,7 @@ export default async function CategoryPage({
   const logs = allLogs.filter((l) => l.data.category === slug);
   const logGroups = groupByPeriod(toFeed([], logs));
   const wash = resolveWash(category);
+  const room = roomOf(slug, index);
 
   /**
    * Somewhere to go when this page has nothing. Only *populated* categories are offered — sending
@@ -118,7 +120,12 @@ export default async function CategoryPage({
       <PageWash hue={wash.hue} tab={slug} />
       <div className="wrap py-10">
         <header className="max-w-3xl">
-          <p className="kicker">Index / {category.slug}</p>
+          {/* The room number is the same one the home page's panel carried, so the visitor walking
+              in from "Room III" is told they have arrived in it. */}
+          <p className="kicker">
+            {room && <span className="room-mark">{room}</span>}
+            Index / {category.slug}
+          </p>
           <PageTitle>{category.label}</PageTitle>
           {category.blurb && (
             <p className="mt-4 max-w-[60ch] text-lede text-muted">{category.blurb}</p>

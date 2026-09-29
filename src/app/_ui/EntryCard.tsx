@@ -94,7 +94,7 @@ export default function EntryCard({
        fit the longest role and the card pushes past the viewport on a phone. */
     <article className="card lift group min-w-0">
       <Link href={href} prefetch={false} className="block">
-        <div className="frame card-cover overflow-hidden" data-drawn={drawn}>
+        <div className="frame mat card-cover overflow-hidden" data-drawn={drawn}>
           <img
             src={cover.src}
             alt=""
@@ -109,7 +109,7 @@ export default function EntryCard({
             with three different title baselines. Now the role is the only shrinkable part: date
             and code hold their place, and the role gets whatever is left before it ellipsizes
             (the full string stays in the title attribute). */}
-        <p className="rail mt-3 flex flex-nowrap items-baseline gap-x-2">
+        <p className="rail wall-label mt-3 flex flex-nowrap items-baseline gap-x-2">
           <span className="shrink-0">{range}</span>
           {entry.data.role && (
             <>

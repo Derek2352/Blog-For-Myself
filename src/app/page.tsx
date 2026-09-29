@@ -24,6 +24,7 @@ import { monthKey } from '@/lib/format';
 import { balancedCols } from '@/lib/layout';
 import { SITE_URL } from '@/lib/site-url';
 import { resolveWash } from '@/lib/wash';
+import { roomOf } from '@/lib/rooms';
 import EntryCard from './_ui/EntryCard';
 import InkWash from './_ui/InkWash';
 import HeroReel from './_ui/HeroReel';
@@ -100,6 +101,7 @@ export default async function HomePage() {
     return {
       ...c,
       hue: resolveWash(c).hue,
+      room: roomOf(c.slug, index),
       span: yearSpan(own.map((e) => e.data.date)),
       prints: own.slice(0, PRINTS).map((e) => ({
         id: e.id,
@@ -198,7 +200,7 @@ export default async function HomePage() {
             <figure className="reveal-2">
               <Link href={entryHref(hero)} className="card group block">
                 <div
-                  className={`frame card-cover overflow-hidden${heroDrawn ? '' : ' blurup'}`}
+                  className={`frame mat card-cover overflow-hidden${heroDrawn ? '' : ' blurup'}`}
                   data-drawn={heroDrawn}
                 >
                   <img
@@ -295,6 +297,7 @@ export default async function HomePage() {
                       cannot use. The counts start showing themselves again the moment there is
                       something to count. */}
                     <p className="rail">
+                      {c.room && <span className="room-mark">{c.room}</span>}
                       {c.entryCount} {c.entryCount === 1 ? 'entry' : 'entries'}
                       {c.logCount > 0 && ` · ${c.logCount} ${c.logCount === 1 ? 'log' : 'logs'}`}
                       {c.span && ` · ${c.span}`}

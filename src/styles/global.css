@@ -509,6 +509,75 @@
   .cta-primary::after { z-index: -1; --sheen: 0.3; }
   html.dark .card-cover::after { --sheen: 0.08; }
 
+  /* ------------------------------------------------------------------ *
+   * The exhibition.
+   *
+   * Browsing the work should feel like walking a show rather than scrolling a feed, and a show has
+   * four things a feed does not: works that are *hung* rather than placed, light that finds them,
+   * a label beside each one, and rooms. All four are made from materials the site already had —
+   * the paper surface, the amber, the hairline, the mono rail — so it is the same site, hung.
+   * ------------------------------------------------------------------ */
+
+  /* Hung: every cover gets a passe-partout, the paper-coloured mat a print sits in behind glass, and
+     a wall shadow that says it is on a wall and not printed on it. A border and not padding, so the
+     image's clip (`overflow: hidden` stops at the padding box) keeps the hover zoom inside the
+     window of the mat instead of spilling over it. */
+  .mat {
+    border: clamp(6px, 0.3rem + 0.35vw, 12px) solid var(--color-surface);
+    outline: 1px solid var(--color-line);
+    box-shadow:
+      0 1px 2px rgb(60 44 28 / 0.08),
+      0 14px 26px -20px rgb(60 44 28 / 0.4);
+  }
+  html.dark .mat {
+    outline-color: color-mix(in srgb, var(--color-ink) 12%, transparent);
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.35),
+      0 16px 28px -18px rgb(0 0 0 / 0.7);
+  }
+
+  /* Lit: a pool of warm light falls on the wall above a work as you come to it — the picture light
+     of a gallery. The palette's amber, faint on paper and stronger in the dark theme, which is the
+     room where a picture light matters. */
+  article.card { position: relative; isolation: isolate; }
+  article.card::before {
+    content: "";
+    position: absolute;
+    /* Within the card's own width: the first version reached 8% past each side, and on a phone
+       that put 14px of light past the window's edge and gave every page with a card a sideways
+       scroll. phone-audit, card-check and arena all caught it. */
+    left: 0;
+    right: 0;
+    top: -3rem;
+    height: 85%;
+    z-index: -1;
+    pointer-events: none;
+    background: radial-gradient(
+      ellipse 60% 70% at 50% 0%,
+      hsl(38 90% 62% / var(--spot, 0.2)),
+      transparent 72%
+    );
+    opacity: 0;
+  }
+  html.dark article.card::before { --spot: 0.16; }
+
+  /* Labelled: the line under each work reads as the card on the wall beside it — a hairline above,
+     the date, the role and the catalogue number set in the index rail's voice. */
+  .wall-label {
+    border-top: 1px solid var(--color-line);
+    padding-top: 0.65rem;
+  }
+
+  /* Rooms: "Room III", ahead of a subject's own label, on the way in and on arrival. */
+  .room-mark {
+    color: var(--color-accent);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    margin-right: 0.7em;
+    padding-right: 0.7em;
+    border-right: 1px solid color-mix(in srgb, currentColor 40%, transparent);
+  }
+
   /* ---- calls to action ----
      The hero's two buttons were `px-4 py-2 text-sm`: 36px tall, the same weight as a tag chip,
      sitting under a 68px headline. A call to action is the one control a landing page exists to
@@ -1632,6 +1701,9 @@
   @media (hover: hover) {
     html:not(.a11y-motion) .card-cover img { transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
     html:not(.a11y-motion) .card:hover .card-cover img { transform: scale(1.045); }
+    /* The picture light comes up slowly, the way a gallery's sensor lights do. */
+    html:not(.a11y-motion) article.card::before { transition: opacity 0.7s ease; }
+    html:not(.a11y-motion) article.card:hover::before { opacity: 1; }
     /* The sheen crosses once per arrival: it runs on hover and is reset without a transition when
        the pointer leaves, so leaving never sends the light back the way it came. */
     html:not(.a11y-motion) :is(.card:hover .card-cover, .cta-primary:hover)::after {
