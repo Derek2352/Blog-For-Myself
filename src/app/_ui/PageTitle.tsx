@@ -15,6 +15,9 @@
  * The tail is `<em>` and not a styled `<span>`: it is a genuine change of voice within the
  * sentence, which is what `<em>` means, and a screen reader reading "The story, *so far*" with
  * emphasis is reading it correctly rather than being told about a font.
+ *
+ * Sized by `text-title`, the fluid token in global.css, rather than `text-4xl sm:text-5xl`: every
+ * page title on the site scales with the window in one line instead of jumping at 640px.
  */
 export default function PageTitle({
   children,
@@ -28,7 +31,7 @@ export default function PageTitle({
   className?: string;
 }) {
   return (
-    <h1 className={`mt-2 font-display text-4xl leading-[1.08] text-pretty sm:text-5xl ${className}`}>
+    <h1 className={`mt-2 font-display text-title text-pretty ${className}`}>
       {children}
       {tail && (
         <>

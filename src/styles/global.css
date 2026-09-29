@@ -53,6 +53,34 @@
   --radius-card: 0.875rem;
   --radius-chip: 0.5rem;
 
+  /* ---- fluid type: one continuous scale instead of three stepped ones ----
+     The display sizes used to jump at Tailwind's breakpoints — the hero's name went 2.25rem →
+     3rem → 3.4rem, a page title 2.25rem → 3rem at 640 exactly — so a window dragged from phone to
+     desktop width re-set its headlines in three visible lurches, and every width between two
+     breakpoints got the smaller one. `clamp()` makes the size a function of the width: each of
+     these has a floor it never drops below on a phone, a ceiling it stops at on a large screen, and
+     a straight line between them.
+
+     The floors are the phone sizes that were already there, or a little above them; the ceilings
+     are where Instrument Serif, which is narrow, still reads as a headline rather than a poster.
+     Defined as `--text-*` so Tailwind turns each into a utility (`text-display`, `text-title`, …)
+     carrying its own line-height — a display size and its leading are one decision. */
+  --text-display: clamp(2.6rem, 1.85rem + 3.2vw, 4.25rem);
+  --text-display--line-height: 1.02;
+  --text-turn: clamp(1.45rem, 1.12rem + 1.35vw, 2.15rem);
+  --text-turn--line-height: 1.15;
+  --text-title: clamp(2.25rem, 1.7rem + 2.3vw, 3.5rem);
+  --text-title--line-height: 1.06;
+  --text-section: clamp(1.75rem, 1.4rem + 1.4vw, 2.5rem);
+  --text-section--line-height: 1.1;
+  --text-lede: clamp(1.0625rem, 0.98rem + 0.4vw, 1.25rem);
+  --text-lede--line-height: 1.62;
+  /* The gap between a landing page's sections, on the same principle: 4rem on a phone, where a
+     screen of air between two headings is a screen of scrolling, up to 7rem on a desktop, where
+     it is what lets each section be seen as one thing. It was a fixed mt-20 before, with an mt-6
+     between the hero and the first section — two different rhythms on one page. */
+  --spacing-section: clamp(4rem, 2.5rem + 5vw, 7rem);
+
   /* ---- the treats HUD's offset from the bottom edge ----
      `#cat-hud` in SiteCat.astro is fixed to the bottom-left corner; this clears the cat's
      own 30px band so the chip never sits on the animal.
@@ -124,6 +152,21 @@
       animation-iteration-count: 1 !important;
       transition-duration: 0.001ms !important;
       scroll-behavior: auto !important;
+    }
+  }
+  /* Page transitions draw on pseudo-elements of <html> that `*::before` does not reach, so the
+     stand-down above missed them — they would have played the browser's default cross-fade for a
+     reader who asked for none. Named here, for both switches. */
+  html.a11y-motion::view-transition-group(*),
+  html.a11y-motion::view-transition-old(*),
+  html.a11y-motion::view-transition-new(*) {
+    animation: none !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*) {
+      animation: none !important;
     }
   }
 
@@ -251,6 +294,184 @@
     background: var(--color-surface);
     border-radius: var(--radius-card);
   }
+
+  /* ---- the home hero's breathing room, fluid like the type in it ---- */
+  .hero { padding-block: clamp(2.5rem, 1.25rem + 4.5vw, 4.5rem); }
+
+  /* ---- calls to action ----
+     The hero's two buttons were `px-4 py-2 text-sm`: 36px tall, the same weight as a tag chip,
+     sitting under a 68px headline. A call to action is the one control a landing page exists to
+     have pressed, so it gets a fingertip's height everywhere (44px, not only under `pointer:
+     coarse`), a size that belongs beside the display type, and a shadow in its own colour — the
+     wine lifts off the paper rather than being printed on it. */
+  .cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-height: 2.75rem;
+    padding-inline: 1.2rem;
+    border-radius: var(--radius-chip);
+    font-size: 0.9375rem;
+    font-weight: 500;
+    line-height: 1;
+    transition:
+      background-color 0.2s ease,
+      border-color 0.2s ease,
+      color 0.2s ease,
+      box-shadow 0.3s ease;
+  }
+  .cta-primary {
+    background: var(--color-accent);
+    color: var(--color-accent-ink);
+    box-shadow: 0 12px 24px -16px color-mix(in srgb, var(--color-accent) 90%, transparent);
+  }
+  .cta-primary:hover {
+    background: color-mix(in srgb, var(--color-accent) 86%, var(--color-ink));
+    box-shadow: 0 16px 28px -14px color-mix(in srgb, var(--color-accent) 90%, transparent);
+  }
+  .cta-quiet {
+    border: 1px solid var(--color-line);
+    background: color-mix(in srgb, var(--color-surface) 60%, transparent);
+    color: var(--color-ink);
+  }
+  .cta-quiet:hover { border-color: var(--color-accent); color: var(--color-accent); }
+  /* On a phone the two do not fit side by side, and one full-width button over one half-width one
+     looks like an accident. Growing both makes them share a row when they fit and each fill a row
+     when they do not. */
+  @media (max-width: 639px) {
+    .hero .cta { flex: 1 1 auto; justify-content: center; }
+  }
+
+  /* ---- "there is more this way" ----
+     One arrow language for every onward link on the landing pages: the rail's mono voice, and an
+     arrow that leans the way it points when the thing it belongs to is hovered. It is set here
+     rather than borrowed from `.rail` on purpose — `.rail` is on the cat arena's list of things it
+     may claim (src/lib/arena.ts), and a decorative "Open →" should not deal the game four extra
+     cards on the home page. */
+  .go-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-height: 2rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-ink);
+    transition: color 0.2s ease;
+  }
+  a.go-link:hover,
+  .group:hover .go-link { color: var(--color-accent); }
+  .go-arrow { display: inline-block; }
+  @media (pointer: coarse) {
+    a.go-link { min-height: 2.75rem; }
+  }
+
+  /* ---- browse by subject: a contact sheet per category ----
+     The panel is a container, so its layout answers to its own width rather than the window's:
+     side by side (words left, prints right) when there is room for both, stacked with the prints
+     on top when there is not. The same panel sits in a four-up grid, a two-up grid or a single
+     column depending on how many flagship categories there are, and a viewport breakpoint cannot
+     know which of those it is in. */
+  .subject {
+    container-type: inline-size;
+    position: relative;
+    isolation: isolate;
+    display: block;
+    height: 100%;
+  }
+  /* The category page's way on: a neighbour subject, lit in that subject's own hue. */
+  .pager {
+    position: relative;
+    isolation: isolate;
+    display: block;
+    padding: 1.25rem 1.5rem 1.4rem;
+  }
+  .pager .go-link { color: var(--color-muted); }
+  /* The category's own light, from the top corner the prints sit under — the same hue its page is
+     washed in (src/lib/wash.ts), a little stronger here because a panel is small. */
+  .subject::before,
+  .pager::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(
+      85% 110% at 100% 0%,
+      hsl(var(--hue, 32) 42% 55% / calc(var(--wash-a) * 1.7)),
+      transparent 72%
+    );
+  }
+  .subject-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+    height: 100%;
+    padding: 1.25rem;
+  }
+  .subject-text {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    flex: 1;
+    min-width: 0;
+  }
+  .subject-text .go-link { margin-top: auto; padding-top: 0.75rem; }
+  .subject-sheet {
+    position: relative;
+    flex: none;
+    height: 8.25rem;
+  }
+  @container (min-width: 30rem) {
+    .subject-body {
+      flex-direction: row-reverse;
+      align-items: center;
+      gap: 1.25rem;
+      padding: 1.5rem 1.25rem 1.5rem 1.75rem;
+    }
+    .subject-sheet { width: 13rem; height: 9.5rem; }
+  }
+
+  /* One print. Its border is the paper's own colour, which is what a print's white border is; the
+     shadow is two — a tight contact edge and a long soft fall — so it rests on the panel rather
+     than floating over it. */
+  .subject-print {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 8.5rem;
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    border: 3px solid var(--color-surface);
+    border-radius: 6px;
+    background: var(--color-surface);
+    box-shadow:
+      0 0 0 1px var(--color-line),
+      0 1px 2px rgb(60 44 28 / 0.1),
+      0 14px 26px -16px rgb(60 44 28 / 0.5);
+    transform: translate(-50%, -50%) translate(var(--dx, 0px), var(--dy, 0px)) rotate(var(--rot, 0deg));
+  }
+  html.dark .subject-print {
+    box-shadow:
+      0 0 0 1px var(--color-line),
+      0 1px 2px rgb(0 0 0 / 0.3),
+      0 16px 28px -14px rgb(0 0 0 / 0.7);
+  }
+  .subject-print img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  /* The lead entry on top and nearly square to the table; the next two tucked behind it, turned
+     out to either side. Two prints split the difference, and one lies alone. */
+  .subject-print[data-i="0"] { z-index: 3; --rot: -1.5deg; --dy: 0.15rem; }
+  .subject-print[data-i="1"] { z-index: 2; --rot: -8deg; --dx: -2.7rem; --dy: 0.5rem; }
+  .subject-print[data-i="2"] { z-index: 1; --rot: 7deg; --dx: 2.7rem; --dy: 0.35rem; }
+  .subject-sheet[data-count="2"] .subject-print[data-i="0"] { --dx: 1.3rem; }
+  .subject-sheet[data-count="2"] .subject-print[data-i="1"] { --dx: -1.5rem; }
 
   /* ---- signature: the index rail (timecode / ticker margin notes) ---- */
   .rail {
@@ -388,7 +609,52 @@
        the boundary. The simulation now runs past the frame on the left and
        below, so the mark genuinely continues off-canvas, and fading it out at
        the edge would destroy exactly the effect the padding buys: a fragment
-       has to meet the frame at full strength. */
+       has to meet the frame at full strength.
+
+       **That argument holds where there is a frame, and two of the four edges
+       have none.** Looked at on a 1440 screen: the canvas is the hero section,
+       and the hero section is `.wrap` — 72rem, centred — so the ink stopped on
+       a dead-straight vertical line 144px in from the left of the window, with
+       bare paper beyond it, and again on a horizontal line across the page
+       under the hero, just above "Start with these". Neither line is the edge
+       of anything the reader can see. A fragment meeting the window's edge
+       reads as scale; a fragment sheared off in mid-page reads as a picture
+       that was cropped badly.
+
+       So the edges that *are* frames stay hard — the top, which is the
+       header's rule, and the sides whenever the canvas reaches the window —
+       and the two that are not are feathered: the bottom always, and the
+       sides only by as much as the window is wider than the column, so on a
+       phone or a small laptop, where the canvas already spans the window, the
+       side fade is exactly zero.
+
+       The obvious alternative was to make the canvas full-bleed, and it was
+       measured rather than taken: the simulation costs about half a desktop
+       core already (see `SLICE_MS` in src/lib/ink-wash.ts), in proportion to
+       its area, and a full-bleed canvas on a 2560 monitor is 2.2× the area.
+       A mask costs nothing to draw. */
+    --ink-fade-b: clamp(3rem, 18%, 8rem);
+    --ink-fade-x: clamp(0px, (100vw - 72rem) / 2 + 1rem, 9rem);
+    -webkit-mask-image:
+      linear-gradient(to bottom, #000 calc(100% - var(--ink-fade-b)), transparent),
+      linear-gradient(
+        to right,
+        transparent,
+        #000 var(--ink-fade-x),
+        #000 calc(100% - var(--ink-fade-x)),
+        transparent
+      );
+    -webkit-mask-composite: source-in;
+    mask-image:
+      linear-gradient(to bottom, #000 calc(100% - var(--ink-fade-b)), transparent),
+      linear-gradient(
+        to right,
+        transparent,
+        #000 var(--ink-fade-x),
+        #000 calc(100% - var(--ink-fade-x)),
+        transparent
+      );
+    mask-composite: intersect;
   }
 
   /* category tab strip: two deliberate tiers on wide screens, one scrolling
@@ -857,7 +1123,8 @@
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
   }
-  .reveal, .reveal-2, .reveal-3 { animation: none !important; opacity: 1 !important; }
+  .reveal, .reveal-2, .reveal-3, .hero-in, .hero-pane { animation: none !important; opacity: 1 !important; }
+  .hero-copy, .hero-art { transform: none !important; }
   /* Scroll-revealed blocks sit at opacity 0 until they enter the viewport — and
      printing never scrolls. Without this a timeline or a reflection printed
      without being read through comes out blank. */
@@ -883,18 +1150,96 @@
     to { opacity: 1; transform: none; }
   }
 
-  /* page-to-page: soft cross-fade with a small settle */
-  ::view-transition-old(root) {
-    animation: vt-out 0.18s ease both;
+  /* ---- the banner's entrance ----
+     It used to rise as one block — pane, headline, paragraph and buttons moving together as a
+     single 10px slab. Now the pane's frosting settles first and its lines arrive after it in reading
+     order, each a beat behind the last, so the page is *read to* you once rather than shown. The two
+     display lines also come into focus as they land: a short blur is the camera finding the words,
+     which is this site's other half — "frames by night" — saying hello in the typography.
+
+     Scoped `html:not(.a11y-motion)` as well as by the media query, because the accessibility toggle
+     only shortens durations: it leaves `animation-delay` alone, and with `both` fill a delayed line
+     would sit invisible for up to half a second before snapping in. */
+  html:not(.a11y-motion) .hero-pane { animation: hero-pane 0.7s ease both; }
+  html:not(.a11y-motion) .hero-in {
+    animation: hero-in 0.95s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: 0.12s;
   }
+  html:not(.a11y-motion) .hero-focus { animation-name: hero-focus; }
+  html:not(.a11y-motion) .hero-in[data-d="1"] { animation-delay: 0.2s; }
+  html:not(.a11y-motion) .hero-in[data-d="2"] { animation-delay: 0.32s; }
+  html:not(.a11y-motion) .hero-in[data-d="3"] { animation-delay: 0.44s; }
+  html:not(.a11y-motion) .hero-in[data-d="4"] { animation-delay: 0.56s; }
+  @keyframes hero-pane {
+    from { opacity: 0; }
+  }
+  @keyframes hero-in {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes hero-focus {
+    from { opacity: 0; transform: translateY(16px); filter: blur(8px); }
+    to { opacity: 1; transform: none; filter: blur(0); }
+  }
+
+  /* ---- the banner's depth, as the page scrolls away from it ----
+     Three layers, three speeds — the thing that makes an illustrated banner feel like a place rather
+     than a picture. The featured cover is nearest and rises a little faster than the page; the
+     words are the middle distance and barely move; the ink is furthest back, lags behind and thins
+     out as it goes. Nothing about the layout changes, only how far each layer travels.
+
+     Scroll-driven animation rather than a scroll listener, which is the whole reason it is smooth: it
+     is declared once and run by the compositor, so it keeps pace with the finger even while the
+     main thread is busy — and on this page the main thread is busy, with the ink. Where
+     `animation-timeline` is not supported the block is skipped and the banner is simply still.
+
+     The layers are wrappers (`.hero-copy`, `.hero-art`), never the pane or the figure themselves:
+     both already run an entrance animation, and the figure is on the cat arena's list of things it
+     may claim and tilt — an animated transform on it would override the claim's. */
+  @supports (animation-timeline: scroll()) {
+    html:not(.a11y-motion) .hero-art,
+    html:not(.a11y-motion) .hero-copy,
+    html:not(.a11y-motion) .hero .ink-wash {
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-timeline: scroll(root);
+      animation-range: 0px 85vh;
+    }
+    html:not(.a11y-motion) .hero-art { animation-name: depth-near; }
+    html:not(.a11y-motion) .hero-copy { animation-name: depth-mid; }
+    html:not(.a11y-motion) .hero .ink-wash { animation-name: depth-far; }
+    @keyframes depth-near { to { transform: translate3d(0, var(--depth-near, -28px), 0); } }
+    @keyframes depth-mid { to { transform: translate3d(0, var(--depth-mid, -8px), 0); } }
+    @keyframes depth-far { to { transform: translate3d(0, var(--depth-far, 28px), 0); opacity: 0.3; } }
+    /* Stacked on a phone, the cover sits under the words, so it may not travel far toward them. */
+    @media (min-width: 1024px) {
+      .hero { --depth-near: -56px; --depth-mid: -14px; --depth-far: 36px; }
+    }
+  }
+
+  /* page-to-page: the old page lets go, the new one settles in.
+     Triggered by src/app/_chrome/RouteTransition.tsx, which names the two sides `page-out` and
+     `page-in`. The old page only fades — it is leaving, and movement would pull the eye after it —
+     and the new one fades *and* settles the last few pixels, a beat later, so the two never read
+     as one image dissolving into another but as a page being put down on the table.
+
+     The rest of the document (the footer, the fixed furniture) is the `root` snapshot, and only
+     cross-fades quickly; the header has its own name below and does not move at all. */
+  ::view-transition-old(root),
   ::view-transition-new(root) {
-    animation: vt-in 0.26s cubic-bezier(0.2, 0.6, 0.2, 1) both;
+    animation-duration: 0.2s;
+  }
+  ::view-transition-old(.page-out) {
+    animation: vt-out 0.16s ease both;
+  }
+  ::view-transition-new(.page-in) {
+    animation: vt-in 0.42s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
   }
   @keyframes vt-out {
     to { opacity: 0; }
   }
   @keyframes vt-in {
-    from { opacity: 0; transform: translateY(8px); }
+    from { opacity: 0; transform: translateY(14px); }
   }
 
   /* header stays perfectly still while content transitions beneath it */
@@ -1003,6 +1348,22 @@
     html.dark:not(.a11y-motion) .lift:hover {
       box-shadow: 0 8px 25px -8px rgb(0 0 0 / 0.30);
     }
+
+    /* Onward arrows lean the way they point. */
+    html:not(.a11y-motion) .go-arrow { transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1); }
+    html:not(.a11y-motion) :is(a.go-link, .cta, .group):hover .go-arrow { transform: translateX(4px); }
+    html:not(.a11y-motion) :is(a.go-link, .cta, .group):hover .go-arrow-back { transform: translateX(-4px); }
+
+    /* The prints fan out as the cursor arrives — the lead lifts, the two behind it turn further out
+       — and settle back when it leaves. Slow on purpose: paper moving is not a switch. */
+    html:not(.a11y-motion) .subject-print {
+      transition: transform 0.55s cubic-bezier(0.2, 0.7, 0.2, 1);
+    }
+    html:not(.a11y-motion) .subject:hover .subject-print[data-i="0"] { --dy: -0.4rem; --rot: 0deg; }
+    html:not(.a11y-motion) .subject:hover .subject-print[data-i="1"] { --dx: -3.5rem; --rot: -11deg; }
+    html:not(.a11y-motion) .subject:hover .subject-print[data-i="2"] { --dx: 3.5rem; --rot: 10deg; }
+    html:not(.a11y-motion) .subject:hover .subject-sheet[data-count="2"] .subject-print[data-i="0"] { --dx: 1.9rem; }
+    html:not(.a11y-motion) .subject:hover .subject-sheet[data-count="2"] .subject-print[data-i="1"] { --dx: -2.1rem; }
 
     /* the 404 plane leans into takeoff */
     html:not(.a11y-motion) .fly-hint svg { transition: transform 0.3s cubic-bezier(0.2, 0.6, 0.2, 1); }

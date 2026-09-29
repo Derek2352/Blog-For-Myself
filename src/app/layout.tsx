@@ -32,6 +32,7 @@ import SearchShortcut from './_chrome/SearchShortcut';
 import Header from './_chrome/Header';
 import Footer from './_chrome/Footer';
 import Chrome from './_chrome/Chrome';
+import RouteTransition from './_chrome/RouteTransition';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -126,7 +127,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* polite announcement of the new page after client-side navigation */}
         <p className="sr-only" aria-live="polite" data-route-announce />
         <main id="main" className="flex-1" tabIndex={-1}>
-          {children}
+          <RouteTransition>{children}</RouteTransition>
         </main>
         <Footer />
         {/* The cat and its card. Rendered by the layout, which is what makes them persist across

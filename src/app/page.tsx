@@ -13,6 +13,7 @@ import {
   getCodes,
   entryHref,
   categoryHref,
+  sortForCategory,
 } from '@/server/content';
 import { byPinnedOrder } from '@/lib/sort';
 import { categoryBySlug } from '@/data/categories';
@@ -22,8 +23,10 @@ import { isGeneratedPlate, isCoverArt } from '@/lib/cover-plate';
 import { monthKey } from '@/lib/format';
 import { balancedCols } from '@/lib/layout';
 import { SITE_URL } from '@/lib/site-url';
+import { resolveWash } from '@/lib/wash';
 import EntryCard from './_ui/EntryCard';
 import InkWash from './_ui/InkWash';
+import SectionHead from './_ui/SectionHead';
 
 export const metadata: Metadata = { alternates: { canonical: '/' } };
 
@@ -34,9 +37,24 @@ export const metadata: Metadata = { alternates: { canonical: '/' } };
  */
 const BROWSE_COLS: Record<number, string> = {
   1: '',
-  2: 'sm:grid-cols-2',
-  3: 'sm:grid-cols-2 lg:grid-cols-3',
+  2: 'md:grid-cols-2',
+  3: 'md:grid-cols-2 lg:grid-cols-3',
 };
+
+/**
+ * How many of a category's covers its browse panel shows. Three is a fan — enough to say "a body
+ * of work" at a glance, few enough that each print is still big enough to recognise.
+ */
+const PRINTS = 3;
+
+/** "2025", or "2025–2026" — the span a category's entries cover, read off their dates. */
+function yearSpan(dates: Date[]): string {
+  if (!dates.length) return '';
+  const years = dates.map((d) => d.getUTCFullYear());
+  const lo = Math.min(...years);
+  const hi = Math.max(...years);
+  return lo === hi ? String(lo) : `${lo}–${hi}`;
+}
 
 export default async function HomePage() {
   const [entries, index, codes] = await Promise.all([
@@ -74,6 +92,21 @@ export default async function HomePage() {
   const primaryCats = catIndex.filter((c) => c.primary);
   const browseCats = primaryCats.length ? primaryCats : catIndex;
   const browseCols = BROWSE_COLS[balancedCols(browseCats.length)] ?? BROWSE_COLS[3];
+  /* Each subject's own covers, in the order its page shows them — so the print on top of the fan is
+     the one a visitor will see first when they get there. */
+  const subjects = browseCats.map((c) => {
+    const own = sortForCategory(entries.filter((e) => e.data.category === c.slug));
+    return {
+      ...c,
+      hue: resolveWash(c).hue,
+      span: yearSpan(own.map((e) => e.data.date)),
+      prints: own.slice(0, PRINTS).map((e) => ({
+        id: e.id,
+        cover: e.data.cover,
+        drawn: isGeneratedPlate(e.id) ? 'plate' : isCoverArt(e.id) ? 'art' : undefined,
+      })),
+    };
+  });
 
   return (
     <>
@@ -86,7 +119,7 @@ export default async function HomePage() {
       {/* Hero: photography leads; the rail annotates; the ink washes behind both. `isolate` is
           load-bearing now the canvas sits at z-index -1 — `relative` alone opens no stacking
           context, so the wash would escape behind the page itself. */}
-      <section className="wrap relative isolate grid items-center gap-10 py-12 sm:py-16 lg:grid-cols-[0.9fr_1.1fr] lg:gap-14">
+      <section className="hero wrap relative isolate grid items-center gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:gap-14">
         <InkWash />
         {/* One element, two jobs, deliberately the same rectangle.
 
@@ -96,82 +129,102 @@ export default async function HomePage() {
             text.
 
             `.glass` is the pane that cap was already implying. Keeping both on one div means the
-            frosted rectangle and the capped rectangle cannot drift apart. */}
-        <div className="reveal glass" data-ink-reserve>
-          <p className="kicker">portfolio &amp; reflections · hong kong</p>
-          {/* Name and tagline are one typographic unit, so the display face carries the thesis
+            frosted rectangle and the capped rectangle cannot drift apart.
+
+            The pane no longer rises as one block; its lines arrive in turn (`hero-in`, global.css).
+            That is also a gift to the ink: the reserve is measured off this rectangle, and a pane
+            that does not move is one the wash can measure the moment it mounts, rather than after
+            waiting out a 600ms translate.
+
+            The wrapper is for the scroll depth, and is a wrapper for a reason: an element has one
+            `animation` at a time, so a scroll-linked drift on the pane itself would cancel its
+            entrance. */}
+        <div className="hero-copy">
+          <div className="hero-pane glass" data-ink-reserve>
+            <p className="kicker hero-in" data-d="0">
+              portfolio &amp; reflections · hong kong
+            </p>
+            {/* Name and tagline are one typographic unit, so the display face carries the thesis
               instead of spending its largest size on a greeting alone. */}
-          <h1 className="mt-3 font-display leading-[1.05]">
-            <span className="block text-4xl sm:text-5xl lg:text-[3.4rem]">Hi — I’m Derek.</span>{' '}
-            {/* The explicit space is not cosmetic. JSX strips whitespace between elements, so
+            <h1 className="mt-3 font-display">
+              <span className="hero-in hero-focus block text-display" data-d="1">
+                Hi — I’m Derek.
+              </span>{' '}
+              {/* The explicit space is not cosmetic. JSX strips whitespace between elements, so
                 without it the h1's accessible name reads "Hi — I’m Derek.Numbers by day" with the
                 sentences run together — the two spans are `block`, so nothing looks wrong, and the
                 only place the fault shows is a screen reader. Astro kept the source newline and got
                 this for free; the parity harness caught the difference by comparing textContent. */}
-            <span className="mt-2 block text-pretty text-2xl italic text-muted sm:text-3xl lg:text-[2.1rem]">
-              Numbers by day, frames by night.
-            </span>
-          </h1>
-          <p className="mt-5 max-w-[48ch] text-lg leading-relaxed text-muted">
-            I study financial analysis &amp; FinTech, and I make AI-animated film and photographs —
-            usually both at once. Each entry below is the whole story, not the one-line CV version.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Link
-              href="/timeline/"
-              className="rounded-(--radius-chip) bg-accent px-4 py-2 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90"
-            >
-              See the work
-            </Link>
-            <Link
-              href="/about/"
-              className="rounded-(--radius-chip) border border-line px-4 py-2 text-sm transition-colors hover:border-accent hover:text-accent"
-            >
-              More about me
-            </Link>
+              <span
+                className="hero-in hero-focus mt-2 block text-pretty text-turn italic text-muted"
+                data-d="2"
+              >
+                Numbers by day, frames by night.
+              </span>
+            </h1>
+            <p className="hero-in mt-5 max-w-[48ch] text-lede text-muted" data-d="3">
+              I study financial analysis &amp; FinTech, and I make AI-animated film and photographs
+              — usually both at once. Each entry below is the whole story, not the one-line CV
+              version.
+            </p>
+            <div className="hero-in mt-8 flex flex-wrap gap-3" data-d="4">
+              <Link href="/timeline/" className="cta cta-primary">
+                See the work
+                <span aria-hidden="true" className="go-arrow">
+                  →
+                </span>
+              </Link>
+              <Link href="/about/" className="cta cta-quiet">
+                More about me
+              </Link>
+            </div>
           </div>
         </div>
         {hero && (
-          <figure className="reveal-2">
-            <Link href={entryHref(hero)} className="card group block">
-              <div
-                className={`frame card-cover overflow-hidden${heroDrawn ? '' : ' blurup'}`}
-                data-drawn={heroDrawn}
-              >
-                <img
-                  src={hero.data.cover.src}
-                  alt=""
-                  width={hero.data.cover.width}
-                  height={hero.data.cover.height}
-                  className={`aspect-[16/10] w-full ${
-                    orientation(hero.data.cover) === 'wide' ? 'object-cover' : 'object-contain'
-                  }`}
-                  loading="eager"
-                  fetchPriority="high"
-                />
-              </div>
-              <figcaption className="rail mt-3 flex flex-wrap justify-between gap-x-4 gap-y-1">
-                <span>
-                  {heroCode} · {monthKey(hero.data.date)} ·{' '}
-                  {categoryBySlug(hero.data.category)?.label ?? hero.data.category}
-                </span>
-                <span className="transition-colors group-hover:text-accent">
-                  {hero.data.title} →
-                </span>
-              </figcaption>
-            </Link>
-          </figure>
+          <div className="hero-art">
+            <figure className="reveal-2">
+              <Link href={entryHref(hero)} className="card group block">
+                <div
+                  className={`frame card-cover overflow-hidden${heroDrawn ? '' : ' blurup'}`}
+                  data-drawn={heroDrawn}
+                >
+                  <img
+                    src={hero.data.cover.src}
+                    alt=""
+                    width={hero.data.cover.width}
+                    height={hero.data.cover.height}
+                    className={`aspect-[16/10] w-full ${
+                      orientation(hero.data.cover) === 'wide' ? 'object-cover' : 'object-contain'
+                    }`}
+                    loading="eager"
+                    fetchPriority="high"
+                  />
+                </div>
+                <figcaption className="rail mt-3 flex flex-wrap justify-between gap-x-4 gap-y-1">
+                  <span>
+                    {heroCode} · {monthKey(hero.data.date)} ·{' '}
+                    {categoryBySlug(hero.data.category)?.label ?? hero.data.category}
+                  </span>
+                  <span className="transition-colors group-hover:text-accent">
+                    {hero.data.title} →
+                  </span>
+                </figcaption>
+              </Link>
+            </figure>
+          </div>
         )}
       </section>
 
       {/* Featured entries */}
       {strip.length > 0 && (
-        <section className="wrap reveal-3 mt-6" aria-labelledby="featured-h">
-          <p className="kicker">best place to start</p>
-          <h2 id="featured-h" className="mt-1 font-display text-3xl">
-            Start with these
-          </h2>
-          <div className="mt-6 grid gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+        <section className="wrap reveal-3 mt-4 sm:mt-6" aria-labelledby="featured-h">
+          <SectionHead
+            id="featured-h"
+            kicker="best place to start"
+            title="Start with these"
+            action={{ href: '/timeline/', label: 'Full timeline' }}
+          />
+          <div className="mt-8 grid gap-x-6 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
             {strip.map((entry) => (
               <EntryCard
                 key={entry.id}
@@ -185,33 +238,62 @@ export default async function HomePage() {
 
       {/* Browse: flagship categories lead; the rest sit in the tab bar rather than being listed
           again here. */}
-      <section className="wrap mt-20" aria-labelledby="browse-h">
-        <p className="kicker">by category</p>
-        <h2 id="browse-h" className="mt-1 font-display text-3xl">
-          Or wander by subject
-        </h2>
-        <ul className={`mt-6 grid list-none gap-4 p-0 ${browseCols}`} data-io-stagger>
-          {browseCats.map((c) => (
+      <section className="wrap mt-section" aria-labelledby="browse-h">
+        <SectionHead id="browse-h" kicker="by category" title="Or wander by subject" />
+        <ul className={`mt-8 grid list-none gap-4 p-0 sm:gap-5 ${browseCols}`} data-io-stagger>
+          {subjects.map((c) => (
             <li key={c.slug}>
-              {/* Clean cream panels: these used to carry their own texture and hue wash on top of
-                  the page's, which was one layer too many. */}
+              {/* A contact sheet for the subject: its own covers, fanned like prints on a table,
+                  beside what it is. These were text-only cream panels — a count, a name and a
+                  sentence, four times — which is a table of contents, and a table of contents is
+                  the least inviting thing a landing page can end on. The covers are the ones the
+                  category page opens with, so the panel is a preview of the page it leads to rather
+                  than a picture chosen for it.
+
+                  The hue is the category's own wash, the one its page is lit with, so arriving
+                  there looks like walking into the room the panel was a window onto. */}
               <Link
                 href={categoryHref(c.slug)}
-                className="panel lift group block h-full p-5 transition-colors hover:border-accent"
+                prefetch={false}
+                className="subject panel lift group"
+                style={{ ['--hue' as string]: String(c.hue) }}
               >
-                {/* The log count only appears when there is one. Every category currently has
-                    zero, so this line read "3 entries · 0 logs" eight times over — a card whose
-                    second fact is always the same nothing, advertising a feature the visitor
-                    cannot use. The counts start showing themselves again the moment there is
-                    something to count. */}
-                <p className="rail">
-                  {c.entryCount} {c.entryCount === 1 ? 'entry' : 'entries'}
-                  {c.logCount > 0 && ` · ${c.logCount} ${c.logCount === 1 ? 'log' : 'logs'}`}
-                </p>
-                <h3 className="mt-2 font-display text-2xl transition-colors group-hover:text-accent">
-                  {c.label}
-                </h3>
-                <p className="mt-1.5 text-sm leading-relaxed text-muted">{c.blurb}</p>
+                <div className="subject-body">
+                  <div className="subject-sheet" aria-hidden="true" data-count={c.prints.length}>
+                    {c.prints.map((p, i) => (
+                      <span key={p.id} className="subject-print" data-i={i} data-drawn={p.drawn}>
+                        <img
+                          src={p.cover.src}
+                          alt=""
+                          width={p.cover.width}
+                          height={p.cover.height}
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      </span>
+                    ))}
+                  </div>
+                  <div className="subject-text">
+                    {/* The log count only appears when there is one. Every category currently has
+                      zero, so this line read "3 entries · 0 logs" eight times over — a card whose
+                      second fact is always the same nothing, advertising a feature the visitor
+                      cannot use. The counts start showing themselves again the moment there is
+                      something to count. */}
+                    <p className="rail">
+                      {c.entryCount} {c.entryCount === 1 ? 'entry' : 'entries'}
+                      {c.logCount > 0 && ` · ${c.logCount} ${c.logCount === 1 ? 'log' : 'logs'}`}
+                      {c.span && ` · ${c.span}`}
+                    </p>
+                    <h3 className="mt-2 font-display text-[1.65rem] leading-[1.1] transition-colors group-hover:text-accent">
+                      {c.label}
+                    </h3>
+                    <p className="mt-2 text-sm leading-relaxed text-muted">{c.blurb}</p>
+                    <span className="go-link mt-4" aria-hidden="true">
+                      Open
+                      <span className="go-arrow">→</span>
+                    </span>
+                  </div>
+                </div>
               </Link>
             </li>
           ))}

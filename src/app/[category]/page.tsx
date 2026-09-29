@@ -21,6 +21,7 @@ import {
 import { resolveWash } from '@/lib/wash';
 import EntryCard from '../_ui/EntryCard';
 import PeriodGroup from '../_ui/PeriodGroup';
+import SectionHead from '../_ui/SectionHead';
 import PageWash from '../_chrome/PageWash';
 
 /**
@@ -99,6 +100,19 @@ export default async function CategoryPage({
           .filter((c) => c.slug !== slug && c.entryCount > 0)
           .sort((a, b) => b.entryCount - a.entryCount || a.label.localeCompare(b.label));
 
+  /* Neighbours in tab order among populated categories, wrapping at the ends. `index` is already
+     in tab order (categoryIndex sorts by `order`). With fewer than three populated there is at
+     most one other to go to, and "previous" and "next" would both name it. */
+  const populated = index.filter((c) => c.entryCount > 0);
+  const here = populated.findIndex((c) => c.slug === slug);
+  const pager =
+    entries.length > 0 && here >= 0 && populated.length >= 3
+      ? ([
+          { dir: 'prev', c: populated[(here - 1 + populated.length) % populated.length]! },
+          { dir: 'next', c: populated[(here + 1) % populated.length]! },
+        ] as const)
+      : null;
+
   return (
     <>
       <PageWash hue={wash.hue} tab={slug} />
@@ -107,7 +121,7 @@ export default async function CategoryPage({
           <p className="kicker">Index / {category.slug}</p>
           <PageTitle>{category.label}</PageTitle>
           {category.blurb && (
-            <p className="mt-3 text-lg leading-relaxed text-muted">{category.blurb}</p>
+            <p className="mt-4 max-w-[60ch] text-lede text-muted">{category.blurb}</p>
           )}
           {/* Same rule as the browse cards on the home page: a count of nothing is not a fact
               worth printing. Every category reads "0 logs" today, so this line spent half its
@@ -189,17 +203,56 @@ export default async function CategoryPage({
             documented in the README, and a dev-only string nobody sees is not worth a branch that
             ships. */}
         {logGroups.length > 0 && (
-          <section className="mt-20" aria-labelledby="monthly-log-h">
-            <p className="kicker">Monthly log</p>
-            <h2 id="monthly-log-h" className="mt-1 font-display text-3xl">
-              Small things, monthly
-            </h2>
+          <section className="mt-section" aria-labelledby="monthly-log-h">
+            <SectionHead id="monthly-log-h" kicker="Monthly log" title="Small things, monthly" />
             <div className="mt-8 space-y-12">
               {logGroups.map((group) => (
                 <PeriodGroup key={group.ref.id} group={group} codes={codes} headingLevel="h3" />
               ))}
             </div>
           </section>
+        )}
+
+        {/* The way on. A category page used to end on its last card and then the footer, so
+            reading one subject to the end left a visitor at a dead stop with the tab bar a full
+            page above them. These are the two neighbours in tab order, among the categories that
+            have something in them, and the ends join up — the last subject leads back to the
+            first — so the landing pages can be walked as a loop rather than a list with two dead
+            ends.
+
+            Not shown on an empty category, which already offers every populated one above. */}
+        {pager && (
+          <nav className="mt-section grid gap-4 sm:grid-cols-2" aria-label="Other subjects">
+            {pager.map(({ dir, c }) => (
+              <Link
+                key={dir}
+                href={categoryHref(c.slug)}
+                prefetch={false}
+                className={`pager panel lift group ${dir === 'next' ? 'sm:col-start-2 sm:text-right' : ''}`}
+                style={{ ['--hue' as string]: String(resolveWash(c).hue) }}
+              >
+                <span className="go-link">
+                  {dir === 'prev' && (
+                    <span aria-hidden="true" className="go-arrow go-arrow-back">
+                      ←
+                    </span>
+                  )}
+                  {dir === 'prev' ? 'Previous subject' : 'Next subject'}
+                  {dir === 'next' && (
+                    <span aria-hidden="true" className="go-arrow">
+                      →
+                    </span>
+                  )}
+                </span>
+                <span className="mt-1 block font-display text-[1.65rem] leading-tight transition-colors group-hover:text-accent">
+                  {c.label}
+                </span>
+                <span className="mt-1 block text-sm text-muted">
+                  {c.entryCount} {c.entryCount === 1 ? 'entry' : 'entries'}
+                </span>
+              </Link>
+            ))}
+          </nav>
         )}
       </div>
     </>

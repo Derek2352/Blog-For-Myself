@@ -156,6 +156,41 @@ const ELONGATION = 2.3;
  * whenever FRAME_MS does or the whole animation changes speed.
  */
 const TICKS = 12;
+/**
+ * The longest one piece of a frame may hold the main thread, in ms.
+ *
+ * A frame is about 50ms of work on a desktop — twelve ticks of the simulation, then five or six
+ * interpolated samples for every output pixel — and it used to be done in one go, as one task. On
+ * a desktop that is a 50ms long task ten times a second. On a phone it is much worse: under the 4×
+ * CPU throttle Lighthouse uses for a mid-range Android, each frame measured **about 340ms** (worst
+ * 429ms), back to back, so the main thread was never free. A tap on the landing page could wait
+ * the better part of half a second to be answered, and every scroll-triggered reveal and hover
+ * waited behind the ink.
+ *
+ * So a frame is now a sequence of short pieces with the event loop in between: one tick is a
+ * piece, and the render is cut every sixteen rows. The pixels are exactly the ones the single-task
+ * version drew — nothing about *what* is computed changed, only when control is handed back — and
+ * the canvas is still committed once, whole, at the end, so a half-rendered frame is never shown.
+ *
+ * 8 rather than something smaller: a tick is about 3ms, so a slice is two or three of them, and the
+ * cost of handing back is paid a few times a frame rather than dozens.
+ */
+const SLICE_MS = 8;
+/**
+ * The most of the main thread the wash may take, averaged over a frame.
+ *
+ * Slicing stops the ink from *blocking* input; it does not stop it from *occupying* the thread,
+ * and on a phone that cannot fit a frame into 100ms the old loop ran flat out forever — the page
+ * stayed hot and the battery paid for scenery. After each frame the next is held back until the
+ * work just done is at most this share of the time since the frame began.
+ *
+ * Half, because that is what a desktop was already spending (measured 50–52% of a core at 1440),
+ * so on a machine that could afford the wash this changes nothing: its frames still come every
+ * 100ms or so, at the designed pace. It only engages where the frame cannot fit, and there it
+ * trades the ink's speed for the page's — the wash spreads more slowly on a slow phone, the same
+ * wash, and everything else on the page stays answerable.
+ */
+const DUTY = 0.5;
 /** Hard cap on live cursor drips, so a fast scribble stays bounded. */
 const MAX_DRIPS = 26;
 /** Minimum travel between drips, in CSS pixels. */
@@ -346,8 +381,13 @@ function rainTo(front: number): void {
   injectedTo = front;
 }
 
-function draw(now: number): void {
+/**
+ * One frame, as a sequence of pieces — see `SLICE_MS`. Each `yield` is a point where the frame may
+ * hand the main thread back; the driver in `pump()` decides whether to.
+ */
+function* drawSteps(now: number): Generator<void, void, void> {
   if (!field || !view || !canvas || !grid || !gridCtx || !pixels) return;
+  flushDrips();
   if (!arrivedAt) arrivedAt = now;
   const { soak } = entrance(now - arrivedAt);
 
@@ -369,7 +409,10 @@ function draw(now: number): void {
   // cycle is a fresh pour rather than the same stain fading in and out.
   if (presence > 0) {
     if (step > 0) rainTo(Math.min(1, Math.max(0, injectedTo) + step / INJECT_MS));
-    for (let t = 0; t < TICKS; t++) stepInk(field, 1);
+    for (let t = 0; t < TICKS; t++) {
+      stepInk(field, 1);
+      yield;
+    }
   } else if (injectedTo >= 0) {
     // A fresh mark, not the same one poured again. The seed used to be chosen
     // once at mount, so every pour in a visit re-laid an identical
@@ -403,6 +446,7 @@ function draw(now: number): void {
   // stay visible for the whole time it is spreading.
   const vis = visible(field);
   if (smooth && scratch) blurField(vis, smooth, scratch, field.gw, field.gh, BLUR);
+  yield;
   const data = pixels.data;
   const dep = smooth ?? vis;
   const parts = inkRgb.split(',');
@@ -468,7 +512,10 @@ function draw(now: number): void {
       data[p + 2] = b;
       data[p + 3] = a * 255;
     }
+    if ((oy & 15) === 15) yield;
   }
+  // Committed once, whole. Everything above wrote into an off-screen buffer, so however many pieces
+  // the frame was cut into, the reader only ever sees a finished one.
   gridCtx.putImageData(pixels, 0, 0);
 
   // The upscale is the softening. That trick was wrong for a crisp brush but
@@ -481,6 +528,86 @@ function draw(now: number): void {
   view.globalAlpha = 1;
 }
 
+/** Run a whole frame now, unsliced. Only for the one-off repaint when the theme changes. */
+function draw(now: number): void {
+  for (const _ of drawSteps(now));
+}
+
+/** The frame being computed, when one is in flight, and a token that retires stale pumps. */
+let job: Generator<void, void, void> | null = null;
+let jobId = 0;
+/** Milliseconds of main-thread work the current frame has cost so far. */
+let jobWork = 0;
+/** Earliest moment the next frame may begin — the `DUTY` ceiling. */
+let restUntil = 0;
+
+/**
+ * How a frame's next piece gets scheduled.
+ *
+ * `scheduler.postTask` at background priority where the browser has it: input, rendering and the
+ * page's own work all go ahead of the scenery, which is the whole point. A `MessageChannel` message
+ * elsewhere — a macrotask with no minimum delay, unlike `setTimeout`, whose clamping would turn a
+ * sixteen-piece frame into a 64ms one.
+ */
+type PostTask = (cb: () => void, opts: { priority: 'background' }) => Promise<unknown>;
+const postTask = (globalThis as { scheduler?: { postTask?: PostTask } }).scheduler?.postTask?.bind(
+  (globalThis as { scheduler?: unknown }).scheduler,
+) as PostTask | undefined;
+let channel: MessageChannel | null = null;
+let queued: (() => void) | null = null;
+function later(cb: () => void): void {
+  if (postTask) {
+    postTask(cb, { priority: 'background' }).catch(() => {});
+    return;
+  }
+  if (!channel) {
+    channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      const run = queued;
+      queued = null;
+      run?.();
+    };
+  }
+  queued = cb;
+  channel.port2.postMessage(0);
+}
+
+/** Work on the frame in flight for up to `SLICE_MS`, then hand back and come again. */
+function pump(id: number): void {
+  if (!job || id !== jobId) return;
+  const t0 = performance.now();
+  let done = false;
+  try {
+    while (performance.now() - t0 < SLICE_MS) {
+      if (job.next().done) {
+        done = true;
+        break;
+      }
+    }
+  } catch (err) {
+    // A frame that throws must not stay "in flight": `frame()` waits for `job` to clear, so a
+    // stuck one would freeze the wash for the rest of the visit instead of failing one frame.
+    job = null;
+    throw err;
+  }
+  const t1 = performance.now();
+  jobWork += t1 - t0;
+  if (!done) {
+    later(() => pump(id));
+    return;
+  }
+  job = null;
+  // The ceiling: the next frame waits until this one's work is at most `DUTY` of the time since it
+  // began. On a machine that fits a frame into half of FRAME_MS this is already in the past.
+  restUntil = last + jobWork / DUTY;
+}
+
+/** Drop the frame in flight. Its buffers may be about to be replaced, so it must not finish. */
+function abortFrame(): void {
+  job = null;
+  jobId++;
+}
+
 function frame(now: number): void {
   // Front-page-only, so it cannot use transition:persist and must genuinely
   // stop. This check cannot leak even if a teardown event is ever missed.
@@ -489,18 +616,22 @@ function frame(now: number): void {
     return;
   }
   raf = requestAnimationFrame(frame);
-  if (now - last < FRAME_MS) return;
+  if (job || now - last < FRAME_MS || now < restUntil) return;
   last = now;
-  draw(now);
+  jobWork = 0;
+  job = drawSteps(now);
+  pump(++jobId);
 }
 
 function start(): void {
   if (raf || !canvas) return;
   last = 0;
+  restUntil = 0;
   raf = requestAnimationFrame(frame);
 }
 
 function stop(): void {
+  abortFrame();
   if (!raf) return;
   cancelAnimationFrame(raf);
   raf = 0;
@@ -524,6 +655,7 @@ function sync(): void {
 
 function resize(): void {
   if (!canvas || !grid || !gridCtx) return;
+  abortFrame();
   const rect = canvas.getBoundingClientRect();
   const w = Math.max(1, Math.round(rect.width));
   const h = Math.max(1, Math.round(rect.height));
@@ -677,9 +809,21 @@ function onPointerMove(e: PointerEvent): void {
   // A drip is real ink now: it wets the paper and then bleeds outward on its
   // own, rather than being a shape that fades on a timer.
   // A fresh drip is undiluted 焦墨 — it has not met anything to weaken it.
-  injectBlob(field, x, y, 1.4 + Math.random() * 1.8, 0.85, 1, seed);
+  //
+  // Queued rather than injected on the spot. A frame is computed in pieces now, and a drip landing
+  // between two of them would be half in the rows already rendered and half not — one frame of a
+  // drip cut in two. The next frame lands it first thing, at most a frame late.
+  pendingDrips.push([x, y, 1.4 + Math.random() * 1.8]);
   dripCount++;
   sync();
+}
+
+/** Drips that arrived while a frame was being computed, as [x, y, radius] in field cells. */
+let pendingDrips: [number, number, number][] = [];
+function flushDrips(): void {
+  if (!field) return;
+  for (const [x, y, r] of pendingDrips) injectBlob(field, x, y, r, 0.85, 1, seed);
+  pendingDrips = [];
 }
 
 function onEnter(): void {
@@ -773,6 +917,7 @@ function unmount(): void {
   lastTick = 0;
   injectedTo = -1;
   dripCount = 0;
+  pendingDrips = [];
   pointerOver = false;
 }
 
