@@ -69,13 +69,6 @@ on:
     # 03:00 UTC — late enough that a day's pushes are all in.
     - cron: '0 3 * * *'
   workflow_dispatch:
-  # TEMPORARY, and removed in the commit after the run it is here to produce.
-  # The page transitions and the smooth scroll (3e94d07) change how every harness navigates, and
-  # have only been through the fleet on this machine's Chromium, not the runner's Chrome; the
-  # stance budgets (914402f) answer a red that only the runner has shown. `workflow_dispatch`
-  # returns 403 for this token, as it did for 219998c, so this is the way left.
-  push:
-    branches: [claude/portfolio-reflections-blog-8hqnwh]
 
 permissions:
   contents: read
