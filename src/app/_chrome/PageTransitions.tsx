@@ -66,8 +66,10 @@ function destination(e: MouseEvent): URL | null {
   if (a.target && a.target !== '_self') return null;
   const url = new URL(a.href, location.href);
   if (url.origin !== location.origin || !isPagePath(url.pathname)) return null;
-  // Same page, different anchor (or none): an in-page jump, not a navigation.
-  if (url.pathname === location.pathname && url.search === location.search) return null;
+  /* The page it is already on — an in-page anchor, or the same page with a different query. Not a
+     page change, so no tide; and the transition waits for the *pathname* to change, which a query
+     alone never does, so it would have stood frozen for the whole of WAIT_MS. */
+  if (url.pathname === location.pathname) return null;
   return url;
 }
 
