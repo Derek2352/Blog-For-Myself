@@ -26,10 +26,22 @@ export default function PageWash({ hue = 32, tab }: { hue?: number; tab?: string
   }, [tab]);
 
   return (
-    <div
-      className="page-bg wash"
-      style={{ ['--hue' as string]: String(hue) }}
-      aria-hidden="true"
-    />
+    /* The wash is fixed to the window, and it is wrapped in a plain block that is not.
+
+       Next 16 decides whether a newly arrived page needs scrolling by measuring the page's top-level
+       elements (through a React fragment ref) and taking the highest top edge. A fixed wash is
+       always at the very top of the window — above the 5rem of scroll padding the sticky header
+       reserves — so every page that opened with it was judged "not in view" and scrolled 66px down,
+       putting its first line under the header. Measured, on every navigation into a category, an
+       entry, the timeline, search, the colophon and the 404. The wrapper sits in the flow where the
+       page begins, has no height, and is what gets measured; the wash inside it renders exactly as
+       it did. */
+    <div>
+      <div
+        className="page-bg wash"
+        style={{ ['--hue' as string]: String(hue) }}
+        aria-hidden="true"
+      />
+    </div>
   );
 }

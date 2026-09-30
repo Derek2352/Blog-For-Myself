@@ -31,7 +31,10 @@ export default function ReadingAids() {
   }, []);
 
   return (
-    <>
+    /* An in-flow wrapper round two fixed elements, for the reason given in PageWash.tsx: the
+       progress bar is fixed at the very top of the window, and as a top-level element of the entry
+       page it made Next scroll every arriving entry 66px down. */
+    <div>
       <div className="reading-progress" data-progress aria-hidden="true" ref={bar} />
       <button
         type="button"
@@ -55,6 +58,6 @@ export default function ReadingAids() {
           <path d="M12 19V5M5 12l7-7 7 7" />
         </svg>
       </button>
-    </>
+    </div>
   );
 }

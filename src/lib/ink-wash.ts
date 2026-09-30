@@ -191,6 +191,17 @@ const SLICE_MS = 8;
  * wash, and everything else on the page stays answerable.
  */
 const DUTY = 0.5;
+/**
+ * How long after the last scroll event the wash waits before drawing again, in ms.
+ *
+ * The page scrolls smoothly now (src/app/_chrome/SmoothScroll.tsx), and a smoothed scroll is driven
+ * from the main thread: every frame of the glide is a script writing the new position. A slice of
+ * ink landing across one of those frames is a dropped frame of scrolling — the one thing on a
+ * landing page nobody forgives. So the wash simply holds still while the page moves. It is also
+ * fading and sinking away on that same scroll (the depth animation in global.css), so a pause
+ * mid-scroll is not something anyone can see; it picks up again the moment the page settles.
+ */
+const SCROLL_QUIET_MS = 140;
 /** Hard cap on live cursor drips, so a fast scribble stays bounded. */
 const MAX_DRIPS = 26;
 /** Minimum travel between drips, in CSS pixels. */
@@ -617,6 +628,7 @@ function frame(now: number): void {
   }
   raf = requestAnimationFrame(frame);
   if (job || now - last < FRAME_MS || now < restUntil) return;
+  if (performance.now() - lastScrollAt < SCROLL_QUIET_MS) return;
   last = now;
   jobWork = 0;
   job = drawSteps(now);
@@ -956,6 +968,8 @@ export function startInkWash(): () => void {
   };
   const reduceQuery = matchMedia('(prefers-reduced-motion: reduce)');
   const classObserver = new MutationObserver(syncMotion);
+  // What the wash is mounting into, so the first unrelated class change is recognised as one.
+  lastMotionKey = motionKey();
 
   /*
    * The arena already announces itself at exactly the right moments: it borrows the cat on
@@ -997,7 +1011,26 @@ export function startInkWash(): () => void {
   };
 }
 
+/**
+ * What the wash last saw of the two things on <html> it answers to — reduced motion and the theme.
+ *
+ * The class observer below fires on *every* class change to <html>, and <html> is busy: the smooth
+ * scroller adds and removes `lenis-scrolling` and `lenis-smooth` many times a second while the page
+ * glides, and the page and theme transitions add classes of their own. Each firing used to run
+ * `syncMotion` in full, and with the wash parked that means a whole synchronous frame — twelve ticks
+ * and a render, about 50ms — for a class that has nothing to do with ink. Scrolling past the banner
+ * would have stuttered on every one. Comparing against the last state makes the unrelated firings
+ * free.
+ */
+let lastMotionKey = '';
+function motionKey(): string {
+  return `${motionReduced()}|${document.documentElement.classList.contains('dark')}`;
+}
+
 function syncMotion(): void {
+  const key = motionKey();
+  if (key === lastMotionKey) return;
+  lastMotionKey = key;
   if (motionReduced()) unmount();
   else if (document.querySelector('canvas.ink-wash')) mount();
   // Composited normally now, so the ink colour does have to follow the theme.

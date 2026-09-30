@@ -101,6 +101,19 @@
   --cat-hud-bottom: 2.75rem;
 }
 
+/* The page tide's two masks (see "page to page: the tide" in the motion block): bitmaps rendered by
+   scripts/tide-masks.mjs from an SVG with one ragged edge, warped by low-frequency turbulence and
+   dithered against fine noise. Bitmaps, not the SVG, because the SVG's filters re-ran on every frame
+   of the transition (117ms a frame, measured) and a bitmap mask composites at 60fps. PageTransitions
+   loads them once the page is idle, so they are in hand before the first click. The band between
+   them is the ink at the palest register the wash uses. */
+:root {
+  --tide-new: url("/tide-new.png");
+  --tide-old: url("/tide-old.png");
+  --tide-band: color-mix(in srgb, var(--color-ink) 22%, var(--color-ground));
+}
+.dark { --tide-band: color-mix(in srgb, var(--color-ink) 14%, var(--color-ground)); }
+
 /* Dark theme: candlelit versions of the same tokens. */
 .dark {
   --color-ground: #1c1814;
@@ -966,7 +979,7 @@
     /* Named, so a page transition carries it from the old tab to the new one: the browser animates a
        named element between its two positions, which is exactly a sliding underline. The Astro site
        had this (`transition:name="active-tab"`) and lost it with its view transitions; see
-       RouteTransition.tsx for how they came back. */
+       PageTransitions.tsx for how they came back. */
     view-transition-name: active-tab;
   }
   /* Hover: a fainter line of the same shape grows from the middle, so the tab you are pointing at
@@ -1043,6 +1056,11 @@
     padding-top: 6px; /* transparent bridge so the pointer can cross the gap */
   }
   .tab-flyout.flip { left: auto; right: 0; }
+  /* Never part of a page transition. A click on a tab is a click on a hovered tab, so its flyout is
+     open at the moment the outgoing page is photographed — and the header's photograph then carried
+     the flyout's overflow and was drawn stretched to more than twice its height, a ghost of the
+     header sliding down the window mid-transition. `page-vt` goes on before the photograph is taken. */
+  html.page-vt .tab-flyout { display: none !important; }
 
   @media (hover: hover) and (min-width: 768px) {
     .tab-group:hover > .tab-flyout,
@@ -1424,6 +1442,9 @@
     backdrop-filter: none !important;
   }
   .reveal, .reveal-2, .reveal-3, .hero-in, .hero-pane { animation: none !important; opacity: 1 !important; }
+  [data-io-reveal],
+  [data-io-text],
+  [data-io-stagger] > * { animation: none !important; translate: none !important; scale: none !important; }
   .hero-copy, .hero-art { transform: none !important; }
   /* Scroll-revealed blocks sit at opacity 0 until they enter the viewport — and
      printing never scrolls. Without this a timeline or a reflection printed
@@ -1584,29 +1605,102 @@
     }
   }
 
-  /* page-to-page: the old page lets go, the new one settles in.
-     Triggered by src/app/_chrome/RouteTransition.tsx, which names the two sides `page-out` and
-     `page-in`. The old page only fades — it is leaving, and movement would pull the eye after it —
-     and the new one fades *and* settles the last few pixels, a beat later, so the two never read
-     as one image dissolving into another but as a page being put down on the table.
+  /* ---- page to page: the tide ----
+     src/app/_chrome/PageTransitions.tsx photographs the window before and after a navigation, and
+     the new page comes in behind a band of pale ink rising up the screen — old page above the band,
+     the new one below it, the band itself the paper wetting as it passes. The reference site's
+     transitions are textured wipes rather than cross-fades, and this is that idea in this site's own
+     material: ink, and the grain of paper.
 
-     The rest of the document (the footer, the fixed furniture) is the `root` snapshot, and only
-     cross-fades quickly; the header has its own name below and does not move at all. */
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
-    animation-duration: 0.2s;
+     Built from two masks and a background. Each snapshot is masked by a tall image with one ragged,
+     dithered edge (`--tide-new` / `--tide-old` on :root, rendered by scripts/tide-masks.mjs) and the two
+     masks move up together, the old one's edge a band's width above the new one's. Where both are
+     transparent, the image pair's own background shows: that is the band. Only the window is ever
+     photographed, so a transition costs the same on the home page as on an empty one.
+
+     The geometry, in the root snapshot's own box (the window): each mask image is 240vh tall with
+     its edge at the middle, 120vh from its top, so a mask at `mask-position-y: P` puts its edge at
+     P + 120vh. The new page's edge travels from 118vh (just below the window) to -2vh (just above
+     it); the old page's runs 16vh ahead of it — that gap is the band. */
+  html.page-vt::view-transition-group(root) { animation: none; }
+  html.page-vt::view-transition-image-pair(root) { background: var(--tide-band); }
+  html.page-vt::view-transition-old(root),
+  html.page-vt::view-transition-new(root) {
+    mix-blend-mode: normal;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: 100% 240vh;
+    mask-size: 100% 240vh;
+    animation-duration: 0.85s;
+    animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+    animation-fill-mode: both;
   }
-  ::view-transition-old(.page-out) {
-    animation: vt-out 0.16s ease both;
+  html.page-vt::view-transition-old(root) {
+    -webkit-mask-image: var(--tide-old);
+    mask-image: var(--tide-old);
+    animation-name: tide-old;
   }
-  ::view-transition-new(.page-in) {
-    animation: vt-in 0.42s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
+  html.page-vt::view-transition-new(root) {
+    -webkit-mask-image: var(--tide-new);
+    mask-image: var(--tide-new);
+    animation-name: tide-new;
   }
-  @keyframes vt-out {
-    to { opacity: 0; }
+  @keyframes tide-new {
+    from { -webkit-mask-position: 0 -2vh; mask-position: 0 -2vh; }
+    to { -webkit-mask-position: 0 -122vh; mask-position: 0 -122vh; }
   }
-  @keyframes vt-in {
-    from { opacity: 0; transform: translateY(14px); }
+  @keyframes tide-old {
+    from { -webkit-mask-position: 0 -18vh; mask-position: 0 -18vh; }
+    to { -webkit-mask-position: 0 -138vh; mask-position: 0 -138vh; }
+  }
+
+  /* ---- reveals, scrubbed by the scroll ----
+     The reveals used to be timed: a block entered the viewport, a class went on, and a 0.4s fade
+     played whatever the reader did next. Scroll a little and stop, and the block finished arriving
+     anyway; scroll back up and it stayed arrived. Tied to the scroll instead, a block is exactly as
+     far in as the page is scrolled — half-way down the entry, half-way there — and scrolling back
+     rewinds it. That is the reference site's whole manner, and with the smooth scroller driving the
+     scroll it is continuous rather than stepped.
+
+     Grid children also recede a little as they leave over the top, so one card hands over to the
+     next rather than being cut off by the window's edge; sections do not, because a tall section is
+     still being read when its top has gone.
+
+     `translate` and `scale`, never `transform`: the individual properties compose with a transform
+     instead of replacing it, so the hover lift and the press sink on the same cards keep working.
+     `scrub-out` fills forwards only — a backwards fill would hold it at its start for the whole
+     entry and overrule `scrub-in`. Where view timelines are not supported, none of this applies and
+     the timed reveals above do the job they always did. */
+  @supports (animation-timeline: view()) {
+    html.js:not(.a11y-motion) :is([data-io-text], [data-io-reveal], [data-io-stagger] > *) {
+      opacity: 1;
+      transform: none;
+      animation: scrub-in linear both;
+      animation-timeline: view();
+      /* A fixed distance for text, not a share of its height: a paragraph ten lines tall would
+         otherwise still be half-faded while its first lines were being read at the bottom of the
+         window. Every block of text is fully arrived 140px after its top comes into view. */
+      animation-range: entry 0px entry 140px;
+    }
+    html.js:not(.a11y-motion) [data-io-stagger] > * {
+      animation:
+        scrub-in linear both,
+        scrub-out linear forwards;
+      animation-timeline: view(), view();
+      /* Cards are short and seen whole, so theirs is proportional: in by the time 80% of the card
+         has come up, and receding only once a third of it has gone over the top. */
+      animation-range:
+        entry 0% entry 80%,
+        exit 35% exit 100%;
+    }
+    @keyframes scrub-in {
+      from { opacity: 0; translate: 0 44px; scale: 0.965; }
+      to { opacity: 1; translate: 0 0; scale: 1; }
+    }
+    @keyframes scrub-out {
+      from { opacity: 1; translate: 0 0; scale: 1; }
+      to { opacity: 0.35; translate: 0 -18px; scale: 0.985; }
+    }
   }
 
   /* header stays perfectly still while content transitions beneath it */
@@ -1889,6 +1983,12 @@ summary:active,
   filter: drop-shadow(0 2px 3px rgb(20 14 8 / 0.25));
 }
 
+
+/* The smooth scroller's own rules (src/app/_chrome/SmoothScroll.tsx), taken from Lenis's stylesheet
+   rather than imported whole: its `html.lenis, html.lenis body { height: auto }` would undo the
+   body's `min-h-full`, and every short page would lose its footer from the bottom of the window. */
+.lenis [data-lenis-prevent] { overscroll-behavior: contain; }
+.lenis.lenis-smooth iframe { pointer-events: none; }
 
 /* The tab strip's two mask stops, registered so they can be transitioned.
    `@property` cannot live inside a rule, which is why these sit apart from the `.tabbar`

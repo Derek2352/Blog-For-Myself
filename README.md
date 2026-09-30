@@ -491,13 +491,17 @@ site for the living design page (palette, type, the index-rail signature).
 - Type: Instrument Serif (display, sparingly) · Inter (body) · IBM Plex Mono (rail) — all
   self-hosted via Fontsource, with a Traditional-Chinese-safe fallback stack
   (PingFang TC / Microsoft JhengHei / Noto Sans TC).
-- Dark mode: class-driven, persisted, defaults to system preference, derived from the same
-  tokens.
-- **Motion as linkage:** client-side navigation (the App Router keeps the layout mounted) — pages glide,
-  a card's cover morphs into its entry page, the active tab underline slides between
-  tabs, timeline/monthly items fade in as they arrive, and prev/next launches a small
-  paper plane in the direction of travel. Everything stands down under
-  `prefers-reduced-motion`, and no interaction exceeds ~600ms.
+- Dark mode: class-driven and persisted, derived from the same tokens. Light is the default and
+  dark is opt-in through the toggle, which reveals the new theme as a circle spreading from the
+  button.
+- **Motion as linkage:** client-side navigation (the App Router keeps the layout mounted). A new
+  page comes in behind a rising band of pale ink while the header holds still and the active tab's
+  underline slides to its new tab (`src/app/_chrome/PageTransitions.tsx`; the tide's masks come from
+  `scripts/tide-masks.mjs`). With a mouse or trackpad the wheel glides instead of stepping (Lenis,
+  `src/app/_chrome/SmoothScroll.tsx`); touch keeps the device's own scrolling. Reveals are tied to
+  the scroll, so they rewind when you scroll back, and prev/next launches a small paper plane in the
+  direction of travel. Everything stands down under reduced motion — the OS setting or the site's
+  own toggle — and nothing runs longer than about a second.
 
 ## Deploy — Cloud Run, via Google AI Studio
 

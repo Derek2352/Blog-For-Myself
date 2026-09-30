@@ -32,7 +32,8 @@ import SearchShortcut from './_chrome/SearchShortcut';
 import Header from './_chrome/Header';
 import Footer from './_chrome/Footer';
 import Chrome from './_chrome/Chrome';
-import RouteTransition from './_chrome/RouteTransition';
+import PageTransitions from './_chrome/PageTransitions';
+import SmoothScroll from './_chrome/SmoothScroll';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -105,7 +106,12 @@ const themeBoot = `
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="h-full">
+    /* `data-scroll-behavior` is Next's switch for "this page scrolls smoothly, so turn that off
+       while you scroll a new route to its top". Without it the router's scroll-to-top ran as a
+       smooth scroll: measured, a page reached from far down the one before landed at y=10 and then
+       slid to y=66 — its check for "is the new page already in view?" ran before the smooth scroll
+       had moved anything, so it also scrolled the page under the header's scroll padding. */
+    <html lang="en" className="h-full" data-scroll-behavior="smooth">
       <head>
         <meta name="theme-color" id="theme-color" content="#f9f4ea" />
         <link rel="sitemap" href="/sitemap.xml" />
@@ -127,13 +133,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* polite announcement of the new page after client-side navigation */}
         <p className="sr-only" aria-live="polite" data-route-announce />
         <main id="main" className="flex-1" tabIndex={-1}>
-          <RouteTransition>{children}</RouteTransition>
+          {children}
         </main>
         <Footer />
         {/* The cat and its card. Rendered by the layout, which is what makes them persist across
             navigation — Astro needed `transition:persist` on each; the App Router needs nothing. */}
         <Chrome />
         <RouteEffects />
+        <PageTransitions />
+        <SmoothScroll />
         <SearchShortcut />
       </body>
     </html>

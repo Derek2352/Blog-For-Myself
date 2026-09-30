@@ -114,7 +114,7 @@ export default function TabBar({ tabs }: { tabs: NavCategory[] }) {
                   {tab.label}
                   {/* Astro gave this `transition:name="active-tab"` so the underline slid between
                       tabs during a view transition, and it stopped sliding when the App Router
-                      stopped running them. They run again (src/app/_chrome/RouteTransition.tsx), so
+                      stopped running them. They run again (src/app/_chrome/PageTransitions.tsx), so
                       the name is back — as `view-transition-name` on `.tab-underline` in
                       global.css — and the underline slides from the old tab to the new one. */}
                   {active && <span className="tab-underline" aria-hidden="true" />}
