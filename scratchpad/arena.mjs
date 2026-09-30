@@ -62,6 +62,7 @@
 import {
   BASE,
   deal,
+  dealsFor,
   fresh as context,
   launch,
   press,
@@ -70,6 +71,7 @@ import {
   report,
   snapDiff,
   snapshotOf,
+  stanceOdds,
   wants,
 } from './lib/fixture.mjs';
 
@@ -495,7 +497,10 @@ for (const theme of ['light', 'dark']) {
   await page.goto(BASE + '/?ink=20260802', { waitUntil: 'load' });
   await page.waitForTimeout(600);
 
-  const siege = await deal(page, wants.stance(['siege'], { claims: 'inView' }), { deals: 16, settle: 0 });
+  const siege = await deal(page, wants.stance(['siege'], { claims: 'inView' }), {
+    deals: dealsFor(stanceOdds(['siege'])),
+    settle: 0,
+  });
   const stance = siege.value ?? '';
   const spot = siege.value ? await reachClaim(page) : null;
   fixture('rolled a siege fight with somewhere to hold', siege, stance);

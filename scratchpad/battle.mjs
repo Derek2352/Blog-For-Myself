@@ -40,6 +40,7 @@ import {
   armAmmo,
   bounded,
   deal,
+  dealsFor,
   fresh as context,
   launch,
   overFor,
@@ -47,6 +48,7 @@ import {
   reachClaim,
   release as sharedRelease,
   report,
+  stanceOdds,
   throwSpot,
   wants,
 } from './lib/fixture.mjs';
@@ -103,13 +105,13 @@ const release = async (page) => {
 /**
  * The stance a section is about, dealt for rather than hoped for.
  *
- * Twenty-four deals is this file's own budget kept — §9.3 weights the roll, so a named stance takes
- * several fights to see. Every section here pins one, because 1.4's additions are *per stance*: only
+ * The budget is `dealsFor`'s — §9.3 weights the roll, so a named stance takes several fights to see,
+ * and this file's own twenty-four ran out on 0.015% of calls, just over the fleet's line. Every section here pins one, because 1.4's additions are *per stance*: only
  * siege sweeps, only ambush pins, only a trickster feints.
  */
 const stanceDeal = (page, want) =>
   deal(page, wants.stance([want], { claims: 'any' }), {
-    deals: 24,
+    deals: dealsFor(stanceOdds([want])),
     settle: 0,
     // **This file's own open and close, not the defaults.** `release` here carries a 200ms tail, and
     // without it a re-deal presses the toggle again while the previous intent is still standing — which

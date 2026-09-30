@@ -27,11 +27,13 @@ import {
   BASE,
   armAmmo,
   deal,
+  dealsFor,
   fresh as context,
   launch,
   press as sharedPress,
   release as sharedRelease,
   report,
+  stanceOdds,
   throwSpot,
   wants,
 } from './lib/fixture.mjs';
@@ -455,11 +457,12 @@ function spanStats(log, spans, guardMs = 400) {
 
 /**
  * A cat that leaps, on a board with something in reach — one deal, both conditions.
- * Fourteen deals is this file's own budget: an ambush is one of four weighted stances.
+ * The budget is `dealsFor`'s: an ambush is one of four weighted stances, and fourteen deals ran out
+ * on 0.6% of calls.
  */
 const leaper = (page, want = 'ambush') =>
   deal(page, wants.stance([want], { claims: 'inView' }), {
-    deals: 14,
+    deals: dealsFor(stanceOdds([want])),
     settle: 0,
     reopen: async () => {
       await release(page);

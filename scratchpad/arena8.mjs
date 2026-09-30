@@ -26,12 +26,14 @@ import {
   CARD_SAFE_FLEE_PX,
   armAmmo,
   deal,
+  dealsFor,
   fresh as context,
   launch,
   overFor,
   press as sharedPress,
   release as sharedRelease,
   report,
+  stanceOdds,
   wants,
 } from './lib/fixture.mjs';
 
@@ -64,7 +66,7 @@ const RIBBON = `document.querySelector('[data-ribbon]')?.textContent?.trim() ?? 
  */
 const leaper = (page, want = 'ambush') =>
   deal(page, wants.stance([want], { claims: 'any' }), {
-    deals: 14,
+    deals: dealsFor(stanceOdds([want])),
     settle: 0,
     reopen: async () => {
       await release(page);

@@ -71,6 +71,7 @@ export const IDLE_TRUCE_MS = 20_000; // :1560
 export const ROUND_BEAT_MS = 1500; // :920
 export const INITIAL_CLAIM_FRACTION = 0.55; // :160
 export const SIEGE_REGROW_MS = 9000; // §9.3's table
+export const SLEEPY_CHANCE = 0.08; // :682
 
 /** 1.0's measured counter-play distance: pounce range plus the cat's walk for the length of a hold. */
 export const SAFE_FLEE_PX = POUNCE_RANGE + STALK_SPEED * AGGRO_DESPERATE * (SCRUB_MS / 1000); // 423px
@@ -564,6 +565,42 @@ export async function overFor(page, ms = 8000) {
     )
     .catch(() => {});
   await page.waitForTimeout(120);
+}
+
+/**
+ * The chance that one deal rolls a stance in `list`.
+ *
+ * `pickStance` (src/lib/arena.ts) rolls sleepy first, at `SLEEPY_CHANCE`, and splits the rest evenly
+ * between ambush, siege and trickster — so any one waking stance is 0.92 / 3 ≈ 30.7% of fights.
+ * `tests/deal-budget.test.ts` rolls the real `pickStance` over many seeds and holds this to what it
+ * gets, so a budget built on these odds is built on the game's.
+ */
+export function stanceOdds(list) {
+  const waking = (1 - SLEEPY_CHANCE) / 3;
+  const each = { sleepy: SLEEPY_CHANCE, ambush: waking, siege: waking, trickster: waking };
+  return [...new Set(list)].reduce((p, stance) => p + (each[stance] ?? 0), 0);
+}
+
+/** How often a stance fixture may run out of deals on the dice alone: once in ten thousand calls. */
+export const DEAL_MISS = 1e-4;
+
+/**
+ * Enough deals that a fixture with per-deal odds `p` runs out less often than `miss`.
+ *
+ * Every deal is a fresh seed, so all `n` of them miss with probability (1 − p)^n, and a budget is a
+ * calculation rather than a feel. Fourteen, which `arena8` gave an ambush, runs out on 0.6% of calls;
+ * `arena8` makes three such calls a run, so one night in fifty-six was red on the dice alone. It
+ * happened on 2026-09-30 — "no deal in 14 offered one", on a commit that touched no game code — and
+ * a later call in the same run needed eleven. An ambush now gets 26. The expected number
+ * of deals is still 1/p, about three, so the extra ones are only spent on calls that would have
+ * failed.
+ *
+ * For a predicate that is a stance and a board that exists, which is every `wants.stance`. A fixture
+ * that also wants a *position* (`wants.all` with a placement) lands less often than its stance does,
+ * so these odds overstate it and it needs a budget of its own.
+ */
+export function dealsFor(p, miss = DEAL_MISS) {
+  return Math.ceil(Math.log(miss) / Math.log(1 - p));
 }
 
 /**

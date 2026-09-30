@@ -32,6 +32,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { dealsFor, stanceOdds } from '../scratchpad/lib/fixture.mjs';
 
 const DIR = 'scratchpad';
 const files = readdirSync(DIR)
@@ -287,6 +288,36 @@ describe('the harness fleet obeys its own rules', () => {
       offenders,
       `positions on the first claim in document order — use wants.spot()/deal():\n${offenders.join('\n')}`,
     ).toEqual([]);
+  });
+
+  /*
+   * Rule 6. A stance fixture's budget is a calculation, not a feel. `arena8` gave an ambush fourteen
+   * deals, which run out on 0.6% of calls; at three calls a run, one nightly in fifty-six went red on
+   * the dice alone, and on 2026-09-30 one did. `dealsFor(stanceOdds(...))` is the budget, and a
+   * hand-written number passes only if it is at least that.
+   *
+   * A stance list that is not written out — a `want` the caller passes in — is judged as a single
+   * waking stance, the most demanding case any caller here asks for. A budget that is itself a
+   * parameter is the caller's number and is not judged here; `wants.all` with a placement lands less
+   * often than its stance does, so it is left to its own measured budget.
+   */
+  it('gives every stance fixture enough deals that the dice alone cannot fail it', () => {
+    const offenders: string[] = [];
+    for (const [file, src] of source) {
+      for (const call of callsOf(src, 'deal')) {
+        const want = call.args[1] ?? '';
+        if (!want.startsWith('wants.stance(')) continue;
+        const budget = /\bdeals:\s*(\d+)\b/.exec(call.args[2] ?? '');
+        if (!budget) continue;
+        const named = /^wants\.stance\(\s*\[([^\]]*)\]/.exec(want)?.[1]?.split(',').map((s) => s.trim());
+        const list = named?.every((s) => /^'\w+'$/.test(s)) ? named.map((s) => s.slice(1, -1)) : ['ambush'];
+        const need = dealsFor(stanceOdds(list));
+        if (Number(budget[1]) < need) {
+          offenders.push(`${file}:${call.line}  ${budget[1]} deals for ${list.join('/')}, needs ${need}`);
+        }
+      }
+    }
+    expect(offenders, `a stance budget under dealsFor(stanceOdds(...)):\n${offenders.join('\n')}`).toEqual([]);
   });
 
   /*
