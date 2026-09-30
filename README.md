@@ -494,10 +494,13 @@ site for the living design page (palette, type, the index-rail signature).
 - Dark mode: class-driven and persisted, derived from the same tokens. Light is the default and
   dark is opt-in through the toggle, which reveals the new theme as a circle spreading from the
   button.
-- **Motion as linkage:** client-side navigation (the App Router keeps the layout mounted). A new
-  page comes in behind a rising band of pale ink while the header holds still and the active tab's
-  underline slides to its new tab (`src/app/_chrome/PageTransitions.tsx`; the tide's masks come from
-  `scripts/tide-masks.mjs`). With a mouse or trackpad the wheel glides instead of stepping (Lenis,
+- **Motion as linkage:** client-side navigation (the App Router keeps the layout mounted), and what
+  you clicked carries across into the page it opens: a card's cover grows into the entry's cover, a
+  tab or a room's name grows into the new page's title, while the old page recedes from that point
+  and the new page's opening lines arrive one after another. The header holds still and the active
+  tab's underline slides to its new tab (`src/app/_chrome/PageTransitions.tsx`; the pieces that can
+  travel carry `data-vt`, the spots they land on `data-vt-target`). With a mouse or trackpad the
+  wheel glides instead of stepping (Lenis,
   `src/app/_chrome/SmoothScroll.tsx`); touch keeps the device's own scrolling. Reveals are tied to
   the scroll, so they rewind when you scroll back, and prev/next launches a small paper plane in the
   direction of travel. Everything stands down under reduced motion — the OS setting or the site's

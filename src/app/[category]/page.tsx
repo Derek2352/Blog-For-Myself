@@ -251,7 +251,10 @@ export default async function CategoryPage({
                     </span>
                   )}
                 </span>
-                <span className="mt-1 block font-display text-[1.65rem] leading-tight transition-colors group-hover:text-accent">
+                <span
+                  className="mt-1 block font-display text-[1.65rem] leading-tight transition-colors group-hover:text-accent"
+                  data-vt="word"
+                >
                   {c.label}
                 </span>
                 <span className="mt-1 block text-sm text-muted">

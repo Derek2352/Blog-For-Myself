@@ -202,6 +202,7 @@ export default async function HomePage() {
                 <div
                   className={`frame mat card-cover overflow-hidden${heroDrawn ? '' : ' blurup'}`}
                   data-drawn={heroDrawn}
+                  data-vt="picture"
                 >
                   <img
                     src={hero.data.cover.src}
@@ -220,7 +221,7 @@ export default async function HomePage() {
                     {heroCode} · {monthKey(hero.data.date)} ·{' '}
                     {categoryBySlug(hero.data.category)?.label ?? hero.data.category}
                   </span>
-                  <span className="transition-colors group-hover:text-accent">
+                  <span className="transition-colors group-hover:text-accent" data-vt="word">
                     {hero.data.title} →
                   </span>
                 </figcaption>
@@ -302,7 +303,12 @@ export default async function HomePage() {
                       {c.logCount > 0 && ` · ${c.logCount} ${c.logCount === 1 ? 'log' : 'logs'}`}
                       {c.span && ` · ${c.span}`}
                     </p>
-                    <h3 className="mt-2 font-display text-[1.65rem] leading-[1.1] transition-colors group-hover:text-accent">
+                    {/* The room's name is what walks through the door: it grows into the title of
+                        the page this panel opens (src/app/_chrome/PageTransitions.tsx). */}
+                    <h3
+                      className="mt-2 font-display text-[1.65rem] leading-[1.1] transition-colors group-hover:text-accent"
+                      data-vt="word"
+                    >
                       {c.label}
                     </h3>
                     <p className="mt-2 text-sm leading-relaxed text-muted">{c.blurb}</p>

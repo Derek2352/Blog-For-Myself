@@ -101,19 +101,6 @@
   --cat-hud-bottom: 2.75rem;
 }
 
-/* The page tide's two masks (see "page to page: the tide" in the motion block): bitmaps rendered by
-   scripts/tide-masks.mjs from an SVG with one ragged edge, warped by low-frequency turbulence and
-   dithered against fine noise. Bitmaps, not the SVG, because the SVG's filters re-ran on every frame
-   of the transition (117ms a frame, measured) and a bitmap mask composites at 60fps. PageTransitions
-   loads them once the page is idle, so they are in hand before the first click. The band between
-   them is the ink at the palest register the wash uses. */
-:root {
-  --tide-new: url("/tide-new.png");
-  --tide-old: url("/tide-old.png");
-  --tide-band: color-mix(in srgb, var(--color-ink) 22%, var(--color-ground));
-}
-.dark { --tide-band: color-mix(in srgb, var(--color-ink) 14%, var(--color-ground)); }
-
 /* Dark theme: candlelit versions of the same tokens. */
 .dark {
   --color-ground: #1c1814;
@@ -1605,54 +1592,105 @@
     }
   }
 
-  /* ---- page to page: the tide ----
-     src/app/_chrome/PageTransitions.tsx photographs the window before and after a navigation, and
-     the new page comes in behind a band of pale ink rising up the screen — old page above the band,
-     the new one below it, the band itself the paper wetting as it passes. The reference site's
-     transitions are textured wipes rather than cross-fades, and this is that idea in this site's own
-     material: ink, and the grain of paper.
+  /* ---- page to page: something carries across ----
+     The reference site never cuts. One thing in each scene — the golden pear — carries across into
+     the next while everything around it falls away past the camera, and the new scene's words come
+     in once it has landed. src/app/_chrome/PageTransitions.tsx does the same with what was clicked:
+     it names the thing it lifts (`page-picture`, a card's cover; `page-word`, the words of a tab, a
+     room, a line) and, on the new page, the spot it lands on (the entry's cover, the page's title).
 
-     Built from two masks and a background. Each snapshot is masked by a tall image with one ragged,
-     dithered edge (`--tide-new` / `--tide-old` on :root, rendered by scripts/tide-masks.mjs) and the two
-     masks move up together, the old one's edge a band's width above the new one's. Where both are
-     transparent, the image pair's own background shows: that is the band. Only the window is ever
-     photographed, so a transition costs the same on the home page as on an empty one.
-
-     The geometry, in the root snapshot's own box (the window): each mask image is 240vh tall with
-     its edge at the middle, 120vh from its top, so a mask at `mask-position-y: P` puts its edge at
-     P + 120vh. The new page's edge travels from 118vh (just below the window) to -2vh (just above
-     it); the old page's runs 16vh ahead of it — that gap is the band. */
+     The page around it recedes: the old photograph scales up and fades from the point the thing
+     lifted off (`--vt-x`/`--vt-y`, set at the click), on top of the new page, which is already
+     standing behind it and coming forward. It is out of the way in 0.4s but keeps travelling
+     towards the camera for longer: both at once read as two pages superimposed, the fault the first
+     cut of this had at the half-way frame. A camera move, not a wipe. Only the window and those few
+     named things are photographed, so a transition costs the same on the richest page as on the
+     emptiest. */
   html.page-vt::view-transition-group(root) { animation: none; }
-  html.page-vt::view-transition-image-pair(root) { background: var(--tide-band); }
+  html.page-vt::view-transition-image-pair(root) { background: var(--color-ground); }
   html.page-vt::view-transition-old(root),
   html.page-vt::view-transition-new(root) {
     mix-blend-mode: normal;
-    -webkit-mask-repeat: no-repeat;
-    mask-repeat: no-repeat;
-    -webkit-mask-size: 100% 240vh;
-    mask-size: 100% 240vh;
-    animation-duration: 0.85s;
-    animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
-    animation-fill-mode: both;
+    transform-origin: var(--vt-x, 50%) var(--vt-y, 40%);
   }
   html.page-vt::view-transition-old(root) {
-    -webkit-mask-image: var(--tide-old);
-    mask-image: var(--tide-old);
-    animation-name: tide-old;
+    z-index: 1;
+    animation:
+      vt-recede-fade 0.4s cubic-bezier(0.4, 0, 0.7, 0.4) both,
+      vt-recede-scale 0.65s cubic-bezier(0.45, 0, 0.8, 0.35) both;
   }
   html.page-vt::view-transition-new(root) {
-    -webkit-mask-image: var(--tide-new);
-    mask-image: var(--tide-new);
-    animation-name: tide-new;
+    animation: vt-approach 0.9s cubic-bezier(0.2, 0.75, 0.25, 1) both;
   }
-  @keyframes tide-new {
-    from { -webkit-mask-position: 0 -2vh; mask-position: 0 -2vh; }
-    to { -webkit-mask-position: 0 -122vh; mask-position: 0 -122vh; }
+  @keyframes vt-recede-fade { to { opacity: 0; } }
+  @keyframes vt-recede-scale { to { scale: 1.07; } }
+  @keyframes vt-approach { from { scale: 0.97; } }
+
+  /* The things carried: above everything, header included, for the whole flight. Off the mark
+     promptly — the new page has already taken a beat to render — and a long glide in. Words are
+     lighter than a picture and move quicker: from a card, the title has to cross the cover on its
+     way up, and at the picture's pace it was still settling onto the heading when the summary
+     arrived under it. */
+  html.page-vt::view-transition-group(page-picture),
+  html.page-vt::view-transition-group(page-word) {
+    z-index: 2;
+    animation-duration: 0.9s;
+    animation-timing-function: cubic-bezier(0.45, 0, 0.15, 1);
   }
-  @keyframes tide-old {
-    from { -webkit-mask-position: 0 -18vh; mask-position: 0 -18vh; }
-    to { -webkit-mask-position: 0 -138vh; mask-position: 0 -138vh; }
+  html.page-vt::view-transition-group(page-word) {
+    animation-duration: 0.72s;
+    animation-timing-function: cubic-bezier(0.3, 0, 0.1, 1);
   }
+  /* A picture keeps its proportions as its window changes shape — the card's 16:10 into whatever the
+     entry's cover is — by filling the moving box and cropping, never stretching. It is the same image
+     at both ends, so the cross-fade under it is invisible except for the card's mat, which dissolves:
+     the print comes out of its mount. */
+  html.page-vt::view-transition-old(page-picture),
+  html.page-vt::view-transition-new(page-picture) {
+    height: 100%;
+    object-fit: cover;
+  }
+  /* The mat's wall shadow and outline sit outside its box; photographed with it, they would squeeze
+     the picture by their own size on the first frame. The card is leaving anyway. */
+  html.page-vt [data-vt-lift="picture"] {
+    box-shadow: none !important;
+    outline: none !important;
+  }
+  /* Words are small at one end and large at the other. Scaled up, the small ones blur, so they hand
+     over early to the large ones, which are sharp scaled down: kept whole and left-aligned the way
+     both ends set them. */
+  html.page-vt::view-transition-old(page-word),
+  html.page-vt::view-transition-new(page-word) {
+    height: 100%;
+    object-fit: contain;
+    object-position: left center;
+  }
+  html.page-vt::view-transition-old(page-word) { animation: vt-fade-out 0.35s ease-in both; }
+  html.page-vt::view-transition-new(page-word) { animation: vt-fade-in 0.45s 0.12s ease-out both; }
+  /* Lifted but with nowhere to land — a card's cover when the entry's would be off the bottom of a
+     phone's screen: it goes with its page. */
+  html.page-vt::view-transition-old(page-picture):only-child,
+  html.page-vt::view-transition-old(page-word):only-child {
+    animation:
+      vt-recede-fade 0.4s cubic-bezier(0.4, 0, 0.7, 0.4) both,
+      vt-recede-scale 0.65s cubic-bezier(0.45, 0, 0.8, 0.35) both;
+  }
+  @keyframes vt-fade-out { to { opacity: 0; } }
+  @keyframes vt-fade-in { from { opacity: 0; } }
+  /* A cover landing is the card's own image, already decoded; the blur-up's fade-in would dim it
+     mid-flight for no reason. */
+  html.page-vt .blurup img { transition: none; }
+
+  /* ...and the new page's opening lines come in one after another as it lands: the header's lines,
+     then whatever follows the header, each a beat after the last. The ones the carried things landed
+     on are not marked — they are already here. Set by PageTransitions on arrival and taken off once they are
+     all in. Above the scrubbed reveals below in weight, so a line that is also a reveal arrives this
+     way, then goes back to following the scroll where it already is. */
+  html.js.vt-arrive:not(.a11y-motion) [data-arrive] {
+    animation: vt-arrive 0.7s cubic-bezier(0.2, 0.75, 0.25, 1) both;
+    animation-delay: calc(0.28s + var(--arrive, 0) * 0.07s);
+  }
+  @keyframes vt-arrive { from { opacity: 0; translate: 0 20px; } }
 
   /* ---- reveals, scrubbed by the scroll ----
      The reveals used to be timed: a block entered the viewport, a class went on, and a 0.4s fade

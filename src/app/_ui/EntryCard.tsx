@@ -12,9 +12,12 @@
  * variants of a vector. Width and height still come from the loader's `measure()`, which is the
  * part that mattered: they are what reserve the card's space before the cover loads.
  *
- * `transition:name={`cover-${id}`}` is gone with the view transitions — the cover no longer morphs
- * into the entry page's hero. Noted here because the class it paired with, `.card-cover`, is still
- * doing the rest of the styling and looks untouched.
+ * **What travels when a card is clicked.** `data-vt="picture"` marks the cover and `data-vt="word"`
+ * the title: src/app/_chrome/PageTransitions.tsx lifts both, and the card comes apart into the page —
+ * the cover grows into the entry's cover and the title into its heading (the cover stays with the old
+ * page when the entry's would land off the bottom of the screen). Astro did the cover as
+ * `transition:name={`cover-${id}`}`, and it was lost with the move to the App Router until the site
+ * ran its own transitions.
  */
 import Link from 'next/link';
 import type { Entry } from '@/server/content';
@@ -61,6 +64,7 @@ export default function EntryCard({
           <div
             className="card-cover h-16 w-24 shrink-0 overflow-hidden rounded-(--radius-chip) border border-line"
             data-drawn={drawn}
+            data-vt="picture"
           >
             <img
               src={cover.src}
@@ -79,7 +83,10 @@ export default function EntryCard({
               <span aria-hidden="true"> · </span>
               <span aria-hidden="true">{code}</span>
             </p>
-            <h3 className="mt-0.5 font-display text-lg leading-snug transition-colors group-hover:text-accent">
+            <h3
+              className="mt-0.5 font-display text-lg leading-snug transition-colors group-hover:text-accent"
+              data-vt="word"
+            >
               {entry.data.title}
             </h3>
             <p className="mt-0.5 truncate text-sm text-muted">{entry.data.summary}</p>
@@ -94,7 +101,7 @@ export default function EntryCard({
        fit the longest role and the card pushes past the viewport on a phone. */
     <article className="card lift group min-w-0">
       <Link href={href} prefetch={false} className="block">
-        <div className="frame mat card-cover overflow-hidden" data-drawn={drawn}>
+        <div className="frame mat card-cover overflow-hidden" data-drawn={drawn} data-vt="picture">
           <img
             src={cover.src}
             alt=""
@@ -129,7 +136,10 @@ export default function EntryCard({
             {code}
           </span>
         </p>
-        <h3 className="mt-1.5 font-display text-[1.35rem] leading-tight transition-colors group-hover:text-accent">
+        <h3
+          className="mt-1.5 font-display text-[1.35rem] leading-tight transition-colors group-hover:text-accent"
+          data-vt="word"
+        >
           <span className="link-draw">{entry.data.title}</span>
         </h3>
         <p className="mt-1.5 text-sm leading-relaxed text-muted">{entry.data.summary}</p>

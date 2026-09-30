@@ -200,7 +200,7 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
           /* The poster inside is the cover, so a filmed entry whose photographs have not landed is
              still showing a plate — `data-drawn` rides on the wrapper and the rule reaches the
              poster through it, with no need for VideoEmbed to learn what an entry id is. */
-          <div className="mt-8" data-drawn={drawn}>
+          <div className="mt-8" data-drawn={drawn} data-vt-target="picture">
             <VideoEmbed
               url={entry.data.video}
               title={entry.data.title}
@@ -218,9 +218,13 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
               `data-drawn` — died on "clipped area is either empty or outside the resulting image".
               One shape for all three cases is both simpler and the only one the measuring
               instruments can see. */}
+          {/* `data-vt-target`: where a clicked card's cover lands (src/app/_chrome/PageTransitions.tsx).
+              On the frame, not the image, so what flies in is the picture in its window — the same
+              shape the card showed it in. */}
           <div
             className={`frame overflow-hidden${drawn ? '' : ' blurup'}`}
             data-drawn={drawn}
+            data-vt-target="picture"
           >
           {/* wide covers run full width; tall/square ones hang matted at a capped height */}
           <img
