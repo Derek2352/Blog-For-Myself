@@ -170,7 +170,7 @@ export default async function HomePage() {
                 Numbers by day, frames by night.
               </span>
             </h1>
-            <p className="hero-in mt-5 max-w-[48ch] text-lede text-muted" data-d="3">
+            <p className="hero-in mt-5 max-w-(--measure-tight) text-lede text-muted" data-d="3">
               I study financial analysis &amp; FinTech, and I make AI-animated film and photographs
               — usually both at once. Each entry below is the whole story, not the one-line CV
               version.
@@ -306,7 +306,7 @@ export default async function HomePage() {
                     {/* The room's name is what walks through the door: it grows into the title of
                         the page this panel opens (src/app/_chrome/PageTransitions.tsx). */}
                     <h3
-                      className="mt-2 font-display text-[1.65rem] leading-[1.1] transition-colors group-hover:text-accent"
+                      className="mt-2 font-display text-heading transition-colors group-hover:text-accent"
                       data-vt="word"
                     >
                       {c.label}

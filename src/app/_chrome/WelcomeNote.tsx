@@ -20,8 +20,8 @@ export default function WelcomeNote() {
   return (
     <dialog id="welcome-note" className="welcome" aria-labelledby="welcome-h">
       <p className="kicker">first visit · a quick map</p>
-      <h2 id="welcome-h" className="mt-2 font-display text-3xl leading-tight">Glad you’re here.</h2>
-      <p className="mt-3 text-[0.95rem] leading-relaxed text-muted">
+      <h2 id="welcome-h" className="mt-2 font-display text-section">Glad you’re here.</h2>
+      <p className="mt-3 text-body text-muted">
         Three ways in: each tab mixes big projects with small monthly notes, the timeline runs
         everything in one line, and the honest reflection at the end of each entry is the part
         worth staying for.

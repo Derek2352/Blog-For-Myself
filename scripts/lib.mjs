@@ -5,6 +5,11 @@
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import { stdin, stdout } from 'node:process';
+import { THEMES, resolve } from '../src/design/tokens.mjs';
+import { oklchToHex } from '../src/design/color.mjs';
+
+/** A light-theme colour as hex, from the design system's source (src/design/tokens.mjs). */
+const tokenHex = (role) => oklchToHex(resolve(THEMES.light[role]));
 
 /**
  * Minimal prompt helper. Unlike readline/promises it buffers lines that
@@ -307,7 +312,7 @@ export function placeholderSVG({ seed = '', hue, width = 1600, height = 1000 }) 
   // an empty box rather than a drawn cell — the registration marks are the whole reason it looks
   // deliberate, so they keep roughly the contrast the old sand hairline had against its ground.
   const lineCol = `hsl(${h} 22% 58%)`;
-  const accent = '#8e2f45'; // --color-accent, ledger wine
+  const accent = tokenHex('accent'); // --color-accent, ledger wine
   // Axis 2 — the grid's pitch, which replaced its phase. Phase slid the lines inside
   // their own cell and changed nothing anyone could see; pitch changes the texture of
   // the entire field. The four values are geometric rather than evenly spaced because

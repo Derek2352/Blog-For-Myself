@@ -128,7 +128,7 @@ export default async function CategoryPage({
           </p>
           <PageTitle>{category.label}</PageTitle>
           {category.blurb && (
-            <p className="mt-4 max-w-[60ch] text-lede text-muted">{category.blurb}</p>
+            <p className="mt-4 max-w-(--measure-lede) text-lede text-muted">{category.blurb}</p>
           )}
           {/* Same rule as the browse cards on the home page: a count of nothing is not a fact
               worth printing. Every category reads "0 logs" today, so this line spent half its
@@ -157,7 +157,7 @@ export default async function CategoryPage({
             </div>
           ) : (
             <div className="max-w-prose">
-              <p className="font-display text-2xl italic leading-snug">Nothing here yet.</p>
+              <p className="font-display text-quote italic">Nothing here yet.</p>
               <p className="mt-3 text-sm leading-relaxed text-muted">
                 This part of the site is still being filled in. The{' '}
                 <Link href="/timeline/" className="text-accent hover:underline">
@@ -252,7 +252,7 @@ export default async function CategoryPage({
                   )}
                 </span>
                 <span
-                  className="mt-1 block font-display text-[1.65rem] leading-tight transition-colors group-hover:text-accent"
+                  className="mt-1 block font-display text-heading transition-colors group-hover:text-accent"
                   data-vt="word"
                 >
                   {c.label}

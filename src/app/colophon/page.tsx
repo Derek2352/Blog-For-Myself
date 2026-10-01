@@ -10,6 +10,7 @@
  * Recorded here rather than in a task list, because this is the file that would be lying.
  */
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import PageTitle from '../_ui/PageTitle';
 import { categories } from '@/data/categories';
 import { resolveWash } from '@/lib/wash';
@@ -51,7 +52,7 @@ export default function ColophonPage() {
 
         <section className="mt-12" aria-labelledby="idea-h">
           <p className="kicker">the idea</p>
-          <h2 id="idea-h" className="mt-1 font-display text-2xl">
+          <h2 id="idea-h" className="mt-1 font-display text-heading">
             Frames and figures
           </h2>
           <div className="prose-reflection mt-4">
@@ -86,14 +87,19 @@ export default function ColophonPage() {
 
         <section className="mt-12" aria-labelledby="palette-h">
           <p className="kicker">palette</p>
-          <h2 id="palette-h" className="mt-1 font-display text-2xl">
+          <h2 id="palette-h" className="mt-1 font-display text-heading">
             Colour, from the darkroom
           </h2>
           <p className="mt-3 max-w-prose text-sm leading-relaxed text-muted">
             Rendered live from the design tokens — flip the theme toggle and this page re-grades
             itself. Ivory paper like afternoon light, espresso ink, a wine-red librarian&apos;s
             stamp, photo-chemical amber. Warm on purpose — and deliberately not the default
-            cream-and-terracotta or black-and-acid-green looks.
+            cream-and-terracotta or black-and-acid-green looks. The whole system — every ramp, role,
+            size, shadow and curve, with its contrast measured — is on{' '}
+            <Link href="/system/" prefetch={false} className="text-accent hover:underline">
+              its own page
+            </Link>
+            .
           </p>
           <ul className="mt-5 grid list-none gap-3 p-0 sm:grid-cols-2">
             {swatches.map((s) => (
@@ -114,7 +120,7 @@ export default function ColophonPage() {
 
         <section className="mt-12" aria-labelledby="washes-h">
           <p className="kicker">light</p>
-          <h2 id="washes-h" className="mt-1 font-display text-2xl">
+          <h2 id="washes-h" className="mt-1 font-display text-heading">
             One warm light, tab by tab
           </h2>
           <p className="mt-3 max-w-prose text-sm leading-relaxed text-muted">
@@ -135,7 +141,7 @@ export default function ColophonPage() {
                 style={{ ['--hue' as string]: String(w.hue), ['--wash-a' as string]: '0.16' }}
               >
                 <p className="rail">hue {w.hue}</p>
-                <p className="mt-1 font-display text-xl">{w.label}</p>
+                <p className="mt-1 font-display text-heading">{w.label}</p>
               </li>
             ))}
           </ul>
@@ -143,13 +149,13 @@ export default function ColophonPage() {
 
         <section className="mt-12" aria-labelledby="type-h">
           <p className="kicker">type</p>
-          <h2 id="type-h" className="mt-1 font-display text-2xl">
+          <h2 id="type-h" className="mt-1 font-display text-heading">
             Three voices
           </h2>
           <div className="mt-5 space-y-4">
             <div className="panel p-5">
               <p className="rail">Instrument Serif — display, used sparingly</p>
-              <p className="mt-2 font-display text-3xl leading-snug">
+              <p className="mt-2 font-display text-section">
                 The director’s cut of a CV, <em>with feelings kept in</em>.
               </p>
             </div>
@@ -173,7 +179,7 @@ export default function ColophonPage() {
 
         <section className="mt-12" aria-labelledby="model-h">
           <p className="kicker">under the hood</p>
-          <h2 id="model-h" className="mt-1 font-display text-2xl">
+          <h2 id="model-h" className="mt-1 font-display text-heading">
             Content is just files
           </h2>
           <div className="prose-reflection mt-4">

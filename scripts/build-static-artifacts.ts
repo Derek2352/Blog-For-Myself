@@ -112,6 +112,7 @@ const urls = [
   '/',
   '/about/',
   '/colophon/',
+  '/system/',
   '/timeline/',
   '/monthly/',
   '/search/',

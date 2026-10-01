@@ -75,7 +75,7 @@ export default async function TimelinePage() {
                     data-year={row.year}
                     className="scroll-mt-24 pb-1 pt-8 first:pt-0"
                   >
-                    <p className="font-display text-3xl text-muted" aria-label={`Year ${row.year}`}>
+                    <p className="font-display text-section text-muted" aria-label={`Year ${row.year}`}>
                       {row.year}
                     </p>
                   </li>

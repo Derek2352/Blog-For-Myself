@@ -23,7 +23,7 @@ export default function TimelineItem({ entry, code }: { entry: Entry; code: stri
         <p className="mt-0.5 text-accent">{code}</p>
       </div>
       <div className="min-w-0">
-        <h3 className="font-display text-xl leading-snug sm:text-2xl">
+        <h3 className="font-display text-heading">
           <Link href={entryHref(entry)} prefetch={false} className="transition-colors hover:text-accent">
             {entry.data.title}
           </Link>

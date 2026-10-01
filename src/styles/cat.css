@@ -291,7 +291,7 @@
     animation: cat-ear 5.5s ease-in-out infinite;
   }
   #site-cat.startled .cat-svg {
-    animation: cat-hop 0.35s cubic-bezier(0.2, 0.6, 0.2, 1);
+    animation: cat-hop 0.35s var(--ease-snap);
   }
   #site-cat.chasing .leg-a,
   #site-cat.chasing .leg-b,
@@ -302,7 +302,7 @@
     animation-duration: 0.55s;
   }
   #site-cat.pounce .cat-svg {
-    animation: cat-pounce 0.45s cubic-bezier(0.2, 0.6, 0.2, 1);
+    animation: cat-pounce 0.45s var(--ease-snap);
   }
 
   /* ---- affection: the idle repertoire widens as the cat warms to you ---- */
@@ -343,15 +343,15 @@
     animation: treat-taken 0.42s ease-out forwards;
   }
   #cat-score {
-    transition: opacity 0.45s ease;
+    transition: opacity var(--dur-move) ease;
   }
   .cat-caption {
-    transition: color 0.45s ease;
+    transition: color var(--dur-move) ease;
   }
   .cat-paw {
     transition:
-      background-color 0.35s ease,
-      transform 0.35s cubic-bezier(0.2, 0.6, 0.2, 1);
+      background-color var(--dur-move) ease,
+      transform var(--dur-move) var(--ease-snap);
   }
   .cat-paw.just-got {
     transform: scale(1.5);

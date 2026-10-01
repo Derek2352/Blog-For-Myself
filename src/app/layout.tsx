@@ -19,7 +19,9 @@
 import type { Metadata, Viewport } from 'next';
 import '@fontsource/instrument-serif';
 import '@fontsource/instrument-serif/400-italic.css';
-import '@fontsource-variable/inter';
+/* Inter's optical-size build: small labels open up and display sizes tighten on their own (see TYPE in
+   src/design/tokens.mjs). Same family name, so nothing that names "Inter Variable" changes. */
+import '@fontsource-variable/inter/opsz.css';
 import '@fontsource/ibm-plex-mono';
 import '@fontsource/ibm-plex-mono/500.css';
 import '@/styles/global.css';

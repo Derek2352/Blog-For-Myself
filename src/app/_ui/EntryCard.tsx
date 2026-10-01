@@ -137,7 +137,7 @@ export default function EntryCard({
           </span>
         </p>
         <h3
-          className="mt-1.5 font-display text-[1.35rem] leading-tight transition-colors group-hover:text-accent"
+          className="mt-1.5 font-display text-heading transition-colors group-hover:text-accent"
           data-vt="word"
         >
           <span className="link-draw">{entry.data.title}</span>

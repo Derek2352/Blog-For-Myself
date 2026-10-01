@@ -43,7 +43,7 @@ const SLUG = 'ah-gaap-alipayhk-ux-design-2026';
 const SEL = '[data-drawn="art"] img';
 
 /** `--color-surface` on `.dark` — the card the cover sits in. */
-const DARK_SURFACE = [39, 33, 25]; // #272119
+const DARK_SURFACE = [38, 33, 25]; // #262119 — paper.925, src/design/tokens.mjs
 /** `--color-surface` on the light theme. */
 const LIGHT_SURFACE = [255, 252, 245]; // #fffcf5
 

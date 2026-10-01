@@ -35,7 +35,7 @@ export default async function Header() {
       <header className="border-b border-line">
         <div className="wrap flex flex-wrap items-center gap-x-6 gap-y-2 pb-2 pt-4">
           <Link href="/" className="group mr-auto no-underline">
-            <span className="block font-display text-[1.55rem] leading-none transition-colors group-hover:text-accent">
+            <span className="block font-display text-heading leading-none transition-colors group-hover:text-accent">
               Derek Yung
             </span>
             <span className="rail mt-1 block">{site.mastheadNote}</span>

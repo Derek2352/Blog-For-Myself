@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* Every colour, type role, space, radius, shadow and easing curve: generated from src/design/tokens.mjs. */
+@import "./tokens.css";
 /* The ambient cat's rules, lifted out of SiteCat.astro's scoped <style> so both builds share one
    copy. Safe as global: every selector in it is anchored to the cat's own ids and classes. */
 @import "./cat.css";
@@ -10,77 +12,12 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ------------------------------------------------------------------ *
- * Design tokens — the single source of truth.
- * "Contact sheet, annotated" system, graded warm: ivory paper, espresso
- * ink, a ledger-wine stamp (deliberately not terracotta), photo-chemical
- * amber, and a quiet mono index rail. Afternoon light, not gallery glare.
- * All components consume these; no ad-hoc hex in markup.
+ * Design tokens are not defined here. src/design/tokens.mjs is the one definition — the palette as
+ * OKLCH ramps with a semantic layer per theme, the type roles, space, radius, elevation and motion —
+ * and tokens.css (imported above) is generated from it by scripts/build-tokens.mjs. This file only
+ * uses them: tests/design-hygiene.test.ts fails on a raw colour or easing curve anywhere in it.
  * ------------------------------------------------------------------ */
 @theme {
-  /* color */
-  --color-ground: #f9f4ea;   /* page — warm ivory, afternoon paper */
-  --color-surface: #fffcf5;  /* cards, panels — cream white */
-  --color-ink: #2a241e;      /* primary text — espresso */
-  --color-muted: #6e6257;    /* secondary text — warm taupe, AA on ground */
-  --color-line: #e8e0d2;     /* hairlines, frames, ticks — sand */
-  --color-accent: #8e2f45;   /* ledger wine — links, active, focus */
-  --color-accent-ink: #ffffff; /* text on accent */
-  --color-signal: #e8a13a;   /* photo-chemical amber — markers, badges (bg use) */
-  --color-signal-text: #8a5a14; /* amber legible as text on light ground */
-  /**
-   * Sage secondary — taxonomy, as distinct from action and from attention.
-   *
-   * Adopted from the Next.js drops, which proposed `#697b58`. Kept at that hue (91°) and
-   * saturation and taken two percent darker, because `#697b58` measures **4.19:1** on this
-   * ground: fine for a border or a dot, below AA for text, and it would have been the only
-   * sub-AA colour on a site whose others run 5.4–7.8. This is 4.55 on ground and 4.86 on
-   * surface.
-   *
-   * It earns a slot because the palette had two roles and three jobs. Wine says *this is
-   * interactive*; amber says *notice this*. Category labels, tags and log kinds are none of
-   * those — they say *this is what sort of thing it is*, and they were borrowing muted grey or
-   * amber for want of anywhere better. Three accents is usually one too many; three accents with
-   * one meaning each is a palette.
-   */
-  --color-secondary: #647554;
-
-  /* type */
-  --font-display: "Instrument Serif", "Iowan Old Style", Georgia, "Noto Serif TC", "Songti TC", serif;
-  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", monospace;
-
-  /* shape — soft, unhurried corners */
-  --radius-card: 0.875rem;
-  --radius-chip: 0.5rem;
-
-  /* ---- fluid type: one continuous scale instead of three stepped ones ----
-     The display sizes used to jump at Tailwind's breakpoints — the hero's name went 2.25rem →
-     3rem → 3.4rem, a page title 2.25rem → 3rem at 640 exactly — so a window dragged from phone to
-     desktop width re-set its headlines in three visible lurches, and every width between two
-     breakpoints got the smaller one. `clamp()` makes the size a function of the width: each of
-     these has a floor it never drops below on a phone, a ceiling it stops at on a large screen, and
-     a straight line between them.
-
-     The floors are the phone sizes that were already there, or a little above them; the ceilings
-     are where Instrument Serif, which is narrow, still reads as a headline rather than a poster.
-     Defined as `--text-*` so Tailwind turns each into a utility (`text-display`, `text-title`, …)
-     carrying its own line-height — a display size and its leading are one decision. */
-  --text-display: clamp(2.6rem, 1.85rem + 3.2vw, 4.25rem);
-  --text-display--line-height: 1.02;
-  --text-turn: clamp(1.45rem, 1.12rem + 1.35vw, 2.15rem);
-  --text-turn--line-height: 1.15;
-  --text-title: clamp(2.25rem, 1.7rem + 2.3vw, 3.5rem);
-  --text-title--line-height: 1.06;
-  --text-section: clamp(1.75rem, 1.4rem + 1.4vw, 2.5rem);
-  --text-section--line-height: 1.1;
-  --text-lede: clamp(1.0625rem, 0.98rem + 0.4vw, 1.25rem);
-  --text-lede--line-height: 1.62;
-  /* The gap between a landing page's sections, on the same principle: 4rem on a phone, where a
-     screen of air between two headings is a screen of scrolling, up to 7rem on a desktop, where
-     it is what lets each section be seen as one thing. It was a fixed mt-20 before, with an mt-6
-     between the hero and the first section — two different rhythms on one page. */
-  --spacing-section: clamp(4rem, 2.5rem + 5vw, 7rem);
-
   /* ---- the treats HUD's offset from the bottom edge ----
      `#cat-hud` in SiteCat.astro is fixed to the bottom-left corner; this clears the cat's
      own 30px band so the chip never sits on the animal.
@@ -101,20 +38,6 @@
   --cat-hud-bottom: 2.75rem;
 }
 
-/* Dark theme: candlelit versions of the same tokens. */
-.dark {
-  --color-ground: #1c1814;
-  --color-surface: #272119;
-  --color-ink: #ece4d6;
-  --color-muted: #a89b89;
-  --color-line: #382f24;
-  --color-accent: #efa397;
-  --color-accent-ink: #211a13;
-  --color-signal: #e8a13a;
-  --color-signal-text: #e8a13a;
-  /* The drops' own dark value, which needed no adjustment: 7.84 on the dark ground. */
-  --color-secondary: #a4b28c;
-}
 
 @layer base {
   /* ---- accessibility mode: user toggles, applied to <html> ---- */
@@ -170,19 +93,20 @@
     }
   }
 
-  :root {
-    color-scheme: light;
-    /* strength of the single page wash — kept whisper-quiet so text contrast
-       stays untouched and photography leads */
-    --wash-a: 0.1;
-  }
-  .dark {
-    color-scheme: dark;
-    --wash-a: 0.14;
-  }
+  :root { color-scheme: light; }
+  .dark { color-scheme: dark; }
 
+  /* The paper, and its grain (GRAIN in src/design/tokens.mjs). The tile carries strong speckle and a
+     veil of the ground's own colour lies over it, letting only --grain-a of it through — so one image
+     serves both themes, and its strength is a token rather than a re-drawn file. On the canvas, so it
+     scrolls with the page the way paper does; sheets laid on the page (cards, panels, mats) are opaque
+     and lie on it smooth. */
   html {
+    scrollbar-color: var(--color-line-strong) transparent;
+    --grain-veil: color-mix(in srgb, var(--color-ground) calc((1 - var(--grain-a)) * 100%), transparent);
     background-color: var(--color-ground);
+    background-image: linear-gradient(var(--grain-veil), var(--grain-veil)), url("/grain.png");
+    background-size: 100% 100%, var(--grain-tile) var(--grain-tile);
     scroll-padding-top: 5rem;
   }
 
@@ -207,10 +131,17 @@
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--color-focus);
     outline-offset: 2px;
-    border-radius: 3px;
+    border-radius: var(--radius-hair);
   }
+
+  /* Typesetting defaults. Headlines balance their lines, so a two-line title is two near-equal lines
+     rather than a long one and an orphan; running text avoids a lone last word. Inter is the optical-
+     size build, so its small sizes open up and its large ones tighten on their own. */
+  :is(h1, h2, h3, h4) { text-wrap: balance; }
+  :is(p, li, blockquote, figcaption, dd) { text-wrap: pretty; }
+  blockquote { hanging-punctuation: first last; }
 
   img { max-width: 100%; height: auto; }
 }
@@ -231,11 +162,13 @@
     .tap-safe { min-width: 44px; min-height: 44px; }
   }
 
-  /* soft panel: the default resting place for cards */
+  /* A panel is a sheet lying on the page: a hairline, the surface's paper, a contact shadow so it
+     sits *on* the grained ground rather than being printed into it, and a lit top edge. */
   .panel {
     border: 1px solid var(--color-line);
     background: var(--color-surface);
     border-radius: var(--radius-card);
+    box-shadow: var(--elev-sheet), var(--edge-light);
   }
 
   /* ---- the hero's glass pane ----
@@ -257,22 +190,14 @@
     /* A hairline, plus a brighter top edge. The lit edge is what actually sells
        a pane of glass — without it a translucent fill reads as a flat tint. */
     border: 1px solid color-mix(in srgb, var(--color-line) 70%, transparent);
-    border-top-color: color-mix(in srgb, #fff 55%, transparent);
-    /* Float: one wide soft shadow for the lift, one tight one for the contact
-       edge, and an inset highlight so the top surface catches light. */
-    box-shadow:
-      0 24px 48px -28px rgb(60 44 28 / 0.28),
-      0 2px 6px -3px rgb(60 44 28 / 0.10),
-      inset 0 1px 0 0 rgb(255 255 255 / 0.35);
+    border-top-color: color-mix(in srgb, var(--color-paper-0) 55%, transparent);
+    /* Float — a pane over the page — plus a lit top edge, so the top surface catches light. */
+    box-shadow: var(--elev-float), var(--edge-light);
   }
   html.dark .glass {
     background: color-mix(in srgb, var(--color-ground) 52%, transparent);
     border-color: color-mix(in srgb, var(--color-ink) 16%, transparent);
     border-top-color: color-mix(in srgb, var(--color-ink) 30%, transparent);
-    box-shadow:
-      0 24px 52px -26px rgb(0 0 0 / 0.55),
-      0 2px 6px -3px rgb(0 0 0 / 0.35),
-      inset 0 1px 0 0 rgb(255 255 255 / 0.07);
   }
   /* Without backdrop-filter there is no frosting, so the fill has to do the
      whole job of separating text from ink. */
@@ -315,8 +240,8 @@
     --gut: 0.6rem;
     --rail: 1.45rem;
     --film-h: calc(var(--fw) * 0.625 + var(--rail) * 2);
-    --film: #231d17;
-    --hole: var(--color-ground);
+    --film: var(--color-film);
+    --hole: var(--color-film-hole);
     --edge: var(--color-signal);
     position: relative;
     height: calc(var(--film-h) * 1.34);
@@ -328,10 +253,6 @@
   /* In the dark the film is blacker than the room and the perforations are lit from behind, which is
      how film looks on a light table — and why the frames are *not* given the drawn-cover filter here:
      a transparency glows. */
-  html.dark .reel {
-    --film: #0d0a08;
-    --hole: #4a3e31;
-  }
   .reel-strip {
     position: absolute;
     left: -6%;
@@ -341,13 +262,13 @@
     margin-top: calc(var(--film-h) / -2);
     background: var(--film);
     box-shadow:
-      0 1px 0 rgb(255 255 255 / 0.05) inset,
-      0 22px 40px -26px rgb(30 20 10 / 0.7);
+      inset 0 1px 0 color-mix(in srgb, var(--color-paper-0) 5%, transparent),
+      0 22px 40px -26px color-mix(in srgb, var(--color-shadow) 70%, transparent);
     transform: translateY(var(--lift, 0px)) rotate(var(--tilt, 0deg));
   }
   html.dark .reel-near {
     box-shadow:
-      0 1px 0 rgb(255 255 255 / 0.04) inset,
+      inset 0 1px 0 color-mix(in srgb, var(--color-paper-0) 4%, transparent),
       0 0 46px -14px color-mix(in srgb, var(--color-signal) 30%, transparent);
   }
   .reel-near { --tilt: -2.4deg; --lift: 6%; z-index: 2; }
@@ -392,7 +313,7 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-    border-radius: 2px;
+    border-radius: var(--radius-hair);
   }
   /* Perforations: seven to a frame, top and bottom, in the rebate's outer half. */
   .reel-frame::before,
@@ -412,7 +333,7 @@
     left: 0.15rem;
     top: calc(100% + 0.16rem);
     font-family: var(--font-mono);
-    font-size: 0.5rem;
+    font-size: calc(var(--text-micro) * 0.8);
     line-height: 1;
     letter-spacing: 0.14em;
     color: var(--edge);
@@ -435,14 +356,14 @@
     background: color-mix(in srgb, var(--color-surface) 70%, transparent);
     color: var(--color-muted);
     transition:
-      color 0.2s ease,
-      border-color 0.2s ease,
-      box-shadow 0.3s ease;
+      color var(--dur-quick) ease,
+      border-color var(--dur-quick) ease,
+      box-shadow var(--dur-brisk) ease;
   }
   .icon-btn:hover {
     color: var(--color-ink);
     border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-line));
-    box-shadow: 0 8px 18px -12px rgb(60 44 28 / 0.5);
+    box-shadow: var(--elev-lift);
   }
 
   /* ---- an underline that draws itself ----
@@ -455,7 +376,7 @@
     background: linear-gradient(currentColor, currentColor) 0 100% / 0 1px no-repeat;
     -webkit-box-decoration-break: clone;
     box-decoration-break: clone;
-    transition: background-size 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: background-size var(--dur-move) var(--ease-settle);
   }
   a:hover .link-draw,
   .group:hover .link-draw,
@@ -464,7 +385,7 @@
   .footer-nav a {
     background: linear-gradient(currentColor, currentColor) 0 100% / 0 1px no-repeat;
     background-origin: content-box;
-    transition: background-size 0.45s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s ease;
+    transition: background-size var(--dur-move) var(--ease-settle), color var(--dur-quick) ease;
   }
   .footer-nav a:hover { background-size: 100% 1px; color: var(--color-accent); }
 
@@ -501,7 +422,7 @@
     background: linear-gradient(
       105deg,
       transparent 38%,
-      rgb(255 255 255 / var(--sheen, 0.22)) 50%,
+      color-mix(in srgb, var(--color-paper-0) calc(var(--sheen, 0.22) * 100%), transparent) 50%,
       transparent 62%
     );
     transform: translateX(-130%);
@@ -525,16 +446,9 @@
   .mat {
     border: clamp(6px, 0.3rem + 0.35vw, 12px) solid var(--color-surface);
     outline: 1px solid var(--color-line);
-    box-shadow:
-      0 1px 2px rgb(60 44 28 / 0.08),
-      0 14px 26px -20px rgb(60 44 28 / 0.4);
+    box-shadow: var(--elev-rest);
   }
-  html.dark .mat {
-    outline-color: color-mix(in srgb, var(--color-ink) 12%, transparent);
-    box-shadow:
-      0 1px 2px rgb(0 0 0 / 0.35),
-      0 16px 28px -18px rgb(0 0 0 / 0.7);
-  }
+  html.dark .mat { outline-color: color-mix(in srgb, var(--color-ink) 12%, transparent); }
 
   /* Lit: a pool of warm light falls on the wall above a work as you come to it — the picture light
      of a gallery. The palette's amber, faint on paper and stronger in the dark theme, which is the
@@ -554,7 +468,7 @@
     pointer-events: none;
     background: radial-gradient(
       ellipse 60% 70% at 50% 0%,
-      hsl(38 90% 62% / var(--spot, 0.2)),
+      color-mix(in srgb, var(--color-signal) calc(var(--spot, 0.2) * 100%), transparent),
       transparent 72%
     );
     opacity: 0;
@@ -595,10 +509,10 @@
     font-weight: 500;
     line-height: 1;
     transition:
-      background-color 0.2s ease,
-      border-color 0.2s ease,
-      color 0.2s ease,
-      box-shadow 0.3s ease;
+      background-color var(--dur-quick) ease,
+      border-color var(--dur-quick) ease,
+      color var(--dur-quick) ease,
+      box-shadow var(--dur-brisk) ease;
   }
   .cta-primary {
     background: var(--color-accent);
@@ -606,7 +520,7 @@
     box-shadow: 0 12px 24px -16px color-mix(in srgb, var(--color-accent) 90%, transparent);
   }
   .cta-primary:hover {
-    background: color-mix(in srgb, var(--color-accent) 86%, var(--color-ink));
+    background: var(--color-accent-hover);
     box-shadow: 0 16px 28px -14px color-mix(in srgb, var(--color-accent) 90%, transparent);
   }
   .cta-quiet {
@@ -634,11 +548,11 @@
     gap: 0.45rem;
     min-height: 2rem;
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: var(--text-label);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--color-ink);
-    transition: color 0.2s ease;
+    transition: color var(--dur-quick) ease;
   }
   a.go-link:hover,
   .group:hover .go-link { color: var(--color-accent); }
@@ -725,19 +639,10 @@
     aspect-ratio: 16 / 10;
     overflow: hidden;
     border: 3px solid var(--color-surface);
-    border-radius: 6px;
+    border-radius: var(--radius-hair);
     background: var(--color-surface);
-    box-shadow:
-      0 0 0 1px var(--color-line),
-      0 1px 2px rgb(60 44 28 / 0.1),
-      0 14px 26px -16px rgb(60 44 28 / 0.5);
+    box-shadow: 0 0 0 1px var(--color-line), var(--elev-lift);
     transform: translate(-50%, -50%) translate(var(--dx, 0px), var(--dy, 0px)) rotate(var(--rot, 0deg));
-  }
-  html.dark .subject-print {
-    box-shadow:
-      0 0 0 1px var(--color-line),
-      0 1px 2px rgb(0 0 0 / 0.3),
-      0 16px 28px -14px rgb(0 0 0 / 0.7);
   }
   .subject-print img {
     display: block;
@@ -756,9 +661,9 @@
   /* ---- signature: the index rail (timecode / ticker margin notes) ---- */
   .rail {
     font-family: var(--font-mono);
-    font-size: 0.72rem;
-    line-height: 1.6;
-    letter-spacing: 0.06em;
+    font-size: var(--text-label);
+    line-height: var(--text-label--line-height);
+    letter-spacing: var(--text-label--letter-spacing);
     text-transform: uppercase;
     color: var(--color-muted);
     font-variant-numeric: tabular-nums;
@@ -769,7 +674,7 @@
   /* section kickers: lowercase mono — casual, hand-labelled */
   .kicker {
     font-family: var(--font-mono);
-    font-size: 0.75rem;
+    font-size: calc(var(--text-label) * 1.04);
     letter-spacing: 0.1em;
     text-transform: lowercase;
     color: var(--color-accent);
@@ -813,7 +718,7 @@
     pointer-events: none;
     background: radial-gradient(
       120% 85% at 50% -10%,
-      hsl(var(--hue, 32) 38% 50% / var(--wash-a)),
+      hsl(var(--hue, 32) var(--wash-s) var(--wash-l) / var(--wash-a)),
       transparent 68%
     );
   }
@@ -836,10 +741,7 @@
     backdrop-filter: blur(12px);
   }
   body > header.header-scrolled {
-    box-shadow: 0 1px 8px -2px rgb(30 20 10 / 0.08);
-  }
-  html.dark body > header.header-scrolled {
-    box-shadow: 0 1px 8px -2px rgb(0 0 0 / 0.25);
+    box-shadow: 0 1px 8px -2px color-mix(in srgb, var(--color-shadow) calc(9% * var(--shadow-k)), transparent);
   }
   body > header.header-tucked {
     transform: translateY(-100%);
@@ -979,7 +881,7 @@
     height: 2px;
     background: color-mix(in srgb, var(--color-accent) 35%, transparent);
     transform: scaleX(0);
-    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform var(--dur-move) var(--ease-settle);
   }
   .tab-group > a:hover::after { transform: scaleX(1); }
   .tab-group > a[aria-current="page"]::after { display: none; }
@@ -1074,14 +976,14 @@
     border: 1px solid var(--color-line);
     border-radius: var(--radius-card);
     background: var(--color-surface);
-    box-shadow: 0 18px 44px -22px rgb(30 20 10 / 0.35);
+    box-shadow: var(--elev-float);
     padding: 0.4rem;
   }
   .flyout-head {
     display: block;
     font-family: var(--font-mono);
-    font-size: 0.68rem;
-    letter-spacing: 0.06em;
+    font-size: calc(var(--text-label) * 0.95);
+    letter-spacing: var(--text-label--letter-spacing);
     text-transform: uppercase;
     color: var(--color-accent);
     padding: 0.45rem 0.6rem 0.5rem;
@@ -1101,17 +1003,17 @@
     font-size: 0.85rem;
     line-height: 1.35;
     color: var(--color-ink);
-    transition: background-color 0.12s, color 0.12s;
+    transition: background-color var(--dur-tap), color var(--dur-tap);
   }
   .flyout-list a:hover {
-    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+    background: var(--color-accent-soft);
     color: var(--color-accent);
   }
   .flyout-more {
     display: block;
     padding: 0.4rem 0.6rem;
     font-family: var(--font-mono);
-    font-size: 0.68rem;
+    font-size: calc(var(--text-label) * 0.95);
     letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--color-muted);
@@ -1174,8 +1076,8 @@
          reaching the end of the strip would snap the last tab from two-thirds faded to fully
          opaque. */
       transition:
-        --fade-l 0.2s ease,
-        --fade-r 0.2s ease;
+        --fade-l var(--dur-quick) ease,
+        --fade-r var(--dur-quick) ease;
     }
     .tabbar[data-more-right] { --fade-r: 2.75rem; }
     .tabbar[data-more-left] { --fade-l: 1.5rem; }
@@ -1206,7 +1108,7 @@
     width: 0;
     background: var(--color-accent);
     z-index: 50;
-    transition: width 0.1s linear;
+    transition: width var(--dur-tap) linear;
   }
   .to-top {
     position: fixed;
@@ -1218,15 +1120,15 @@
     justify-content: center;
     width: 2.6rem;
     height: 2.6rem;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     border: 1px solid var(--color-line);
     background: var(--color-surface);
     color: var(--color-ink);
-    box-shadow: 0 8px 22px -12px rgb(30 20 10 / 0.4);
+    box-shadow: var(--elev-lift);
     opacity: 0;
     transform: translateY(8px);
     pointer-events: none;
-    transition: opacity 0.2s, transform 0.2s, border-color 0.15s;
+    transition: opacity var(--dur-quick), transform var(--dur-quick), border-color var(--dur-quick);
   }
   .to-top.show { opacity: 1; transform: none; pointer-events: auto; }
   .to-top:hover { border-color: var(--color-accent); color: var(--color-accent); }
@@ -1242,12 +1144,12 @@
   }
   .jump-rail a {
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: var(--text-label);
     letter-spacing: 0.04em;
     color: var(--color-muted);
     padding: 0.2rem 0.5rem;
     border-left: 2px solid var(--color-line);
-    transition: color 0.15s, border-color 0.15s;
+    transition: color var(--dur-quick), border-color var(--dur-quick);
   }
   .jump-rail a:hover,
   .jump-rail a.here { color: var(--color-accent); border-color: var(--color-accent); }
@@ -1290,56 +1192,86 @@
 
   /* ---- image blur-up: LQIP background, sharp image fades in ---- */
   .blurup { background-size: cover; background-position: center; }
-  .blurup img { opacity: 0; transition: opacity 0.35s ease; }
+  .blurup img { opacity: 0; transition: opacity var(--dur-move) ease; }
   .blurup img.loaded { opacity: 1; }
   html.a11y-motion .blurup img,
   .no-js .blurup img { opacity: 1; }
 
+  /* ---- search: Pagefind's own interface, speaking the system ----
+     Pagefind draws its search box and results with its own palette — a blue-grey that belonged to no
+     page on this site, and a white box in the dark theme. It reads these variables, so it gets the
+     tokens: the input's border is `faint`, which meets the 3:1 a control's boundary needs. */
+  #search {
+    --pagefind-ui-scale: 0.9;
+    --pagefind-ui-primary: var(--color-accent);
+    --pagefind-ui-text: var(--color-ink);
+    --pagefind-ui-background: var(--color-surface);
+    --pagefind-ui-border: var(--color-faint);
+    --pagefind-ui-tag: var(--color-sunken);
+    --pagefind-ui-border-width: 1px;
+    --pagefind-ui-border-radius: var(--radius-chip);
+    --pagefind-ui-image-border-radius: var(--radius-hair);
+    --pagefind-ui-font: var(--font-sans);
+  }
+
   /* ---- reflection prose (markdown bodies) ---- */
   .prose-reflection {
-    max-width: 65ch;
-    font-size: 1.0625rem;
-    line-height: 1.8;
+    max-width: var(--measure-prose);
+    font-size: var(--text-prose);
+    line-height: var(--text-prose--line-height);
   }
   .prose-reflection > * + * { margin-top: 1.1em; }
   .prose-reflection h2 {
     font-family: var(--font-display);
     font-style: italic;
     font-weight: 400;
-    font-size: 1.75rem;
+    font-size: var(--text-quote);
     line-height: 1.2;
+    letter-spacing: var(--text-quote--letter-spacing);
     margin-top: 2.4em;
     color: var(--color-ink);
   }
   .prose-reflection h3 {
     font-weight: 600;
-    font-size: 1.125rem;
+    font-size: var(--text-subhead);
+    letter-spacing: var(--text-subhead--letter-spacing);
     margin-top: 1.8em;
   }
+  /* A link in running text: the underline sits clear of the descenders and thickens under the
+     pointer, so the hover is felt in the line's weight rather than only in its colour. */
   .prose-reflection a {
     color: var(--color-accent);
     text-decoration: underline;
-    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.22em;
+    text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+    transition: text-decoration-color var(--dur-quick) ease, color var(--dur-quick) ease;
+  }
+  .prose-reflection a:hover {
+    color: var(--color-accent-hover);
+    text-decoration-color: currentColor;
+    text-decoration-thickness: 2px;
   }
   .prose-reflection ul, .prose-reflection ol { padding-left: 1.4em; }
   .prose-reflection ul { list-style: disc; }
   .prose-reflection ol { list-style: decimal; }
   .prose-reflection li + li { margin-top: 0.4em; }
+  /* A quotation is a different kind of text, not a link: taxonomy's rule, as on the entry note. */
   .prose-reflection blockquote {
-    border-left: 2px solid var(--color-accent);
+    border-left: 2px solid var(--color-secondary);
     padding-left: 1em;
     color: var(--color-muted);
   }
   .prose-reflection code {
     font-family: var(--font-mono);
     font-size: 0.875em;
-    background: var(--color-surface);
+    background: var(--color-sunken);
     border: 1px solid var(--color-line);
     padding: 0.1em 0.35em;
     border-radius: 0.3em;
   }
   .prose-reflection pre {
-    background: var(--color-surface);
+    background: var(--color-sunken);
     border: 1px solid var(--color-line);
     border-radius: var(--radius-chip);
     padding: 1em;
@@ -1383,18 +1315,8 @@
 
 /* ---- print: entries as clean handouts (recruiters print things) ---- */
 @media print {
-  :root, .dark {
-    --color-ground: #ffffff;
-    --color-surface: #ffffff;
-    --color-ink: #111111;
-    --color-muted: #444444;
-    --color-line: #dddddd;
-    --color-accent: #1a3a99;
-    --color-signal-text: #7a4d0e;
-    /* Sage prints as mud on white paper, and a taxonomy label is not worth ink of its own in a
-       printout — it goes to the same near-black as the body. */
-    --color-secondary: #333333;
-  }
+  /* The print palette is generated with the rest (PRINT in src/design/tokens.mjs), grain off. */
+  html { background-image: none; }
   .page-bg,
   .reel,
   header nav,
@@ -1449,7 +1371,7 @@
 /* ---- motion: linkage between pages and elements; all opt-out aware ---- */
 @media (prefers-reduced-motion: no-preference) {
   .reveal, .reveal-2, .reveal-3 {
-    animation: rise 0.6s cubic-bezier(0.2, 0.6, 0.2, 1) both;
+    animation: rise 0.6s var(--ease-snap) both;
   }
   .reveal-2 { animation-delay: 0.1s; }
   .reveal-3 { animation-delay: 0.2s; }
@@ -1470,7 +1392,7 @@
      would sit invisible for up to half a second before snapping in. */
   html:not(.a11y-motion) .hero-pane { animation: hero-pane 0.7s ease both; }
   html:not(.a11y-motion) .hero-in {
-    animation: hero-in 0.95s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: hero-in 0.95s var(--ease-settle) both;
     animation-delay: 0.12s;
   }
   html:not(.a11y-motion) .hero-focus { animation-name: hero-focus; }
@@ -1513,7 +1435,7 @@
     filter: blur(6px) sepia(0.6) saturate(0.7);
   }
   html.js:not(.a11y-motion) [data-io-stagger].io-in > * :is(.card-cover, .subject-sheet) {
-    transition: filter 1.3s cubic-bezier(0.16, 1, 0.3, 1) 0.1s;
+    transition: filter var(--dur-draw) var(--ease-settle) 0.1s;
   }
 
   /* ---- a section's rule draws in ----
@@ -1522,16 +1444,16 @@
   html.js:not(.a11y-motion) [data-io-text]:not(.io-in) .section-head::after { transform: scaleX(0); }
   html.js:not(.a11y-motion) [data-io-text]:not(.io-in) .section-head::before { transform: scaleX(0); }
   html.js:not(.a11y-motion) [data-io-text].io-in .section-head::after {
-    transition: transform 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.15s;
+    transition: transform var(--dur-draw) var(--ease-settle) 0.15s;
   }
   html.js:not(.a11y-motion) [data-io-text].io-in .section-head::before {
-    transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.05s;
+    transition: transform var(--dur-paper) var(--ease-settle) 0.05s;
   }
 
   /* ---- page transitions: the underline slides ---- */
   ::view-transition-group(active-tab) {
     animation-duration: 0.5s;
-    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    animation-timing-function: var(--ease-settle);
   }
 
   /* ---- the theme changes as a circle of light spreading from the switch ----
@@ -1616,11 +1538,11 @@
   html.page-vt::view-transition-old(root) {
     z-index: 1;
     animation:
-      vt-recede-fade 0.4s cubic-bezier(0.4, 0, 0.7, 0.4) both,
-      vt-recede-scale 0.65s cubic-bezier(0.45, 0, 0.8, 0.35) both;
+      vt-recede-fade 0.4s var(--ease-depart) both,
+      vt-recede-scale 0.65s var(--ease-depart) both;
   }
   html.page-vt::view-transition-new(root) {
-    animation: vt-approach 0.9s cubic-bezier(0.2, 0.75, 0.25, 1) both;
+    animation: vt-approach 0.9s var(--ease-glide) both;
   }
   @keyframes vt-recede-fade { to { opacity: 0; } }
   @keyframes vt-recede-scale { to { scale: 1.07; } }
@@ -1635,11 +1557,11 @@
   html.page-vt::view-transition-group(page-word) {
     z-index: 2;
     animation-duration: 0.9s;
-    animation-timing-function: cubic-bezier(0.45, 0, 0.15, 1);
+    animation-timing-function: var(--ease-carry);
   }
   html.page-vt::view-transition-group(page-word) {
     animation-duration: 0.72s;
-    animation-timing-function: cubic-bezier(0.3, 0, 0.1, 1);
+    animation-timing-function: var(--ease-carry-light);
   }
   /* A picture keeps its proportions as its window changes shape — the card's 16:10 into whatever the
      entry's cover is — by filling the moving box and cropping, never stretching. It is the same image
@@ -1672,8 +1594,8 @@
   html.page-vt::view-transition-old(page-picture):only-child,
   html.page-vt::view-transition-old(page-word):only-child {
     animation:
-      vt-recede-fade 0.4s cubic-bezier(0.4, 0, 0.7, 0.4) both,
-      vt-recede-scale 0.65s cubic-bezier(0.45, 0, 0.8, 0.35) both;
+      vt-recede-fade 0.4s var(--ease-depart) both,
+      vt-recede-scale 0.65s var(--ease-depart) both;
   }
   @keyframes vt-fade-out { to { opacity: 0; } }
   @keyframes vt-fade-in { from { opacity: 0; } }
@@ -1687,7 +1609,7 @@
      all in. Above the scrubbed reveals below in weight, so a line that is also a reveal arrives this
      way, then goes back to following the scroll where it already is. */
   html.js.vt-arrive:not(.a11y-motion) [data-arrive] {
-    animation: vt-arrive 0.7s cubic-bezier(0.2, 0.75, 0.25, 1) both;
+    animation: vt-arrive 0.7s var(--ease-glide) both;
     animation-delay: calc(0.28s + var(--arrive, 0) * 0.07s);
   }
   @keyframes vt-arrive { from { opacity: 0; translate: 0 20px; } }
@@ -1752,8 +1674,8 @@
   /* header hide/show: smooth transform */
   html:not(.a11y-motion) body > header {
     transition:
-      transform 0.3s cubic-bezier(0.2, 0.6, 0.2, 1),
-      box-shadow 0.3s ease;
+      transform var(--dur-brisk) var(--ease-snap),
+      box-shadow var(--dur-brisk) ease;
   }
 
   /* smooth in-page anchor scrolling (jump rails, back-to-top, #links) */
@@ -1768,8 +1690,8 @@
     opacity: 1;
     transform: none;
     transition:
-      opacity 0.4s ease,
-      transform 0.4s cubic-bezier(0.2, 0.6, 0.2, 1);
+      opacity var(--dur-move) ease,
+      transform var(--dur-move) var(--ease-snap);
   }
 
   /* staggered reveal: a grid's children settle in sequence as it enters */
@@ -1781,8 +1703,8 @@
     opacity: 1;
     transform: none;
     transition:
-      opacity 0.38s ease,
-      transform 0.38s cubic-bezier(0.2, 0.6, 0.2, 1);
+      opacity var(--dur-move) ease,
+      transform var(--dur-move) var(--ease-snap);
   }
   .js [data-io-stagger].io-in > *:nth-child(2) { transition-delay: 0.035s; }
   .js [data-io-stagger].io-in > *:nth-child(3) { transition-delay: 0.07s; }
@@ -1802,8 +1724,8 @@
     opacity: 1;
     transform: none;
     transition:
-      opacity 0.3s ease,
-      transform 0.3s cubic-bezier(0.2, 0.6, 0.2, 1);
+      opacity var(--dur-brisk) ease,
+      transform var(--dur-brisk) var(--ease-snap);
   }
 
   /* honour reduced motion for scroll + reveals (native or the a11y toggle) */
@@ -1831,59 +1753,47 @@
      transition-duration to ~0, so without this the hover lifts still jumped
      into place for a reader who asked for less movement. */
   @media (hover: hover) {
-    html:not(.a11y-motion) .card-cover img { transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
+    html:not(.a11y-motion) .card-cover img { transition: transform var(--dur-settle) var(--ease-settle); }
     html:not(.a11y-motion) .card:hover .card-cover img { transform: scale(1.045); }
     /* The picture light comes up slowly, the way a gallery's sensor lights do. */
-    html:not(.a11y-motion) article.card::before { transition: opacity 0.7s ease; }
+    html:not(.a11y-motion) article.card::before { transition: opacity var(--dur-paper) ease; }
     html:not(.a11y-motion) article.card:hover::before { opacity: 1; }
     /* The sheen crosses once per arrival: it runs on hover and is reset without a transition when
        the pointer leaves, so leaving never sends the light back the way it came. */
     html:not(.a11y-motion) :is(.card:hover .card-cover, .cta-primary:hover)::after {
       transform: translateX(130%);
-      transition: transform 0.95s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: transform var(--dur-settle) var(--ease-settle);
     }
-    html:not(.a11y-motion) .subject::before { transition: opacity 0.45s ease; opacity: 0.7; }
+    html:not(.a11y-motion) .subject::before { transition: opacity var(--dur-move) ease; opacity: 0.7; }
     html:not(.a11y-motion) .subject:hover::before { opacity: 1; }
-    html:not(.a11y-motion) .icon-btn svg { transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1); }
+    html:not(.a11y-motion) .icon-btn svg { transition: transform var(--dur-paper) var(--ease-settle); }
     html:not(.a11y-motion) .icon-btn:hover svg { transform: rotate(-14deg) scale(1.06); }
 
     /* cards rise to meet the cursor */
     html:not(.a11y-motion) .lift {
       transition:
-        transform 0.25s cubic-bezier(0.2, 0.6, 0.2, 1),
-        box-shadow 0.25s cubic-bezier(0.2, 0.6, 0.2, 1);
+        transform var(--dur-brisk) var(--ease-snap),
+        box-shadow var(--dur-brisk) var(--ease-snap);
     }
     html:not(.a11y-motion) .lift:hover {
       transform: translateY(-4px);
-      box-shadow:
-        0 2px 4px -2px rgb(60 44 28 / 0.08),
-        0 22px 40px -22px rgb(60 44 28 / 0.32);
-    }
-    html.dark:not(.a11y-motion) .lift:hover {
-      box-shadow:
-        0 2px 4px -2px rgb(0 0 0 / 0.3),
-        0 22px 40px -20px rgb(0 0 0 / 0.6);
+      box-shadow: var(--elev-lift);
     }
     /* An entry card has no panel behind it — it is a cover and some words on the paper — so a shadow
        on the card would draw a box round the text. The cover is the thing that lifts off the table. */
     html:not(.a11y-motion) article.card.lift:hover { box-shadow: none; }
-    html:not(.a11y-motion) .card .card-cover { transition: box-shadow 0.45s cubic-bezier(0.16, 1, 0.3, 1); }
-    html:not(.a11y-motion) article.card:hover .card-cover {
-      box-shadow: 0 24px 42px -24px rgb(60 44 28 / 0.45);
-    }
-    html.dark:not(.a11y-motion) article.card:hover .card-cover {
-      box-shadow: 0 24px 42px -20px rgb(0 0 0 / 0.7);
-    }
+    html:not(.a11y-motion) .card .card-cover { transition: box-shadow var(--dur-move) var(--ease-settle); }
+    html:not(.a11y-motion) article.card:hover .card-cover { box-shadow: var(--elev-float); }
 
     /* Onward arrows lean the way they point. */
-    html:not(.a11y-motion) .go-arrow { transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1); }
+    html:not(.a11y-motion) .go-arrow { transition: transform var(--dur-move) var(--ease-glide); }
     html:not(.a11y-motion) :is(a.go-link, .cta, .group):hover .go-arrow { transform: translateX(4px); }
     html:not(.a11y-motion) :is(a.go-link, .cta, .group):hover .go-arrow-back { transform: translateX(-4px); }
 
     /* The prints fan out as the cursor arrives — the lead lifts, the two behind it turn further out
        — and settle back when it leaves. Slow on purpose: paper moving is not a switch. */
     html:not(.a11y-motion) .subject-print {
-      transition: transform 0.55s cubic-bezier(0.2, 0.7, 0.2, 1);
+      transition: transform var(--dur-paper) var(--ease-glide);
     }
     html:not(.a11y-motion) .subject:hover .subject-print[data-i="0"] { --dy: -0.4rem; --rot: 0deg; }
     html:not(.a11y-motion) .subject:hover .subject-print[data-i="1"] { --dx: -3.5rem; --rot: -11deg; }
@@ -1892,12 +1802,12 @@
     html:not(.a11y-motion) .subject:hover .subject-sheet[data-count="2"] .subject-print[data-i="1"] { --dx: -2.1rem; }
 
     /* the 404 plane leans into takeoff */
-    html:not(.a11y-motion) .fly-hint svg { transition: transform 0.3s cubic-bezier(0.2, 0.6, 0.2, 1); }
+    html:not(.a11y-motion) .fly-hint svg { transition: transform var(--dur-brisk) var(--ease-snap); }
     html:not(.a11y-motion) .fly-hint:hover svg { transform: translate(4px, -4px) rotate(-12deg); }
   }
 
   /* theme toggle: a little press-tilt */
-  #theme-toggle svg { transition: transform 0.25s ease; }
+  #theme-toggle svg { transition: transform var(--dur-brisk) ease; }
   #theme-toggle:active svg { transform: rotate(30deg) scale(0.9); }
 
 }
@@ -1975,7 +1885,7 @@ summary:active,
   /* small controls compress — real buttons, which is every icon button,
      lightbox control, back-to-top and the video play button */
   html:not(.a11y-motion) button {
-    transition: transform 0.11s cubic-bezier(0.2, 0.6, 0.2, 1);
+    transition: transform var(--dur-tap) var(--ease-snap);
   }
   html:not(.a11y-motion) button:active,
   html:not(.a11y-motion) button:has(:active),
@@ -1990,9 +1900,9 @@ summary:active,
   html:not(.a11y-motion) .lift,
   html:not(.a11y-motion) [data-lb-open] {
     transition:
-      transform 0.12s cubic-bezier(0.2, 0.6, 0.2, 1),
-      border-color 0.12s ease,
-      box-shadow 0.25s cubic-bezier(0.2, 0.6, 0.2, 1);
+      transform var(--dur-tap) var(--ease-snap),
+      border-color var(--dur-tap) ease,
+      box-shadow var(--dur-brisk) var(--ease-snap);
   }
   html:not(.a11y-motion) .card:has(:active),
   html:not(.a11y-motion) .panel:has(:active),
@@ -2018,7 +1928,7 @@ summary:active,
   margin: -13px 0 0 -13px;
   color: var(--color-accent);
   pointer-events: none;
-  filter: drop-shadow(0 2px 3px rgb(20 14 8 / 0.25));
+  filter: drop-shadow(0 2px 3px color-mix(in srgb, var(--color-shadow) 25%, transparent));
 }
 
 
@@ -2060,7 +1970,7 @@ summary:active,
 @layer components {
   .entry-note {
     margin: 0;
-    max-width: 46ch;
+    max-width: var(--measure-quote);
     border-inline-start: 2px solid var(--color-secondary);
     padding-inline-start: 1.1rem;
   }

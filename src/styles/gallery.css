@@ -11,13 +11,9 @@
 .gallery li:nth-child(3n + 1) [data-lb-open] { rotate: -1.2deg; }
 .gallery li:nth-child(3n + 2) [data-lb-open] { rotate: 0.9deg; }
 .gallery li:nth-child(3n) [data-lb-open] { rotate: -0.5deg; }
-[data-lb-open] {
-  box-shadow:
-    0 1px 2px rgb(20 18 12 / 0.05),
-    0 8px 18px -10px rgb(20 18 12 / 0.14);
-}
+[data-lb-open] { box-shadow: var(--elev-rest); }
 @media (hover: hover) and (prefers-reduced-motion: no-preference) {
-  [data-lb-open] { transition: rotate 0.25s ease; }
+  [data-lb-open] { transition: rotate var(--dur-brisk) ease; }
   li:hover [data-lb-open] { rotate: 0deg; }
 }
 
@@ -32,7 +28,9 @@
   margin: auto;
 }
 .lightbox::backdrop {
-  background: rgb(8 10 14 / 0.9);
+  /* Near-black, and warm: the film base the reel is printed on, so a photograph is shown the way a
+     slide is — on dark, with nothing else in the room. */
+  background: color-mix(in srgb, var(--color-paper-1000) 92%, transparent);
 }
 .lightbox-bar {
   display: flex;
@@ -46,7 +44,7 @@
   padding: 0.35rem 0.7rem;
   background: var(--color-surface);
   cursor: pointer;
-  transition: border-color 0.15s;
+  transition: border-color var(--dur-quick);
 }
 .lightbox-btn:hover {
   border-color: var(--color-accent);
@@ -66,7 +64,7 @@
 }
 @media (prefers-reduced-motion: no-preference) {
   .lightbox[open] {
-    animation: lb-fade 0.22s cubic-bezier(0.2, 0.6, 0.2, 1);
+    animation: lb-fade 0.22s var(--ease-snap);
   }
   @keyframes lb-fade {
     from {

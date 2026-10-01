@@ -11,14 +11,14 @@
   background: var(--color-surface);
   color: var(--color-ink);
   padding: 1.75rem;
-  box-shadow: 0 24px 60px -24px rgb(30 20 10 / 0.35);
+  box-shadow: var(--elev-overlay);
 }
 .welcome::backdrop {
-  background: rgb(28 22 14 / 0.45);
+  background: color-mix(in srgb, var(--color-paper-1000) 45%, transparent);
 }
 @media (prefers-reduced-motion: no-preference) {
   .welcome[open] {
-    animation: welcome-in 0.3s cubic-bezier(0.2, 0.6, 0.2, 1);
+    animation: welcome-in 0.3s var(--ease-snap);
   }
   @keyframes welcome-in {
     from {

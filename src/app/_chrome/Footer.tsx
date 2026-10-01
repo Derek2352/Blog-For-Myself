@@ -17,8 +17,8 @@ export default function Footer() {
     <footer className="mt-24 border-t border-line">
       <div className="wrap grid gap-8 py-10 text-sm sm:grid-cols-3">
         <div>
-          <p className="font-display text-xl">Derek Yung</p>
-          <p className="mt-1 max-w-[28ch] text-muted">{site.tagline}</p>
+          <p className="font-display text-heading">Derek Yung</p>
+          <p className="mt-1 max-w-(--measure-narrow) text-muted">{site.tagline}</p>
         </div>
         {/* `footer-nav` carries the touch padding — see the `pointer: coarse` block in global.css.
           Measured at 18px tall before it: the contact links, the CV and the feed were the smallest

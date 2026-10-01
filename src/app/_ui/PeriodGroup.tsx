@@ -38,7 +38,7 @@ export default function PeriodGroup({
         <Heading
           id={headingId}
           className={`mt-1 font-display ${
-            group.ref.kind === 'period' ? 'text-3xl sm:text-4xl' : 'text-2xl'
+            group.ref.kind === 'period' ? 'text-section' : 'text-heading'
           }`}
         >
           {group.ref.label}

@@ -44,7 +44,7 @@ export default function LogCard({
           {showCategory && category && <span>{category.label}</span>}
           {log.data.draft && <span className="text-signal-text">draft</span>}
         </p>
-        <h3 className="mt-1 text-[0.95rem] font-medium leading-snug">
+        <h3 className="mt-1 text-body font-medium">
           {href ? (
             <Link href={href} prefetch={false} className="transition-colors hover:text-accent">
               {log.data.title}

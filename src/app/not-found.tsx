@@ -12,7 +12,7 @@ export default function NotFound() {
       <PageWash hue={340} />
       <div className="wrap flex flex-col items-start justify-center py-24">
         <p className="rail">404 · FRAME NOT FOUND</p>
-        <h1 className="mt-3 max-w-xl font-display text-4xl leading-tight sm:text-5xl">
+        <h1 className="mt-3 max-w-xl font-display text-title">
           This frame didn’t make the cut.
         </h1>
         <p className="mt-4 max-w-prose text-muted">

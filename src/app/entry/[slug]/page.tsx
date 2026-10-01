@@ -153,7 +153,7 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
             {code}
             {entry.data.draft && <span className="text-signal-text"> · draft</span>}
           </p>
-          <h1 className="mt-2 font-display text-4xl leading-[1.08] sm:text-5xl">
+          <h1 className="mt-2 font-display text-title">
             {entry.data.title}
           </h1>
           <p className="mt-4 text-lg leading-relaxed text-muted">{entry.data.summary}</p>
@@ -170,7 +170,7 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
               reader from announcing them around a sentence it is already reading as one. */}
           {entry.data.note && (
             <blockquote className="entry-note mt-6">
-              <p className="font-display text-2xl italic leading-snug sm:text-[1.7rem]">
+              <p className="font-display text-quote italic">
                 <span className="text-secondary" aria-hidden="true">
                   “
                 </span>
@@ -284,7 +284,7 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
             />
           ) : (
             <div className="min-w-0 self-start border-t border-line pt-6 lg:order-2">
-              <p className="font-display text-2xl italic leading-snug">
+              <p className="font-display text-quote italic">
                 The full reflection is still being written.
               </p>
               <p className="mt-3 max-w-prose text-sm leading-relaxed text-muted">
@@ -298,7 +298,7 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
         {entry.data.gallery.length > 0 && (
           <section className="mt-16" aria-labelledby="gallery-h">
             <p className="kicker">Gallery</p>
-            <h2 id="gallery-h" className="mt-1 font-display text-2xl">
+            <h2 id="gallery-h" className="mt-1 font-display text-heading">
               Frames
             </h2>
             <div className="mt-5">
@@ -353,7 +353,7 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
             data-pagefind-ignore
           >
             <p className="kicker">Related</p>
-            <h2 id="related-h" className="mt-1 font-display text-2xl">
+            <h2 id="related-h" className="mt-1 font-display text-heading">
               Nearby frames
             </h2>
             <div className="mt-6 grid gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3" data-io-stagger>

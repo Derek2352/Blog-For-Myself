@@ -468,9 +468,18 @@ five commits.
 
 ## Design notes
 
-Tokens live in `src/styles/global.css` (`@theme` + `.dark` overrides) — colors, type,
-radii; every component consumes them, no ad-hoc hex in markup. See **`/colophon`** on the
-site for the living design page (palette, type, the index-rail signature).
+**The design system has one source: `src/design/tokens.mjs`.** Four colour ramps (paper,
+wine, amber, sage) designed in OKLCH; a semantic layer per theme (`ground`, `ink`, `accent`,
+`line`… — the names the markup uses), so dark mode is the same ramps read from the other end;
+thirteen type roles (`text-display` … `text-label`), fluid space, five corners, five
+elevations, and motion curves named for what moves. `npm run tokens` writes
+`src/styles/tokens.css` from it (the build does this first), and two tests hold the line:
+`tests/design-tokens.test.ts` (generated file current, every colour inside sRGB, ramps
+monotonic, every text/ground pairing at WCAG AA in both themes, the identity colours pinned)
+and `tests/design-hygiene.test.ts` (no raw colour or easing curve in any stylesheet, no one-off
+type size in markup). **`/system/`** on the site renders all of it from the source, contrast
+measured live; **`/colophon`** tells the story. The paper's grain is `public/grain.png`, drawn
+by `npm run grain`.
 
 - The three deliberately avoided "AI-default" looks (cream + serif + terracotta;
   near-black + acid green; broadsheet hairline columns) stay avoided: this system is
@@ -484,7 +493,7 @@ site for the living design page (palette, type, the index-rail signature).
   pick from a hash of its slug. Hues are confined to a narrow **warm band** (amber →
   terracotta → wine) and `tests/wash.test.ts` fails the build if one strays: earlier
   versions ranged into violet/cyan/green, which read as a colour cast fighting the paper.
-  Tune the strength via `--wash-a` in `src/styles/global.css`.
+  Tune its strength with `WASH` in `src/design/tokens.mjs`.
   There was also a per-tab *pattern* layer (halftone/ledger/contours/hatch/weave/plus/
   waves). It was removed: page pattern + patterned cards + textured covers stacked three
   deep and made pages feel busy. Photographs should be the only busy thing on a page.

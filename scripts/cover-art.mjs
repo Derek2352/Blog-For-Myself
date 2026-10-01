@@ -72,6 +72,12 @@
  * aspect and check the result parses. Nothing else needs touching.
  */
 import { ART_MARK } from './cover-plate.mjs';
+import { THEMES, resolve } from '../src/design/tokens.mjs';
+import { oklchToHex } from '../src/design/color.mjs';
+
+/** A light-theme colour as hex, from the design system's source (src/design/tokens.mjs). */
+const tokenHex = (role) => oklchToHex(resolve(THEMES.light[role]));
+
 
 /* ── the shared palette ────────────────────────────────────────────────────────────────────────
  * One hue in, eleven tones out. The two marked "= plate" are copied from `placeholderSVG` and must
@@ -87,9 +93,9 @@ const palette = (h) => ({
   chat: `hsl(${h} 16% 92%)`, // their `#eaf2ef` speech bubble
   hair: `hsl(${h} 18% 78%)`, // their `#e4eeec` row rules
   shade: `hsl(${h} 20% 55%)`, // the cast shadow, always drawn at low alpha
-  accent: '#8e2f45', // --color-accent, ledger wine
+  accent: tokenHex('accent'), // --color-accent, ledger wine
   sage: `hsl(88 26% 82%)`, // the agent's disc — a pale form of --color-secondary
-  sageInk: '#647554', // --color-secondary itself
+  sageInk: tokenHex('secondary'), // --color-secondary itself
 });
 
 /* A rounded bar. Nearly every element of both screens is one, which is the point: an interface
