@@ -2,6 +2,9 @@
   "name": "derekyung",
   "type": "module",
   "version": "0.1.0",
+  "engines": {
+    "node": ">=22"
+  },
   "private": true,
   "description": "Derek Yung — portfolio & reflections blog. Content-driven: add files, not code.",
   "scripts": {
@@ -10,6 +13,8 @@
     "build:deploy": "npm run build && node scripts/precompress.mjs",
     "build:drafts": "SHOW_DRAFTS=1 npm run build",
     "preview": "node scripts/serve-out.mjs",
+    "start": "node scripts/serve-out.mjs",
+    "gcp-build": "npm run build:deploy",
     "stage:images": "node scripts/stage-content-images.mjs",
     "typecheck": "tsc --noEmit",
     "tokens": "node scripts/build-tokens.mjs",
