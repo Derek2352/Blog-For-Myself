@@ -1,0 +1,13 @@
+# Netlify: import the repo (or use the Deploy to Netlify button in the README) and nothing else needs
+# setting. Node comes from .node-version; the response headers come from dist/_headers, which is
+# generated from scripts/http-policy.mjs, and dist/404.html is served for a missing page.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  # Netlify sees `next` in package.json and adds its Next.js runtime, which is for server-rendered
+  # Next and expects the export in out/. This site is plain files, moved to dist/ by
+  # scripts/finish-build.mjs, so the runtime has nothing to do here but fail the deploy.
+  NETLIFY_NEXT_PLUGIN_SKIP = "true"

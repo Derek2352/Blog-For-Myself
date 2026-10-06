@@ -5,9 +5,11 @@ export interface CacheRule {
   extraGlobs?: string[];
   value: string;
   why: string;
+  hostDefault?: boolean;
 }
 export declare const CACHE_RULES: CacheRule[];
 export declare const SECURITY_HEADERS: Record<string, string>;
 export declare function cacheControlFor(pathname: string): string;
 export declare function headersFor(pathname: string): Record<string, string>;
 export declare function toHeadersFile(): string;
+export declare function toVercelHeaders(): { source: string; headers: { key: string; value: string }[] }[];

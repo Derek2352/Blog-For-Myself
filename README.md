@@ -93,10 +93,11 @@ npm test           # 36 unit tests
 
 ### S-06 · Deploy
 
-Set your real URL in `src/lib/site-url.ts` (`SITE_URL`) **and** the `Sitemap:` line in
-`public/robots.txt`, then connect the repo to Cloudflare Pages (build command
-`npm run build`, output `dist`, `NODE_VERSION=20`). Every push then auto-deploys. Full
-host details — Netlify, Vercel, draft previews — are in [**Deploy**](#deploy) below.
+Pick a host in [**Deploy**](#deploy). The repo already carries the config for Cloud Run (Google AI
+Studio), Cloudflare, Netlify and Vercel, so importing it is the whole job. If the site will not live
+at `https://derekyung.ai.studio`, set `SITE_URL` to the new origin in that host's build settings —
+canonical links, share cards, the sitemap, the feed and `robots.txt` all follow it. On the
+git-connected hosts every push then redeploys.
 
 ---
 
@@ -104,9 +105,8 @@ host details — Netlify, Vercel, draft previews — are in [**Deploy**](#deploy
 > them) and are excluded from production builds. Publishing = setting `draft: false`.
 > Need to review drafts on a real URL (e.g. your phone)? `npm run build:drafts` builds
 > with drafts included and a visible "preview build" watermark — deploy it as a second,
-> private project (on Cloudflare Pages: same repo, build command
-> `npm run build:drafts`, or set the `SHOW_DRAFTS=1` environment variable). Never point
-> your public domain at it.
+> private project (same repo, with `SHOW_DRAFTS=1` in its build environment; its `robots.txt`
+> then turns every crawler away). Never point your public domain at it.
 
 ---
 
@@ -584,21 +584,66 @@ Netlify; on Cloud Run it is an inert file in the image, so the four security hea
 reached a browser either. `npm run headers` regenerates it now, and `tests/http-policy.test.ts`
 fails if it drifts from the policy or ever mentions `_astro` again.
 
+The generated file then had a bug of its own, invisible from Cloud Run: it set `Cache-Control` on
+both `/_next/static/*` and `/*`, and Cloudflare applies *every* matching rule and joins a repeated
+header with commas. Under `wrangler dev`, a hashed script came back as
+`public, max-age=31536000, immutable, public, max-age=0, must-revalidate` — two answers in one
+header. The catch-all's value is what every static host sends by default anyway, so the host files
+now leave it out, and a test reads `_headers` the way Cloudflare does to check that no path gets
+any header twice.
+
 ## Deploy
 
-Static output — any static host works. Update `SITE_URL` in `src/lib/site-url.ts` **and** the
-`Sitemap:` line in `public/robots.txt` to your real domain first.
+The build is a folder of static files — `npm run build` writes `dist/` — so anything that serves
+files can host it. Four hosts are set up in the repo, so on each of them it is an import with
+nothing to type:
 
-- **Cloudflare Pages (default):** create a Pages project from this repo; build command
-  `npm run build`, output directory `dist`. Done.
-- **Netlify:** build `npm run build`, publish `dist`.
-- **Vercel:** framework preset "Next.js" (build `npm run build`, output `dist`).
-- **Google AI Studio / Cloud Run:** serve `dist/` as static files; no Node runtime is needed.
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Derek2352/Blog-For-Myself)
+[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/Derek2352/Blog-For-Myself)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FDerek2352%2FBlog-For-Myself)
+[![Run on Google Cloud](https://deploy.cloud.run/button.svg)](https://deploy.cloud.run?git_repo=https://github.com/Derek2352/Blog-For-Myself)
+
+| Host | Reads | Headers from `http-policy.mjs` | Missing page | Worth knowing |
+|---|---|---|---|---|
+| **Cloud Run** (AI Studio, or the button) | `Dockerfile` | applied by `serve-out.mjs` | `404.html`, status 404 | Scales to zero, so the first visit after a quiet spell waits for a cold start. Serves the precompressed Brotli. |
+| **Cloudflare** Workers, assets only | `wrangler.jsonc` | `dist/_headers` | `404.html`, status 404 | No Worker script runs, so every request is a file. Checked locally under `wrangler dev`: headers, 404, `/about` → `/about/`. |
+| **Netlify** | `netlify.toml` | `dist/_headers` | `404.html` | Its Next.js runtime is switched off (`NETLIFY_NEXT_PLUGIN_SKIP`) — it is for server-rendered Next and fails on a static export in `dist/`. |
+| **Vercel** | `vercel.json` | its `headers` key, generated | `404.html` | Framework set to "Other": the Next.js preset looks for `out/`, which the build has moved. |
+
+All of them read Node from `.node-version`. `tests/hosting.test.ts` fails if the four files stop
+agreeing on the build command, the output directory or the Node version.
+
+**The buttons copy the repo.** Each one creates a new repository in your own account and deploys
+that — right for someone starting their own site from this one. For *this* site, use the host's
+import instead and point it at this repo (Cloudflare: *Workers & Pages → Create → Import a
+repository*; Netlify: *Add new project → Import an existing project*; Vercel: *Add New → Project*).
+The same files make it zero-config, and pushes here deploy. On Cloudflare's import, if the build
+command field is blank, enter `npm run build` — the button fills it in from `package.json`, the
+import may not.
+
+**The address.** `SITE_URL` defaults to `https://derekyung.ai.studio`. On whichever host *is* the
+site, set it in the build environment to that host's origin (`https://….workers.dev`,
+`https://….netlify.app`, a custom domain). On a mirror, leave it alone so the canonical links keep
+pointing home. A value that is not a bare origin fails the build.
+
+Not set up, on purpose:
+
+- **GitHub Pages** would serve this repo at `derek2352.github.io/Blog-For-Myself/`, under a path,
+  and every asset URL here is root-relative. It works only with a custom domain or a repo named
+  `derek2352.github.io`, and it ignores `_headers`, so the security headers would be lost.
+- **Firebase Hosting** works (`"public": "dist"`) but deploys from its CLI, so it is not one click.
+- **Render** works as a static site too, but its headers live in `render.yaml` — a third copy of the
+  policy, for a host that offers nothing the three above do not.
+- **No git at all:** `npm run build`, then drop `dist/` onto [Netlify Drop](https://app.netlify.com/drop)
+  or a Cloudflare direct upload. `_headers` still applies. Handy for a one-off preview link.
 
 > **The build still writes to `dist/`.** Next's static export always emits `out/`, and
 > `scripts/finish-build.mjs` renames it at the end of `npm run build` — so the build command and
 > the publish directory are exactly what they were before the framework changed, and no hosting
 > configuration needed touching.
+
+Use `npm run build` on the static hosts, not `npm run build:deploy`: they compress on their own, and
+the `.br`/`.gz` copies would be uploaded as hundreds of extra files nobody asks for.
 
 Never commit secrets — there are none required today; keep it that way (`.env` is
 gitignored).

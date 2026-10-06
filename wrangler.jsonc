@@ -1,0 +1,18 @@
+// Cloudflare Workers, static assets only: there is no Worker script, so every request is a file in
+// dist/ or the 404 page, and nothing is billed as a Worker invocation. The Deploy to Cloudflare button
+// in the README reads this file; so does `npx wrangler deploy` after `npm run build`.
+//
+// Response headers come from dist/_headers (generated from scripts/http-policy.mjs). Cloud Run is
+// the only host that does not read that file, which is why scripts/serve-out.mjs applies the policy
+// itself there.
+{
+  "name": "derekyung",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./dist",
+    // A missing page gets dist/404.html with a real 404 status, as it does on Cloud Run.
+    "not_found_handling": "404-page",
+    // Next exports every page as <route>/index.html and links to <route>/ (trailingSlash: true).
+    "html_handling": "auto-trailing-slash"
+  }
+}

@@ -1,5 +1,0 @@
-User-agent: *
-Allow: /
-
-# Keep in sync with "site" in astro.config.mjs
-Sitemap: https://derekyung.ai.studio/sitemap-index.xml

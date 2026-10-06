@@ -1,6 +1,6 @@
 /**
- * The three things a static export cannot generate from a page: `rss.xml`, `sitemap.xml`, and the
- * OG share cards.
+ * The things a static export cannot generate from a page: `rss.xml`, `sitemap.xml`, `robots.txt`
+ * and the OG share cards.
  *
  * Astro produced all three as *routes* — `rss.xml.js` and `og/[...slug].png.ts` were endpoints that
  * happened to emit non-HTML. `output: 'export'` has no route handlers by design (see
@@ -133,6 +133,22 @@ ${[...new Set(urls)].map((u) => `  <url><loc>${absolute(u)}</loc></url>`).join('
 );
 
 /* ------------------------------------------------------------------ *
+ * robots.txt
+ * ------------------------------------------------------------------ */
+
+/* Written here rather than kept in public/ because its one line of substance is an absolute URL.
+   The hand-kept copy pointed at Astro's `sitemap-index.xml` long after the file became
+   `sitemap.xml`, and at a hard-coded host — so it now comes from the same SITE_URL the sitemap
+   does. A draft preview build turns crawlers away outright, as its pages' robots meta already does. */
+await writeFile(
+  path.join(OUT, 'robots.txt'),
+  showDrafts
+    ? 'User-agent: *\nDisallow: /\n'
+    : `User-agent: *\nAllow: /\n\nSitemap: ${absolute('/sitemap.xml')}\n`,
+  'utf8',
+);
+
+/* ------------------------------------------------------------------ *
  * OG share cards
  * ------------------------------------------------------------------ */
 
@@ -182,5 +198,5 @@ for (const c of categories) {
 }
 
 console.log(
-  `wrote rss.xml (${feedItems.length} items), sitemap.xml (${new Set(urls).size} urls), ${entries.length + categories.length + 1} og cards`,
+  `wrote rss.xml (${feedItems.length} items), sitemap.xml (${new Set(urls).size} urls), robots.txt, ${entries.length + categories.length + 1} og cards`,
 );

@@ -7,6 +7,7 @@ import {
   cacheControlFor,
   headersFor,
   toHeadersFile,
+  toVercelHeaders,
 } from '../scripts/http-policy.mjs';
 
 /**
@@ -64,10 +65,63 @@ describe('the header policy', () => {
     expect(onDisk).toBe(toHeadersFile());
   });
 
-  it('orders the rules most-specific first, because both consumers take the first match', () => {
-    // The server does `.find()`; the `_headers` format resolves top-down. A `/*` rule placed above
-    // the others would silently swallow every specific one in both.
+  it('orders the rules most-specific first, because the server takes the first match', () => {
+    // The server does `.find()`. A `/*` rule placed above the others would silently swallow every
+    // specific one.
     expect(CACHE_RULES.at(-1)?.glob).toBe('/*');
     expect(CACHE_RULES.findIndex((r) => r.glob === '/_next/static/*')).toBe(0);
+  });
+
+  it('never sends one header twice from the _headers file, because Cloudflare would join them', () => {
+    /* Cloudflare applies every rule whose glob matches, and "if a header is applied twice in the
+       `_headers` file, the values are joined with a comma separator". The first generated file
+       set Cache-Control on both `/_next/static/*` and `/*`, so a hashed script would have gone out
+       as `…immutable, public, max-age=0, must-revalidate`. This reads the file the way that host
+       does — every matching block, every header — and checks what a browser would actually get. */
+    const blocks: { re: RegExp; headers: [string, string][] }[] = [];
+    for (const line of toHeadersFile().split('\n')) {
+      if (line.startsWith('/')) {
+        const re = new RegExp(`^${line.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`);
+        blocks.push({ re, headers: [] });
+      } else if (line.startsWith('  ')) {
+        const [k, ...v] = line.trim().split(': ');
+        blocks.at(-1)!.headers.push([k, v.join(': ')]);
+      }
+    }
+    const served = (p: string) => {
+      const got = new Map<string, string[]>();
+      for (const b of blocks.filter((b) => b.re.test(p))) {
+        for (const [k, v] of b.headers) got.set(k, [...(got.get(k) ?? []), v]);
+      }
+      return got;
+    };
+    const HOST_DEFAULT = 'public, max-age=0, must-revalidate';
+    for (const p of [
+      '/_next/static/chunks/0anb_3ixyf82o.js',
+      '/content/entries/x/images/cover.svg',
+      '/og/entry-x.png',
+      '/assets/portrait.svg',
+      '/',
+      '/about/',
+      '/tags/index.txt',
+    ]) {
+      const got = served(p);
+      for (const [k, vs] of got) expect(vs, `${p} ${k}`).toHaveLength(1);
+      // What the browser ends up with is the policy: ours where we set one, the host's otherwise.
+      expect(got.get('Cache-Control')?.[0] ?? HOST_DEFAULT, p).toBe(cacheControlFor(p));
+      for (const [k, v] of Object.entries(SECURITY_HEADERS)) expect(got.get(k), `${p} ${k}`).toEqual([v]);
+    }
+  });
+
+  it('gives vercel.json the same policy, because Vercel does not read _headers', () => {
+    const onDisk = JSON.parse(readFileSync(path.join(process.cwd(), 'vercel.json'), 'utf8'));
+    expect(onDisk.headers).toEqual(toVercelHeaders());
+    // And the same discipline: the catch-all leaves Cache-Control to the host.
+    const all = onDisk.headers.find((h: { source: string }) => h.source === '/(.*)');
+    expect(all.headers.map((h: { key: string }) => h.key)).not.toContain('Cache-Control');
+    expect(onDisk.headers[0]).toEqual({
+      source: '/_next/static/(.*)',
+      headers: [{ key: 'Cache-Control', value: cacheControlFor('/_next/static/x.js') }],
+    });
   });
 });
