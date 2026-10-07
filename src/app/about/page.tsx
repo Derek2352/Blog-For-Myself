@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import PageTitle from '../_ui/PageTitle';
 import { site, resume } from '@/data/site';
 import { personSchema } from '@/lib/schema';
-import { isPlateAsset } from '@/lib/cover-plate';
+import { assetDrawnKind } from '@/lib/cover-plate';
 import { SITE_URL } from '@/lib/site-url';
 import { stagedImage } from '@/server/content-fs';
 import PageWash from '../_chrome/PageWash';
@@ -21,7 +21,7 @@ export default async function AboutPage() {
      it drawn — so it takes the dark theme's filter the same way twenty-four covers do. Asked of
      the file rather than asserted here: drop a `.jpg` in and this goes false on its own, which
      matters more than usual because the thing being filtered would be a photograph of a person. */
-  const portraitPlate = isPlateAsset('portrait.svg');
+  const portraitDrawn = assetDrawnKind('portrait.svg');
   const portrait = await stagedImage('/assets/portrait.svg');
 
   return (
@@ -112,7 +112,7 @@ export default async function AboutPage() {
           </div>
 
           <aside className="self-start lg:sticky lg:top-6">
-            <figure className="frame overflow-hidden" data-drawn={portraitPlate ? 'plate' : undefined}>
+            <figure className="frame overflow-hidden" data-drawn={portraitDrawn}>
               <img
                 src={portrait.src}
                 alt="Portrait of Derek Yung (placeholder — photo coming)"

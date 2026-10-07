@@ -30,6 +30,7 @@ import {
   CAT_NOTCH_D,
 } from '@/lib/cat-art';
 import { initSiteCat, siteCatPageChanged } from '@/lib/site-cat';
+import CatTextures, { catFill, type CatPart } from './CatTextures';
 
 export default function SiteCat({ tabs }: { tabs: string[] }) {
   const root = useRef<HTMLDivElement>(null);
@@ -47,20 +48,22 @@ export default function SiteCat({ tabs }: { tabs: string[] }) {
 
   return (
     <>
+      <CatTextures />
       <div id="site-cat" aria-hidden="true" ref={root}>
         <span className="cat-flip">
           <svg viewBox="0 0 64 40" width="48" height="30" fill="currentColor" className="cat-svg">
-            <g className="cat-tail"><path d={CAT_TAIL_D}></path></g>
+            <g className="cat-tail"><path d={CAT_TAIL_D} style={catFill('tail')}></path></g>
             <g className="cat-legs">
-              {CAT_LEGS.map((l) => (
+              {CAT_LEGS.map((l, i) => (
                 <path
                   key={`${l.x}-${l.phase}`}
                   className={`cat-leg leg-${l.phase}`}
                   d={catLegD(l.x, l.lean)}
+                  style={catFill(`leg-${i}` as CatPart)}
                 />
               ))}
             </g>
-            <path className="cat-body" d={CAT_BODY_D}></path>
+            <path className="cat-body" d={CAT_BODY_D} style={catFill('body')}></path>
             {/* `.cat-gaze` exists only to own the yaw's rotation origin (§17). It wraps the head
                 rather than replacing it because `.cat-head` already carries two animations of its
                 own — `cat-groom` and `cat-munch` — and both rotate or translate about the default
@@ -68,12 +71,12 @@ export default function SiteCat({ tabs }: { tabs: string[] }) {
                 giving the yaw its own group changes nothing that already works. */}
             <g className="cat-gaze">
             <g className="cat-head">
-              <path className="cat-ear ear-far" d={CAT_EAR_FAR_D}></path>
+              <path className="cat-ear ear-far" d={CAT_EAR_FAR_D} style={catFill('ear-far')}></path>
               {/* The near ear is a group so the notch can ride with it: the arena rotates
                   `.cat-ear` during a pounce's wind-up, and a notch drawn as a sibling would
                   detach from the ear it belongs to. */}
               <g className="cat-ear ear-near">
-                <path d={CAT_EAR_NEAR_D}></path>
+                <path d={CAT_EAR_NEAR_D} style={catFill('ear-near')}></path>
                 {/* The notch — the confrontation path's proof, the collar's opposite number
                     (docs/cat-boss-gdd.md §7.1). Earned by winning a fight, session-only, and
                     the one piece of new art the design allows itself.
@@ -91,7 +94,7 @@ export default function SiteCat({ tabs }: { tabs: string[] }) {
                   strokeWidth="1.5"
                   strokeLinecap="round"></path>
               </g>
-              <path className="cat-skull" d={CAT_HEAD_D}></path>
+              <path className="cat-skull" d={CAT_HEAD_D} style={catFill('head')}></path>
               {/* Earned, not decorative: this only appears once every treat is found. The affection
                   tiers otherwise only widen an idle animation repertoire, which is close to invisible —
                   a collar is a change to the cat you can actually point at.

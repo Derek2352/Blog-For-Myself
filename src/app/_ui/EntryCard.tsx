@@ -25,7 +25,7 @@ import { entryHref } from '@/lib/content-core';
 import { categoryBySlug } from '@/data/categories';
 import { humanRange } from '@/lib/format';
 import { orientation } from '@/lib/images';
-import { isGeneratedPlate, isCoverArt } from '@/lib/cover-plate';
+import { drawnKind } from '@/lib/cover-plate';
 
 export interface EntryCardProps {
   entry: Entry;
@@ -52,9 +52,10 @@ export default function EntryCard({
   const coverFit = orientation(entry.data.cover) === 'wide' ? 'object-cover' : 'object-contain';
   /* A cover this project drew rather than photographed — the plate, or an illustration. Both are
      drawn in the same measured palette, so the dark theme sinks both into the ground with the same
-     filter (see the `[data-drawn]` rule in global.css). The card does not care which it is; the
-     entry page does, and asks separately. */
-  const drawn = isGeneratedPlate(entry.id) ? 'plate' : isCoverArt(entry.id) ? 'art' : undefined;
+     filter (see the `[data-drawn]` rule in global.css) — unless it was rendered, when it carries
+     its own dark picture and the filter stays off (`drawnKind`). The card does not care which it
+     is; the entry page does, and asks separately. */
+  const drawn = drawnKind(entry.id);
   const cover = entry.data.cover;
 
   if (compact) {

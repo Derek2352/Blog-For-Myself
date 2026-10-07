@@ -46,6 +46,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { isPlateSVG, isArtSVG } from '../../scripts/cover-plate.mjs';
+import { isRenderedSVG } from '../../scripts/art-render.mjs';
 
 const ENTRIES = path.join(process.cwd(), 'src', 'content', 'entries');
 const ASSETS = path.join(process.cwd(), 'src', 'assets');
@@ -86,11 +87,15 @@ const filesIn = (root: string, ext: string): string[] => {
  */
 const plates = new Set<string>();
 const art = new Set<string>();
+/* Rendered is orthogonal to plate/art: a rendered cover is still one or the other (the wrapper
+   keeps both marks), and additionally carries its own light and dark pictures. */
+const rendered = new Set<string>();
 for (const id of dirsIn(ENTRIES)) {
   const svg = textOf(path.join(ENTRIES, id, 'images', 'cover.svg'));
   if (!svg) continue;
   if (isArtSVG(svg)) art.add(id);
   else if (isPlateSVG(svg)) plates.add(id);
+  if (isRenderedSVG(svg)) rendered.add(id);
 }
 
 /**
@@ -133,6 +138,20 @@ export function isCoverArt(entryId: string): boolean {
   return art.has(entryId);
 }
 
+/**
+ * The value pages put on `data-drawn`, in one place: `render` for a drawing built and lit in
+ * Blender (scripts/render-art.mjs), else `plate` or `art` for a flat one, else nothing.
+ *
+ * The distinction is what global.css's dark-theme rule turns on. A flat drawing is only colours,
+ * so `invert(1) hue-rotate(180deg)` redraws it for the dark theme; a rendered one is colours and
+ * light, and inverting it turns every shadow into a glow. It carries its own dark render instead,
+ * chosen inside the SVG by the page's `color-scheme`, so the filter must stay off it.
+ */
+export function drawnKind(entryId: string): 'render' | 'plate' | 'art' | undefined {
+  if (rendered.has(entryId)) return 'render';
+  return plates.has(entryId) ? 'plate' : art.has(entryId) ? 'art' : undefined;
+}
+
 /*
  * The same question for the loose assets outside the content collections. Only `/about/`'s portrait
  * asks it today, and it asks for the same reason an entry does: `npm run covers` draws that plate,
@@ -148,6 +167,15 @@ export function isCoverArt(entryId: string): boolean {
 const assetPlates = new Set(
   filesIn(ASSETS, '.svg').filter((file) => isPlateSVG(textOf(path.join(ASSETS, file)))),
 );
+const assetRenders = new Set(
+  filesIn(ASSETS, '.svg').filter((file) => isRenderedSVG(textOf(path.join(ASSETS, file)))),
+);
+
+/** `drawnKind` for `src/assets/<file>`: the portrait plate, rendered or flat. */
+export function assetDrawnKind(file: string): 'render' | 'plate' | undefined {
+  if (assetRenders.has(file)) return 'render';
+  return assetPlates.has(file) ? 'plate' : undefined;
+}
 
 /**
  * True when `src/assets/<file>` is a plate the generator drew.
@@ -170,5 +198,6 @@ export function isPlateAsset(file: string): boolean {
 export const drawnCounts = () => ({
   plates: plates.size,
   art: art.size,
+  rendered: rendered.size,
   assetPlates: assetPlates.size,
 });

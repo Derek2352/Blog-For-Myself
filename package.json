@@ -26,6 +26,7 @@
     "inbox": "node scripts/inbox.mjs",
     "studio": "node scripts/studio.mjs",
     "covers": "node scripts/redraw-covers.mjs",
+    "art": "tsx scripts/render-art.mjs",
     "headers": "node scripts/write-headers.mjs"
   },
   "dependencies": {

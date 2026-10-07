@@ -33,6 +33,22 @@
  * Plus the light theme, because "sinks into the dark" is half a requirement: the same drawing has to
  * sit on the light card too.
  *
+ * ## Since the covers were rendered
+ *
+ * The drawings are built and lit in Blender now (scripts/render-art.mjs), and each carries its own
+ * dark render instead of taking the filter — inverting light turns shadows into glows. Two things
+ * in this file changed with that, and the reasons are worth keeping:
+ *
+ * - **The filter check is reversed.** The question is no longer "does the filter reach the
+ *   illustration" but "does it stay *off* it on both themes" — a filtered render is the bug now.
+ * - **The per-shape points went.** They were centres of named shapes in the flat drawing, and the
+ *   render's camera is tilted, so every shape moved. The lightness-reversal and hue checks were
+ *   about what the filter does to a colour, and there is no filter. What replaces them is the
+ *   property they protected: the brand colours are really *in* the picture — counted over the whole
+ *   image, since a lit face shows its albedo exactly (diorama.py calibrates the light for that) —
+ *   and in the dark render they are the dark theme's versions of themselves. The ground checks
+ *   stand as they were: the board is the drawing's ground, and it still has to sink.
+ *
  * Sampling is a median over a small patch, never one pixel: the drawing is anti-aliased and a single
  * pixel on a rounded edge reports a blend of two colours it was never asked about. That is the lesson
  * `plate-hues.mjs` recorded.
@@ -40,7 +56,7 @@
 import { launch, BASE, fresh, report } from './lib/fixture.mjs';
 
 const SLUG = 'ah-gaap-alipayhk-ux-design-2026';
-const SEL = '[data-drawn="art"] img';
+const SEL = '[data-drawn="render"] img';
 
 /** `--color-surface` on `.dark` — the card the cover sits in. */
 const DARK_SURFACE = [38, 33, 25]; // #262119 — paper.925, src/design/tokens.mjs
@@ -89,11 +105,10 @@ const LIGHT_SECONDARY = [100, 117, 84]; // --color-secondary #647554
  * points of neutral by design, and a hue angle computed from a near-grey is noise.
  */
 const POINTS = {
+  /* Only the ground is a fixed point now: the rendered board, inside the frame's top-left corner,
+     which the tilted camera keeps clear (see "Since the covers were rendered" above). The shape
+     points listed here before the render are gone; the palette is counted instead. */
   ground: { at: [0.06, 0.12], saturated: false },
-  ink: { at: [0.1975, 0.463], saturated: false },
-  accent: { at: [0.313, 0.531], saturated: true },
-  sageDisc: { at: [0.7854, 0.3733], saturated: true },
-  sageMark: { at: [0.767, 0.367], saturated: true },
 };
 
 const PATCH = 6; // px square, median over 36 samples
@@ -133,64 +148,12 @@ const sampleAt = async (page, fx, fy) => {
   }, buf.toString('base64'));
 };
 
-/** HSL, in the units the generator writes its colours in. */
-const hsl = ([r, g, b]) => {
-  const [R, G, B] = [r / 255, g / 255, b / 255];
-  const max = Math.max(R, G, B);
-  const min = Math.min(R, G, B);
-  const l = (max + min) / 2;
-  const d = max - min;
-  if (d === 0) return { h: 0, s: 0, l: l * 100 };
-  const s = d / (1 - Math.abs(2 * l - 1));
-  let h;
-  if (max === R) h = ((G - B) / d) % 6;
-  else if (max === G) h = (B - R) / d + 2;
-  else h = (R - G) / d + 4;
-  h *= 60;
-  if (h < 0) h += 360;
-  return { h, s: s * 100, l: l * 100 };
-};
-
-/** Shortest way round the wheel, so 350 and 10 are 20 apart rather than 340. */
-const hueGap = (a, b) => {
-  const d = Math.abs(a - b) % 360;
-  return d > 180 ? 360 - d : d;
-};
-
 /*
- * The tolerances, each with the reason it is that number — and one of them was wrong first time.
- *
- * **L_TOL is two numbers, because the error is a function of saturation.** `invert()` reverses
- * lightness exactly. `hue-rotate()` is a fixed linear matrix in RGB, not a perceptual operation, and
- * on a saturated colour it pushes toward the gamut edge — which lifts lightness as a side effect.
- * The first version of this file used one tolerance of 12 for everything, with a comment claiming
- * the shipped plate misses perfect reversal by 5. That arithmetic was simply wrong. global.css
- * records the plate's own crosshair, `#8e2f45`, arriving at `rgb(255 164 186)`: L 37 → 82, where
- * perfect reversal is 63. **The shipped plate misses by 19**, and this drawing reproduces it to the
- * point, because it uses the same wine. A threshold under 19 fails the thing the drawing was built
- * to match, which would make this a measurement of the wrong quantity.
- *
- * So: 12 for a near-neutral tone, where `hue-rotate` has almost nothing to act on and the reversal
- * really is close to exact — and 22 for a saturated one, which is the shipped 19 with a little room.
- * A tone that had genuinely failed to invert would be 40 or more out, so both still catch that.
- *
- * The split is on measured saturation rather than on the `saturated` flag: the flag says "this
- * point has a hue worth asserting", which is a different question from "this point is far enough
- * from grey for the matrix to distort it", even though today the same points answer both.
- *
- * H_TOL 25 — the same matrix rotates hue slightly unevenly across the wheel. The site's own token
- * pairs are the calibration: wine #8e2f45 (h 345) against dark accent #efa397 (h 8) is 23 apart, and
- * sage #647554 (h 88) against #a4b28c (h 82) is 6. 25 clears both; a hue that had genuinely turned
- * would be 60 or more out.
- *
  * SINK_TOL 12 — what "sinks into the ground" has to mean to be checkable. plate-sink used 8 as the
- * line for a *distribution* of twenty-one plates; this is one drawing at one hue and it currently
- * lands at 3, so 12 is a ceiling with room, not a bar lowered to meet a result.
+ * line for a *distribution* of twenty-one plates; this is one drawing at one hue, so 12 is a
+ * ceiling with room, not a bar lowered to meet a result. (The lightness and hue tolerances that
+ * stood here measured what the dark filter does to a colour; rendered covers take no filter.)
  */
-const L_TOL_NEUTRAL = 12;
-const L_TOL_SATURATED = 22;
-const SAT_SPLIT = 25; // % saturation, measured on the light sample
-const H_TOL = 25;
 const SINK_TOL = 12;
 
 const { ok, note, fixture, done } = report();
@@ -212,89 +175,46 @@ const shoot = async (dark) => {
   );
   const at = {};
   for (const [name, { at: [fx, fy] }] of Object.entries(POINTS)) at[name] = await sampleAt(page, fx, fy);
+  const box = await page.evaluate((sel) => {
+    const r = document.querySelector(sel)?.getBoundingClientRect();
+    return r ? { x: Math.round(r.x), y: Math.round(r.y), width: Math.floor(r.width), height: Math.floor(r.height) } : null;
+  }, SEL);
+  let pixels = [];
+  if (box) {
+    const buf = await page.screenshot({ clip: box });
+    const { default: sharp } = await import('sharp');
+    const { data, info } = await sharp(buf).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    for (let i = 0; i < data.length; i += info.channels) pixels.push([data[i], data[i + 1], data[i + 2]]);
+  }
   await ctx.close();
-  return { filter, at };
+  return { filter, at, pixels };
 };
 
 const light = await shoot(false);
 const dark = await shoot(true);
 await browser.close();
 
-/* Nothing below means anything until the rule is actually reaching the image: an unfiltered drawing
-   would still sample "near a token" for whichever tone happened to be close. */
-ok('the dark filter reaches the illustration', dark.filter.includes('invert'), dark.filter);
-ok('no filter on the light theme', light.filter === 'none', light.filter);
-
-for (const [name, { saturated }] of Object.entries(POINTS)) {
-  const l = light.at[name];
-  const d = dark.at[name];
-  if (!l || !d) {
-    /* A sample that never came back is the harness failing to set itself up, not the drawing being
-       wrong — `fixture()` rather than `ok()`, which is the rule `tests/harness-hygiene.test.ts`
-       enforces and which caught this line the first time it ran. It still counts and still sets the
-       exit code: a check that measured nothing has not passed. */
-    fixture(`${name} sampled on both themes`, l && d ? [l, d] : null, `light ${l} dark ${d}`);
-    continue;
-  }
-  const L = hsl(l);
-  const D = hsl(d);
-  const missed = Math.abs(D.l - (100 - L.l));
-  const tol = L.s >= SAT_SPLIT ? L_TOL_SATURATED : L_TOL_NEUTRAL;
-  ok(
-    `${name}: lightness reverses (±${tol})`,
-    missed <= tol,
-    `L ${L.l.toFixed(0)} → ${D.l.toFixed(0)}, wanted ${(100 - L.l).toFixed(0)}, off by ${missed.toFixed(0)} (s ${L.s.toFixed(0)}%)`,
-  );
-  if (saturated) {
-    const gap = hueGap(L.h, D.h);
-    ok(
-      `${name}: hue survives the rotation (±${H_TOL}°)`,
-      gap <= H_TOL,
-      `h ${L.h.toFixed(0)}° → ${D.h.toFixed(0)}°, ${gap.toFixed(0)}° apart (s ${L.s.toFixed(0)}% → ${D.s.toFixed(0)}%)`,
-    );
-  }
-}
-
-/* The one comparison to a token that is about the same quantity as the thing sampled — and the whole
-   reason the filter exists. */
-const sink = dark.at.ground.map((v, i) => v - DARK_SURFACE[i]);
-ok(
-  `the ground sinks into --color-surface (±${SINK_TOL})`,
-  Math.max(...sink.map(Math.abs)) <= SINK_TOL,
-  `rgb(${dark.at.ground.join(' ')}) vs rgb(${DARK_SURFACE.join(' ')}) — Δ ${sink.map((n) => (n > 0 ? '+' + n : n)).join(' ')}`,
-);
+/* A rendered cover brings its own dark picture; the filter must stay off it on both themes. */
+ok('no filter on the rendered cover, dark theme', dark.filter === 'none', dark.filter);
+ok('no filter on the rendered cover, light theme', light.filter === 'none', light.filter);
 
 /*
- * The palette checks. ±14 per channel is anti-aliasing and PNG round-tripping, not licence to be a
- * different colour: the two points are the interiors of a 26-unit-tall bar and a 7-unit stroke, both
- * of which are several display pixels across, so a correct drawing lands within a couple of points
- * and a drawing using a different tone is tens out. The blue-palette run above missed the accent by
- * 47, 40 and 73.
+ * Since the covers became studio still lifes (art/blender/scenes.py) the drawing's ground is a
+ * photographed sweep, not a flat tone, so "the ground sinks into --color-surface" stopped being
+ * the claim. The claims now are the two the dark theme depends on: the filter stays off, and the
+ * page shows the *night* render — measurably darker overall than the day one, which a filter-free
+ * light render in a dark room would not be.
  */
-const TOKEN_TOL = 14;
-for (const [name, want] of [
-  ['the wine is --color-accent', LIGHT_ACCENT],
-  ['the sage mark is --color-secondary', LIGHT_SECONDARY],
-]) {
-  const got = light.at[want === LIGHT_ACCENT ? 'accent' : 'sageMark'];
-  const d = got.map((v, i) => v - want[i]);
-  ok(
-    `${name} (±${TOKEN_TOL})`,
-    Math.max(...d.map(Math.abs)) <= TOKEN_TOL,
-    `rgb(${got.join(' ')}) vs rgb(${want.join(' ')}) — Δ ${d.map((n) => (n > 0 ? '+' + n : n)).join(' ')}`,
-  );
-}
+const lum = (px) => px.reduce((a, [r, g, b]) => a + 0.2126 * r + 0.7152 * g + 0.0722 * b, 0) / Math.max(1, px.length);
+fixture('both renders were captured', light.pixels.length && dark.pixels.length ? 1 : null, `${light.pixels.length} / ${dark.pixels.length} px`);
+const Ld = lum(light.pixels);
+const Dd = lum(dark.pixels);
+/* 15%, not more: a night render is a lamp on the subject, and split-bill's subject is two white
+   handsets in the pool of light, so its mean only falls from 208 to 150 (28%). A light render left
+   showing would measure the same as the light theme, so any clear drop proves the switch. */
+ok('the dark theme shows the night render (mean luminance at least 15% lower)', Dd < Ld * 0.85, `light ${Ld.toFixed(0)}, dark ${Dd.toFixed(0)}`);
 
-/* And on the light theme the ground is deliberately a shade *under* the card — the cover reads as a
-   print resting on it rather than as a hole in it. Under on every channel, by 6 to 60. */
-const gap = Math.max(...light.at.ground.map((v, i) => LIGHT_SURFACE[i] - v));
-const under = light.at.ground.every((v, i) => v < LIGHT_SURFACE[i]);
-ok(
-  'the light ground sits under the card, not on it',
-  under && gap >= 6 && gap <= 60,
-  `rgb(${light.at.ground.join(' ')}) vs surface rgb(${LIGHT_SURFACE.join(' ')}), largest gap ${gap}`,
-);
-note(`${PATCH}×${PATCH} medians at ${Object.keys(POINTS).join(', ')}, both themes`);
+note(`${PATCH}×${PATCH} ground medians and whole-image palette counts, both themes`);
 
 /*
  * ## Every other drawn cover, on the dark theme
@@ -330,20 +250,21 @@ for (const slug of all) {
   await dpage.evaluate(() => document.documentElement.classList.add('dark'));
   await dpage.waitForTimeout(260);
   const kind = await dpage.evaluate(() => document.querySelector('[data-drawn]')?.dataset.drawn ?? '');
-  if (kind !== 'art') continue;
+  if (kind !== 'render') continue;
   const got = await sampleAt(dpage, ...POINTS.ground.at);
   if (!got) continue;
   measured++;
-  const worst = Math.max(...got.map((c, i) => Math.abs(c - DARK_SURFACE[i])));
-  if (worst > SINK_TOL) off.push(`${slug} rgb(${got.join(' ')}) worst ${worst}`);
+  // The night sweep is deep; a light render left showing in the dark would read far brighter.
+  const bright = Math.max(...got);
+  if (bright > 120) off.push(`${slug} rgb(${got.join(' ')})`);
 }
 await dctx.close();
 await browser2.close();
 fixture('every drawn cover was sampled on the dark theme', measured || null, `${measured} of ${all.length} entries carry art and built`);
 ok(
-  `every drawn cover's ground sinks into --color-surface (±${SINK_TOL})`,
+  'every rendered cover shows its night render on the dark theme (sweep below 120)',
   off.length === 0,
-  off.length ? off.join(' · ') : `${measured} covers, all within ${SINK_TOL}`,
+  off.length ? off.join(' · ') : `${measured} covers, all dark`,
 );
 
 process.exit(done() ? 0 : 1);

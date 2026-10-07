@@ -439,3 +439,10 @@
   30% { transform: translate(7px, -12px) rotate(-9deg) scale(0.97, 1.05); }
   60% { transform: translate(11px, 0) scale(1.07, 0.9); }
 }
+
+/* The cat's Blender shading (src/app/_chrome/CatTextures.tsx): every pattern holds both themes'
+   sprite sheets, and the theme shows one. */
+#cat-textures { position: absolute; width: 0; height: 0; overflow: hidden; }
+#cat-textures .cat-tex-dark { display: none; }
+.dark #cat-textures .cat-tex-light { display: none; }
+.dark #cat-textures .cat-tex-dark { display: inline; }

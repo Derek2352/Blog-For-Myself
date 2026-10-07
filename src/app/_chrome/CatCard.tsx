@@ -25,6 +25,7 @@ import {
   CAT_EYE,
   CAT_PUPIL,
 } from '@/lib/cat-art';
+import { catFill, type CatPart } from './CatTextures';
 import { initCatCard } from '@/lib/cat-card';
 
 export default function CatCard({ poolJson }: { poolJson: string }) {
@@ -48,17 +49,17 @@ export default function CatCard({ poolJson }: { poolJson: string }) {
               fix for a copy that had drifted (it had dropped the legs and the head, so the cat was
               a floating loaf). Agreeing by hand is not a guarantee; it is a coincidence that had
               already failed once. Now they cannot drift. */}
-          <g className="cat-card-tail"><path d={CAT_TAIL_D}></path></g>
+          <g className="cat-card-tail"><path d={CAT_TAIL_D} style={catFill('tail')}></path></g>
           <g className="cat-card-legs">
-            {CAT_LEGS.map((l) => (
-              <path key={`${l.x}-${l.phase}`} d={catLegD(l.x, l.lean)} />
+            {CAT_LEGS.map((l, i) => (
+              <path key={`${l.x}-${l.phase}`} d={catLegD(l.x, l.lean)} style={catFill(`leg-${i}` as CatPart)} />
             ))}
           </g>
-          <path className="cat-card-body" d={CAT_BODY_D}></path>
+          <path className="cat-card-body" d={CAT_BODY_D} style={catFill('body')}></path>
           <g className="cat-card-head">
-            <path className="cat-card-ear cat-card-ear-far" d={CAT_EAR_FAR_D}></path>
-            <path className="cat-card-ear cat-card-ear-near" d={CAT_EAR_NEAR_D}></path>
-            <path d={CAT_HEAD_D}></path>
+            <path className="cat-card-ear cat-card-ear-far" d={CAT_EAR_FAR_D} style={catFill('ear-far')}></path>
+            <path className="cat-card-ear cat-card-ear-near" d={CAT_EAR_NEAR_D} style={catFill('ear-near')}></path>
+            <path d={CAT_HEAD_D} style={catFill('head')}></path>
             <g className="cat-card-eye">
               <ellipse cx={CAT_EYE.cx} cy={CAT_EYE.cy} rx={CAT_EYE.rx} ry={CAT_EYE.ry}></ellipse>
               <ellipse className="cat-card-pupil" cx={CAT_EYE.cx} cy={CAT_EYE.cy} rx={CAT_PUPIL.rx} ry={CAT_PUPIL.ry}></ellipse>
@@ -127,8 +128,8 @@ export default function CatCard({ poolJson }: { poolJson: string }) {
             <svg viewBox="0 0 64 40" className="cat-card-boss-svg">
               <path className="cat-card-boss-tail" d={CAT_TAIL_D}></path>
               <g className="cat-card-legs">
-                {CAT_LEGS.map((l) => (
-              <path key={`${l.x}-${l.phase}`} d={catLegD(l.x, l.lean)} />
+                {CAT_LEGS.map((l, i) => (
+              <path key={`${l.x}-${l.phase}`} d={catLegD(l.x, l.lean)} style={catFill(`leg-${i}` as CatPart)} />
             ))}
               </g>
               <path className="cat-card-boss-body" d={CAT_BODY_D}></path>
@@ -138,7 +139,7 @@ export default function CatCard({ poolJson }: { poolJson: string }) {
               <g className="cat-card-boss-head">
                 <path className="cat-card-boss-ear cat-card-boss-ear-far" d={CAT_EAR_FAR_D}></path>
                 <path className="cat-card-boss-ear cat-card-boss-ear-near" d={CAT_EAR_NEAR_D}></path>
-                <path d={CAT_HEAD_D}></path>
+                <path d={CAT_HEAD_D} style={catFill('head')}></path>
                 <g className="cat-card-eye">
                   <ellipse cx={CAT_EYE.cx} cy={CAT_EYE.cy} rx={CAT_EYE.rx} ry={CAT_EYE.ry}></ellipse>
                   <ellipse className="cat-card-pupil" cx={CAT_EYE.cx} cy={CAT_EYE.cy} rx={CAT_PUPIL.rx} ry={CAT_PUPIL.ry}></ellipse>

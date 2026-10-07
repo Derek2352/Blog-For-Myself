@@ -1188,7 +1188,10 @@
      The value (`plate` or `art`) is not used by any rule here. It is in the DOM because a reader
      of the page, or a harness sampling one, otherwise cannot tell which kind of cover it is looking
      at — and the two are meant to be told apart. */
-  html.dark [data-drawn] img { filter: invert(1) hue-rotate(180deg); }
+  /* …except a drawing that was *rendered* (`data-drawn="render"`, scripts/render-art.mjs). That
+     one is colours and light, and inverting light turns every shadow into a glow; it carries a
+     dark render of its own, chosen inside the SVG by the page's `color-scheme`. */
+  html.dark [data-drawn]:not([data-drawn='render']) img { filter: invert(1) hue-rotate(180deg); }
 
   /* ---- image blur-up: LQIP background, sharp image fades in ---- */
   .blurup { background-size: cover; background-position: center; }

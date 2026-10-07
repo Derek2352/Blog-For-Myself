@@ -211,6 +211,60 @@ That credit is not decoration. A picture of a bill-splitting app, on the page ab
 app you designed, will be read as a screenshot of what you built unless something says otherwise.
 Every template's credit names what its drawing is **not**, and a test fails if one stops doing so.
 
+#### Built in Blender — `npm run art`
+
+The covers are **studio still lifes**, built and lit in Blender (`art/blender/scenes.py`). Each
+template is a small sculptural arrangement about the entry, and everything except the subject is
+shared, which is what makes twenty-four covers one series:
+
+- **the set:** a seamless paper sweep in the category's hue, so a category's covers are kin;
+- **the materials:** glazed and matte ceramic, travertine, brushed brass, frosted and clear glass,
+  linen, oak and card;
+- **the light:** by day, a low window whose mullions fall across the sweep; by night (the dark
+  theme), one warm lamp and a cool rim, and anything that can glow does — the skyline's rooms,
+  the candles in the trading chart, the network's nodes, the film's frames;
+- **the camera:** one 70 mm lens at one height, shallow focus.
+
+| Template | The still life |
+|---|---|
+| `skyline` | an architect's model city on a travertine plinth, location inlaid in brass |
+| `ridge-line` | glass mountain ridges on a stone base, brass sun (a moon at night) |
+| `trading-desk` | a candlestick chart made of real candles, lit at night |
+| `ledger-page` | an open ruled ledger, blank, with a brass pen |
+| `conversation` | two ceramic speech bubbles facing each other |
+| `cohort` | ceramic figurines on an oak board, two in glaze |
+| `book-stack` | cloth-bound books inside a brass hoop |
+| `film-strip` | a reel unspooling film whose frames glow at night |
+| `split-bill` | two handsets, a receipt torn into shares, brass coins |
+| `model-graph` | a neural network in glass nodes and brass threads |
+| `pipeline` | cups feeding glass tubes into a bowl of sorted beads |
+| `pitch-deck` | card slides in an oak stand |
+| `artboard` | glazed primitives on a white board, one selected |
+| `blueprint` | a blueprint half unrolled under a white massing model |
+| `collection-bag` | a linen collection bag and a sheet of stickers |
+| `crates` | crates of produce and a paper bag of greens |
+
+The rules the flat drawings were written under still hold: a cover shows what the work was
+about, never what it contained — no company marks, no readable interface, no figures. The only
+lettering is a trip's location, which the page already states.
+
+Each cover renders twice, day and night, and both live in the same `cover.svg`: the page's
+`color-scheme` picks one, so the theme toggle switches the picture, and the dark theme's inversion
+filter skips rendered covers (`data-drawn="render"`). The flat drawing from `npm run covers` stays
+inside the file as the cover's identity and fallback; a render records a hash of that drawing and
+of `scenes.py`, `npm run covers` leaves a current render alone, and `tests/art-render.test.ts`
+fails if any cover is stale. The portrait slot on /about/ is the same studio's empty frame under a
+picture light. The Ah Gaap gallery frames stay flat: they are placeholders for screenshots.
+
+**The cat** keeps its vector outline, hit area and every animation: each of its nine parts is
+inflated into clay and rendered alone, and the render is painted inside the original path as a
+pattern fill (`CatTextures`), so a swinging leg carries its own light.
+
+Setup, once: `pip install -r art/blender/requirements.txt` into Python 3.11 (Blender ships as the
+`bpy` module; `fonttools` converts the site's typefaces for the lettering), and
+`BLENDER_PYTHON=/path/to/that/python` if it is not `python3`. `npm run art -- --force` takes
+about 45 minutes on four CPU cores.
+
 #### The fifteen templates
 
 | Template | Draws | Used by |

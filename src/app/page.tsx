@@ -19,7 +19,7 @@ import { byPinnedOrder } from '@/lib/sort';
 import { categoryBySlug } from '@/data/categories';
 import { orientation } from '@/lib/images';
 import { personSchema } from '@/lib/schema';
-import { isGeneratedPlate, isCoverArt } from '@/lib/cover-plate';
+import { drawnKind } from '@/lib/cover-plate';
 import { monthKey } from '@/lib/format';
 import { balancedCols } from '@/lib/layout';
 import { SITE_URL } from '@/lib/site-url';
@@ -79,13 +79,7 @@ export default async function HomePage() {
 
      An illustration takes the same two, for the same two reasons: it is drawn in the plate's own
      measured ground so the filter lands, and it is flat, so there is nothing to blur up from. */
-  const heroDrawn = hero
-    ? isGeneratedPlate(hero.id)
-      ? 'plate'
-      : isCoverArt(hero.id)
-        ? 'art'
-        : undefined
-    : undefined;
+  const heroDrawn = hero ? drawnKind(hero.id) : undefined;
   const strip = (featured.length > 1 ? featured : entries).filter((e) => e !== hero).slice(0, 3);
 
   const catIndex = index.filter((c) => c.entryCount + c.logCount > 0);
@@ -106,7 +100,7 @@ export default async function HomePage() {
       prints: own.slice(0, PRINTS).map((e) => ({
         id: e.id,
         cover: e.data.cover,
-        drawn: isGeneratedPlate(e.id) ? 'plate' : isCoverArt(e.id) ? 'art' : undefined,
+        drawn: drawnKind(e.id),
       })),
     };
   });

@@ -23,7 +23,7 @@ import { categoryBySlug } from '@/data/categories';
 import { resolveWash } from '@/lib/wash';
 import { isPlaceholderCover, orientation } from '@/lib/images';
 import { artMeta } from '../../../../scripts/cover-art.mjs';
-import { isGeneratedPlate, isCoverArt } from '@/lib/cover-plate';
+import { isGeneratedPlate, isCoverArt, drawnKind } from '@/lib/cover-plate';
 import { entrySchema, breadcrumbSchema } from '@/lib/schema';
 import { SITE_URL, absolute } from '@/lib/site-url';
 import MetadataRail from '../../_ui/MetadataRail';
@@ -107,8 +107,11 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
      required: the frontmatter names the template, which is where `alt` and the credit line live,
      and the file says the drawing is actually there. Drop a photograph over it and the file
      disagrees, the frontmatter is ignored, and the page reverts on its own. */
-  const drawn = plate ? 'plate' : isCoverArt(entry.id) ? 'art' : undefined;
-  const art = drawn === 'art' && entry.data.art ? artMeta(entry.data.art) : null;
+  const drawn = drawnKind(entry.id);
+  /* Asked of the file directly rather than of `drawn`: a rendered illustration is `render` there
+     (it brings its own dark picture), and it is still the illustration, with the same alt and the
+     same credit line. */
+  const art = isCoverArt(entry.id) && entry.data.art ? artMeta(entry.data.art) : null;
 
   const schemas = [
     entrySchema(entry, {

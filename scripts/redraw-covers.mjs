@@ -23,6 +23,9 @@ import { fileURLToPath } from 'node:url';
 import { placeholderSVG, loadCategories, categoryHue } from './lib.mjs';
 import { isPlateSVG, isArtSVG } from './cover-plate.mjs';
 import { coverArtSVG } from './cover-art.mjs';
+import { isRenderedSVG, renderedFrom, sceneKey } from './art-render.mjs';
+
+const SCENES = await readFile(new URL('../art/blender/scenes.py', import.meta.url), 'utf8');
 
 const ROOT = fileURLToPath(new URL('../src/content/entries/', import.meta.url));
 const { cats } = await loadCategories();
@@ -94,12 +97,19 @@ for (const slug of dirs) {
      is enough: these three keys are single-line scalars in every entry, written by `new-entry.mjs`
      and by the studio, both of which quote them. */
   const location = front.match(/^location:\s*"([^"]+)"/m)?.[1];
-  await writeFile(
-    cover,
-    art
-      ? coverArtSVG({ template: art, hue, seed: slug, data: { location, ordinal: ordinals.get(slug) ?? 0 } })
-      : placeholderSVG({ seed: slug, hue }),
-  );
+  const drawing = art
+    ? coverArtSVG({ template: art, hue, seed: slug, data: { location, ordinal: ordinals.get(slug) ?? 0 } })
+    : placeholderSVG({ seed: slug, hue });
+  /* A rendered cover (scripts/render-art.mjs) records a hash of the drawing it was built from and
+     of the scene builder. If both are unchanged the render is current and stays; otherwise the
+     vector goes back in, and `npm run art` builds and lights the new one. Either way the drawing is the
+     source of truth and a render is never older than it without saying so. */
+  if (isRenderedSVG(existing) && renderedFrom(existing) === sceneKey(drawing, SCENES)) {
+    console.log(`  keep  ${slug.padEnd(42)} (rendered, and the drawing has not changed)`);
+    skipped++;
+    continue;
+  }
+  await writeFile(cover, drawing);
   console.log(
     `  ${art ? 'draw  ' : 'redraw'} ${slug.padEnd(42)} ${String(category).padEnd(14)} hue ${hue ?? '(hashed)'}${art ? `  art: ${art}` : ''}`,
   );
@@ -131,10 +141,17 @@ if (!existsSync(PORTRAIT)) {
 } else if (!isPlateSVG(await readFile(PORTRAIT, 'utf8'))) {
   console.log('\n  keep  portrait.svg (a real portrait has landed)');
   skipped++;
+} else if (
+  isRenderedSVG(await readFile(PORTRAIT, 'utf8')) &&
+  renderedFrom(await readFile(PORTRAIT, 'utf8')) ===
+    sceneKey(placeholderSVG({ seed: 'portrait', hue: 32, width: 900, height: 1125 }), SCENES)
+) {
+  console.log('\n  keep  portrait.svg (rendered, and the drawing has not changed)');
+  skipped++;
 } else {
   await writeFile(PORTRAIT, placeholderSVG({ seed: 'portrait', hue: 32, width: 900, height: 1125 }));
   console.log('\n  redraw portrait.svg'.padEnd(52) + 'about'.padEnd(14) + 'hue 32');
   done++;
 }
 
-console.log(`\nredrew ${done}, left alone ${skipped}`);
+console.log(`\nredrew ${done}, left alone ${skipped}${done ? ' — run `npm run art` to render what was redrawn' : ''}`);

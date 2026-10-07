@@ -1,0 +1,5 @@
+# Blender as a Python module, for art/blender (npm run art). Python 3.11.
+bpy==4.5.14
+svgelements==1.9.6
+fonttools==4.66.1
+brotli
