@@ -64,15 +64,18 @@ export const INTERACTIVE =
  * Never claimable **anywhere inside**. Exclusion always wins here, and the
  * subtree matters as much as the element:
  *
- * - `header`, `.tabbar` — the way out is not part of the game.
- * - `.glass` — the hero pane stays legible, so the page can never become
- *   unreadable (pillar 2). It matches `CLAIMABLE` too (`[data-ink-reserve]` *is*
- *   `.glass`), and self-matching alone would still have let the cat claim the
- *   `h1` and `.kicker` *inside* it, which is the same failure by another route.
+ * - `header` — the way out is not part of the game. The work menu's panel
+ *   opens inside it, so the rooms it lists are covered by the same word.
+ * - `[data-ink-reserve]` — the hero pane stays legible, so the page can never
+ *   become unreadable (pillar 2). It matches `CLAIMABLE` too, and self-matching
+ *   alone would still have let the cat claim the `h1` and `.kicker` *inside* it,
+ *   which is the same failure by another route. This was `.glass` while the
+ *   pane was a frosted card; the card went and the guard nearly went with it,
+ *   so it is keyed to the attribute that defines the pane, not to its look.
  * - the cat's own furniture — `.cat-caption` wears `.rail`, so without this the
  *   first press had the cat claiming its own score chip.
  */
-export const PROTECTED_TREE = 'header, .tabbar, .glass, #site-cat, #cat-hud, #cat-treat, #cat-scrub';
+export const PROTECTED_TREE = 'header, [data-ink-reserve], #site-cat, #cat-hud, #cat-treat, #cat-scrub';
 
 /**
  * Smallest claim worth making, in px². A `.rail` line is ~2000px² and reads

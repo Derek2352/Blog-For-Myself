@@ -33,6 +33,7 @@ import {
   press as sharedPress,
   release as sharedRelease,
   report,
+  shownLink,
   stanceOdds,
   wants,
 } from './lib/fixture.mjs';
@@ -348,7 +349,7 @@ async function playByFleeing(page, budgetMs = 150_000) {
 
   if (won.won) {
     // Client-side navigation: the script is module-scoped, so the rung should ride along.
-    await page.click('a[href="/about/"]');
+    await page.click(shownLink('/about/'));
     await page.waitForTimeout(1200);
     await press(page);
     const heldAfterNav = await page.evaluate(HELD);

@@ -7,9 +7,11 @@
  */
 import Link from 'next/link';
 import { site } from '@/data/site';
-import { getLogs, getNavTree } from '@/server/content';
+import { getLogs, getNavTree, getCategoryIndex } from '@/server/content';
+import { categoryHref } from '@/lib/content-core';
+import { roomOf } from '@/lib/rooms';
 import NavLinks, { type NavItem } from './NavLinks';
-import TabBar from './TabBar';
+import SiteMenu, { type MenuRoom } from './SiteMenu';
 import ThemeToggle from './ThemeToggle';
 import A11yControls from './A11yControls';
 
@@ -21,44 +23,61 @@ import A11yControls from './A11yControls';
  */
 const MONTHLY_NAV_MIN_LOGS = 4;
 
+/**
+ * One row: the name, the work, three places, two switches.
+ *
+ * The categories used to sit here as two tiers of tabs (see SiteMenu.tsx for why they moved). What
+ * is left is what every page needs: whose site this is, a way into the work from anywhere, and the
+ * three indexes that are not rooms.
+ */
 export default async function Header() {
-  const [logs, tabs] = await Promise.all([getLogs(), getNavTree()]);
+  const [logs, tabs, index] = await Promise.all([getLogs(), getNavTree(1), getCategoryIndex()]);
+  const monthly = logs.length >= MONTHLY_NAV_MIN_LOGS;
   const items: NavItem[] = [
-    ...(logs.length >= MONTHLY_NAV_MIN_LOGS ? [{ href: '/monthly/', label: 'Monthly' }] : []),
+    ...(monthly ? [{ href: '/monthly/', label: 'Monthly' }] : []),
     { href: '/timeline/', label: 'Timeline' },
     { href: '/about/', label: 'About' },
     { href: '/search/', label: 'Search', title: 'Press / to search' },
   ];
+  /* Slim on purpose: this is the one prop a client component gets on every page, so it carries a
+     room's name, its numeral, its counts and one cover — not the entries themselves. */
+  const rooms: MenuRoom[] = tabs.map((t) => ({
+    slug: t.slug,
+    href: categoryHref(t.slug),
+    label: t.label,
+    numeral: roomOf(t.slug, index).replace(/^Room /, ''),
+    entries: t.entryCount,
+    logs: t.logCount,
+    cover: t.entries[0]
+      ? { src: t.entries[0].data.cover.src, width: t.entries[0].data.cover.width, height: t.entries[0].data.cover.height }
+      : undefined,
+  }));
+  const links = [
+    { href: '/timeline/', label: 'Everything, in order' },
+    ...(monthly ? [{ href: '/monthly/', label: 'Month by month' }] : []),
+    { href: '/about/', label: 'About' },
+    { href: '/search/', label: 'Search' },
+  ];
 
   return (
     <>
-      <header className="border-b border-line">
-        <div className="wrap flex flex-wrap items-center gap-x-6 gap-y-2 pb-2 pt-4">
-          <Link href="/" className="group mr-auto no-underline">
-            <span className="block font-display text-heading leading-none transition-colors group-hover:text-accent">
-              Derek Yung
-            </span>
-            <span className="rail mt-1 block">{site.mastheadNote}</span>
+      <header>
+        <div className="wrap site-header-row">
+          <Link href="/" className="wordmark group" aria-label={`${site.name} — home`}>
+            <span className="wordmark-name">Derek Yung</span>
           </Link>
-          <nav
-            aria-label="Site"
-            className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm sm:gap-x-5"
-          >
-            <NavLinks items={items} />
-            {/* The two icon buttons travel together so a narrow-screen wrap never strands one on
-                its own line, and ml-auto keeps them at the right edge of whatever row they land
-                on — the a11y popover is anchored right: 0 to its button, so a left-aligned button
-                would push it off-screen. */}
-            <div className="ml-auto flex items-center gap-x-3">
+          <nav aria-label="Site" className="site-nav">
+            <SiteMenu rooms={rooms} links={links} />
+            <span className="site-nav-links">
+              <NavLinks items={items} />
+            </span>
+            {/* The two switches travel together so a wrap never strands one on its own line; the
+                a11y popover is anchored right: 0 to its button. */}
+            <span className="site-tools">
               <A11yControls />
               <ThemeToggle />
-            </div>
+            </span>
           </nav>
-        </div>
-        <div className="wrap">
-          <div className="tabbar-wrap">
-            <TabBar tabs={tabs} />
-          </div>
         </div>
       </header>
       <p className="sr-only">{site.tagline}</p>

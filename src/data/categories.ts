@@ -21,9 +21,11 @@ export interface Category {
    * src/lib/wash.ts) — cool hues fight the ivory/espresso/wine palette. */
   hue?: number;
   /**
-   * Flagship category. Primary categories read at full weight in the tab bar
-   * and are the ones surfaced first in the homepage "start here" browse;
-   * everything else is secondary. Omit for a secondary tab.
+   * Flagship category. Nothing reads this at the moment: it set a room at full
+   * weight in the old tab bar and surfaced it first in the home page's browse
+   * panels, and the work menu and the home page's list of rooms that replaced
+   * both show every room alike. Kept as the record of which rooms lead, for the
+   * next layout that wants to say so.
    */
   primary?: boolean;
 }

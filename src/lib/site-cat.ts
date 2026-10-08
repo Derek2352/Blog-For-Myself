@@ -63,7 +63,7 @@ const ROOMY_W = 720;
  */
 const game = {
   found: new Set<string>(),
-  /** Slugs worth finding, read from the rendered tab bar rather than hardcoded. */
+  /** Slugs worth finding, read from the rendered paws rather than hardcoded. */
   tabs: [] as string[],
   level: 0,
   celebrated: false,
@@ -71,7 +71,7 @@ const game = {
 
 /**
  * The collection is whatever paws were rendered — which come from
- * getNavCategories(), the same source as the tab bar. Reading them here rather
+ * getNavCategories(), the same source as the work menu. Reading them here rather
  * than scraping the nav keeps one source of truth.
  */
 function readTabs(): string[] {

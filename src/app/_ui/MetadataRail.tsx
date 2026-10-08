@@ -20,7 +20,7 @@ export default function MetadataRail({ entry, code }: { entry: Entry; code: stri
 
   return (
     <aside
-      className="self-start border-t border-line lg:sticky lg:top-6 lg:order-1"
+      className="self-start border-t border-line lg:sticky lg:top-24 lg:order-1"
       aria-label="Entry metadata"
     >
       <dl className="divide-y divide-line text-sm">

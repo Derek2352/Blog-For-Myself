@@ -888,6 +888,46 @@ export async function reachClaim(page) {
 }
 
 /**
+ * The rooms, in menu order: the category pages a visitor browses between, one treat in each.
+ *
+ * These were read off `.tabbar`, the row of category tabs under the name. The rooms moved into the
+ * work menu (src/app/_chrome/SiteMenu.tsx), a button over a panel that is `hidden` until it opens.
+ * The links are in the document either way, so the hrefs read the same; *going* to one is two
+ * presses now, open and pick, which is also what a visitor does.
+ */
+export async function roomHrefs(page, n = 99) {
+  return page.evaluate(
+    (n) => [...document.querySelectorAll('.menu-room[href]')].map((a) => a.getAttribute('href')).slice(0, n),
+    n,
+  );
+}
+
+/**
+ * Walk into a room through the work menu, by click or, on a touch context, by tap. From the top of
+ * the page: the header tucks away on a scroll down, and a button off the screen is not one a hand
+ * can press.
+ */
+export async function enterRoom(page, href, { tap = false } = {}) {
+  await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
+  await page.waitForTimeout(120);
+  const button = page.locator('.menu-btn').first();
+  const room = page.locator(`.menu-room[href="${href}"]`).first();
+  if (tap) {
+    await button.tap();
+    await room.tap();
+  } else {
+    await button.click();
+    await room.click();
+  }
+}
+
+/**
+ * A link to `href` that a visitor can actually see. The first one in the document is often the work
+ * menu's own copy, in the closed panel, and a click on that waits out the whole timeout.
+ */
+export const shownLink = (href) => `a[href="${href}"]:visible`;
+
+/**
  * Earn treats the way a visitor does — by browsing. **Never `page.goto`:** a full document load
  * resets the cat's session state and the found set with it.
  *
@@ -915,32 +955,17 @@ export async function reachClaim(page) {
  * measurements were calibrated against.
  */
 export async function armAmmo(page, { hops = 5, tap = false, home = '/', pool = 6, dwell = 650, settle = 750 } = {}) {
-  const hrefs = await page.evaluate(
-    (n) =>
-      [...document.querySelectorAll('.tabbar a[href]')]
-        // Top-level tabs only. `.tabbar` also holds each tab's flyout of entry links, hidden until
-        // hover — clicking one of those just times out.
-        .filter((a) => !a.closest('.tab-flyout') && a.offsetParent !== null)
-        .map((a) => a.getAttribute('href'))
-        .slice(0, n),
-    pool,
-  );
+  const hrefs = await roomHrefs(page, pool);
   for (const href of hrefs.slice(0, hops)) {
-    if (tap) {
-      await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
-      await page.waitForTimeout(120);
-      await page.locator(`.tabbar a[href="${href}"]`).first().tap();
-    } else {
-      await page.click(`.tabbar a[href="${href}"]`);
-    }
+    await enterRoom(page, href, { tap });
     await page.waitForTimeout(dwell);
   }
   // One more hop, so the last page's treat is credited too, and so the fight below happens on a board
-  // this harness has chosen rather than on whichever tab arming ended on.
+  // this harness has chosen rather than on whichever room arming ended in.
   await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
   await page.waitForTimeout(120);
-  if (tap) await page.locator(`.tabbar a[href="${home}"], a[href="${home}"]`).first().tap();
-  else await page.click(`a[href="${home}"]`).catch(() => {});
+  if (tap) await page.locator(shownLink(home)).first().tap();
+  else await page.click(shownLink(home)).catch(() => {});
   await page.waitForTimeout(settle);
   return page.evaluate(AMMO);
 }

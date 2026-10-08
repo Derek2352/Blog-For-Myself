@@ -123,7 +123,7 @@ function onScreen(el: Element | null, below = 1): DOMRect | null {
  */
 function cargo(a: HTMLAnchorElement): { picture: HTMLElement | null; word: HTMLElement | null } {
   /* A tab's hover list is hidden for the transition (global.css), so nothing in it can be lifted. */
-  if (a.closest('.tab-flyout')) return { picture: null, word: null };
+  if (a.closest('.menu-panel')) return { picture: null, word: null };
   const picture = a.querySelector<HTMLElement>('[data-vt="picture"]');
   let word = a.querySelector<HTMLElement>('[data-vt="word"]');
   if (!word && !picture) {

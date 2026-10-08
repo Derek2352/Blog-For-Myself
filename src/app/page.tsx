@@ -21,7 +21,6 @@ import { orientation } from '@/lib/images';
 import { personSchema } from '@/lib/schema';
 import { drawnKind } from '@/lib/cover-plate';
 import { monthKey } from '@/lib/format';
-import { balancedCols } from '@/lib/layout';
 import { SITE_URL } from '@/lib/site-url';
 import { resolveWash } from '@/lib/wash';
 import { roomOf } from '@/lib/rooms';
@@ -31,17 +30,6 @@ import HeroReel from './_ui/HeroReel';
 import SectionHead from './_ui/SectionHead';
 
 export const metadata: Metadata = { alternates: { canonical: '/' } };
-
-/**
- * Column count follows the card count, so the last row is never a single card beside empty cells.
- * The classes are written out because Tailwind reads source text — an interpolated
- * `lg:grid-cols-${n}` would never be generated.
- */
-const BROWSE_COLS: Record<number, string> = {
-  1: '',
-  2: 'md:grid-cols-2',
-  3: 'md:grid-cols-2 lg:grid-cols-3',
-};
 
 /**
  * How many of a category's covers its browse panel shows. Three is a fan — enough to say "a body
@@ -82,14 +70,10 @@ export default async function HomePage() {
   const heroDrawn = hero ? drawnKind(hero.id) : undefined;
   const strip = (featured.length > 1 ? featured : entries).filter((e) => e !== hero).slice(0, 3);
 
-  const catIndex = index.filter((c) => c.entryCount + c.logCount > 0);
-  /* Lead the browse with flagship categories only. The rest are reachable from the tab bar;
-     listing them here as well named every category three times over. */
-  const primaryCats = catIndex.filter((c) => c.primary);
-  const browseCats = primaryCats.length ? primaryCats : catIndex;
-  const browseCols = BROWSE_COLS[balancedCols(browseCats.length)] ?? BROWSE_COLS[3];
-  /* Each subject's own covers, in the order its page shows them — so the print on top of the fan is
-     the one a visitor will see first when they get there. */
+  /* Every room with work in it, in tab order. The home page used to show only the four flagship
+     categories as panels and leave the rest to the tab bar; the tab bar is gone (the work menu
+     replaced it), so this is where all seven are walked past, as a list of rooms. */
+  const browseCats = index.filter((c) => c.entryCount > 0);
   const subjects = browseCats.map((c) => {
     const own = sortForCategory(entries.filter((e) => e.data.category === c.slug));
     return {
@@ -121,19 +105,9 @@ export default async function HomePage() {
           grid can run edge to edge. The ink stays inside the column: its canvas is sized by its
           parent, and its cost is proportional to its area (see `SLICE_MS` in ink-wash.ts). */}
       <section className="hero relative isolate">
-        <div className="hero-grid wrap relative grid items-center gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:gap-14">
+        <div className="hero-grid wrap relative grid items-center gap-10 lg:grid-cols-[1fr_1.08fr] lg:gap-16">
         <InkWash />
-        {/* One element, two jobs, deliberately the same rectangle.
-
-            `data-ink-reserve` tells the wash where the words are: it does not punch a hole — the
-            ink still flows across this block — it caps the *tone* there, which is what lets the
-            rest of the splash go near-black without ever putting a dark passage under a line of
-            text.
-
-            `.glass` is the pane that cap was already implying. Keeping both on one div means the
-            frosted rectangle and the capped rectangle cannot drift apart.
-
-            The pane no longer rises as one block; its lines arrive in turn (`hero-in`, global.css).
+        {/* The pane no longer rises as one block; its lines arrive in turn (`hero-in`, global.css).
             That is also a gift to the ink: the reserve is measured off this rectangle, and a pane
             that does not move is one the wash can measure the moment it mounts, rather than after
             waiting out a 600ms translate.
@@ -142,34 +116,37 @@ export default async function HomePage() {
             `animation` at a time, so a scroll-linked drift on the pane itself would cancel its
             entrance. */}
         <div className="hero-copy">
-          <div className="hero-pane glass" data-ink-reserve>
+          {/* `data-ink-reserve` tells the wash where the words are: it does not punch a hole — the
+              ink still flows across this block — it caps the *tone* there, which is what lets the
+              rest of the splash go near-black without ever putting a dark passage under a line of
+              text. The cat's game reads the same attribute as the one block it may never claim
+              (`PROTECTED_TREE`, src/lib/arena.ts). This used to be a frosted glass card as well;
+              the words now stand on the page itself, the way a cover line does. */}
+          <div className="hero-pane" data-ink-reserve>
             <p className="kicker hero-in" data-d="0">
               portfolio &amp; reflections · hong kong
             </p>
             {/* Name and tagline are one typographic unit, so the display face carries the thesis
               instead of spending its largest size on a greeting alone. */}
-            <h1 className="mt-3 font-display">
+            <h1 className="mt-4 font-display">
               <span className="hero-in hero-focus block text-display" data-d="1">
                 Hi — I’m Derek.
               </span>{' '}
-              {/* The explicit space is not cosmetic. JSX strips whitespace between elements, so
-                without it the h1's accessible name reads "Hi — I’m Derek.Numbers by day" with the
-                sentences run together — the two spans are `block`, so nothing looks wrong, and the
-                only place the fault shows is a screen reader. Astro kept the source newline and got
-                this for free; the parity harness caught the difference by comparing textContent. */}
+              {/* The explicit space is not cosmetic: JSX strips whitespace between elements, and
+                without it the h1's accessible name runs the two sentences together. */}
               <span
-                className="hero-in hero-focus mt-2 block text-pretty text-turn italic text-muted"
+                className="hero-in hero-focus mt-3 block text-pretty text-turn italic text-muted"
                 data-d="2"
               >
                 Numbers by day, frames by night.
               </span>
             </h1>
-            <p className="hero-in mt-5 max-w-(--measure-tight) text-lede text-muted" data-d="3">
+            <p className="hero-in mt-7 max-w-(--measure-tight) text-lede text-muted" data-d="3">
               I study financial analysis &amp; FinTech, and I make AI-animated film and photographs
               — usually both at once. Each entry below is the whole story, not the one-line CV
               version.
             </p>
-            <div className="hero-in mt-8 flex flex-wrap gap-3" data-d="4">
+            <div className="hero-in mt-9 flex flex-wrap gap-3" data-d="4">
               <Link href="/timeline/" className="cta cta-primary">
                 See the work
                 <span aria-hidden="true" className="go-arrow">
@@ -227,95 +204,79 @@ export default async function HomePage() {
         <HeroReel entries={entries} codes={codes} className="reel-foot hidden lg:block" />
       </section>
 
-      {/* Featured entries */}
+      {/* Selected work: the lead piece large, two beside it. */}
       {strip.length > 0 && (
-        <section className="wrap reveal-3 mt-8 sm:mt-10" aria-labelledby="featured-h">
+        <section className="wrap reveal-3 mt-section" aria-labelledby="featured-h">
           <SectionHead
             id="featured-h"
-            kicker="best place to start"
-            title="Start with these"
-            action={{ href: '/timeline/', label: 'Full timeline' }}
+            kicker="start here"
+            title="Selected work"
+            action={{ href: '/timeline/', label: 'Everything, in order' }}
           />
-          <div className="mt-8 grid gap-x-6 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
-            {strip.map((entry) => (
+          <div className="featured-grid mt-10">
+            {strip.map((entry, i) => (
               <EntryCard
                 key={entry.id}
                 entry={entry}
                 code={codes.get(`entries:${entry.id}`) ?? 'E-000'}
+                feature={i === 0}
               />
             ))}
           </div>
         </section>
       )}
 
-      {/* Browse: flagship categories lead; the rest sit in the tab bar rather than being listed
-          again here. */}
+      {/* The rooms: every category as a numbered line on the wall — its name at the size of a
+          section, what is in it, and its own covers fanned at the right, the ones its page opens
+          with. The hue is the room's own wash, so walking in looks like the light the row hinted
+          at. These were cream panels in a grid; a list reads as an exhibition plan, which is
+          what it is. */}
       <section className="wrap mt-section" aria-labelledby="browse-h">
-        <SectionHead id="browse-h" kicker="by category" title="Or wander by subject" />
-        <ul className={`mt-8 grid list-none gap-4 p-0 sm:gap-5 ${browseCols}`} data-io-stagger>
+        <SectionHead id="browse-h" kicker="by subject" title="The rooms" />
+        <ol className="rooms mt-6" data-io-stagger>
           {subjects.map((c) => (
             <li key={c.slug}>
-              {/* A contact sheet for the subject: its own covers, fanned like prints on a table,
-                  beside what it is. These were text-only cream panels — a count, a name and a
-                  sentence, four times — which is a table of contents, and a table of contents is
-                  the least inviting thing a landing page can end on. The covers are the ones the
-                  category page opens with, so the panel is a preview of the page it leads to rather
-                  than a picture chosen for it.
-
-                  The hue is the category's own wash, the one its page is lit with, so arriving
-                  there looks like walking into the room the panel was a window onto. */}
               <Link
                 href={categoryHref(c.slug)}
                 prefetch={false}
-                className="subject panel lift group"
+                className="room-row group"
                 style={{ ['--hue' as string]: String(c.hue) }}
               >
-                <div className="subject-body">
-                  <div className="subject-sheet" aria-hidden="true" data-count={c.prints.length}>
-                    {c.prints.map((p, i) => (
-                      <span key={p.id} className="subject-print" data-i={i} data-drawn={p.drawn}>
-                        <img
-                          src={p.cover.src}
-                          alt=""
-                          width={p.cover.width}
-                          height={p.cover.height}
-                          loading="lazy"
-                          decoding="async"
-                        />
-                      </span>
-                    ))}
-                  </div>
-                  <div className="subject-text">
-                    {/* The log count only appears when there is one. Every category currently has
-                      zero, so this line read "3 entries · 0 logs" eight times over — a card whose
-                      second fact is always the same nothing, advertising a feature the visitor
-                      cannot use. The counts start showing themselves again the moment there is
-                      something to count. */}
-                    <p className="rail">
-                      {c.room && <span className="room-mark">{c.room}</span>}
-                      {c.entryCount} {c.entryCount === 1 ? 'entry' : 'entries'}
-                      {c.logCount > 0 && ` · ${c.logCount} ${c.logCount === 1 ? 'log' : 'logs'}`}
-                      {c.span && ` · ${c.span}`}
-                    </p>
-                    {/* The room's name is what walks through the door: it grows into the title of
-                        the page this panel opens (src/app/_chrome/PageTransitions.tsx). */}
-                    <h3
-                      className="mt-2 font-display text-heading transition-colors group-hover:text-accent"
-                      data-vt="word"
-                    >
-                      {c.label}
-                    </h3>
-                    <p className="mt-2 text-sm leading-relaxed text-muted">{c.blurb}</p>
-                    <span className="go-link mt-4" aria-hidden="true">
-                      Open
-                      <span className="go-arrow">→</span>
+                <span className="room-num" aria-hidden="true">
+                  {c.room.replace(/^Room /, '')}
+                </span>
+                <span className="room-text">
+                  {/* The log count only appears when there is one, so no row advertises "0 logs". */}
+                  <span className="rail">
+                    {c.entryCount} {c.entryCount === 1 ? 'entry' : 'entries'}
+                    {c.logCount > 0 && ` · ${c.logCount} ${c.logCount === 1 ? 'log' : 'logs'}`}
+                    {c.span && ` · ${c.span}`}
+                  </span>
+                  {/* The room's name is what walks through the door: it grows into the title of
+                      the page this row opens (src/app/_chrome/PageTransitions.tsx). */}
+                  <h3 className="room-title font-display text-section" data-vt="word">
+                    {c.label}
+                  </h3>
+                  <span className="room-blurb">{c.blurb}</span>
+                </span>
+                <span className="subject-sheet room-prints" aria-hidden="true" data-count={c.prints.length}>
+                  {c.prints.map((p, i) => (
+                    <span key={p.id} className="subject-print" data-i={i} data-drawn={p.drawn}>
+                      <img
+                        src={p.cover.src}
+                        alt=""
+                        width={p.cover.width}
+                        height={p.cover.height}
+                        loading="lazy"
+                        decoding="async"
+                      />
                     </span>
-                  </div>
-                </div>
+                  ))}
+                </span>
               </Link>
             </li>
           ))}
-        </ul>
+        </ol>
       </section>
     </>
   );

@@ -106,7 +106,6 @@ describe('the board — queried, never authored', () => {
 
   it('never claims the way out', () => {
     expect(PROTECTED_TREE).toContain('header');
-    expect(PROTECTED_TREE).toContain('.tabbar');
   });
 
   it('never claims anything focusable — the fight must not eat the tab order', () => {
@@ -118,12 +117,14 @@ describe('the board — queried, never authored', () => {
   });
 
   it('protects the hero pane, and everything inside it', () => {
-    // `[data-ink-reserve]` and `.glass` are the same div by design, so exclusion
-    // has to win. Subtree, not self: protecting only the div would still have let
-    // the cat claim the h1 and the kicker inside it — the same failure by another
+    // The pane is claimable and protected at once by design, so exclusion has to
+    // win. Subtree, not self: protecting only the div would still have let the
+    // cat claim the h1 and the kicker inside it — the same failure by another
     // route, and the one block guaranteed to stay legible is the whole point.
+    // Keyed to the attribute, not a class: the guard was `.glass`, and when the
+    // frosted card went the pane was left claimable with nothing failing.
     expect(CLAIMABLE).toContain('[data-ink-reserve]');
-    expect(PROTECTED_TREE).toContain('.glass');
+    expect(PROTECTED_TREE.split(/,\s*/)).toContain('[data-ink-reserve]');
   });
 
   it('protects the cat’s own HUD, which wears .rail', () => {

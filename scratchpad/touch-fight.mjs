@@ -29,6 +29,9 @@ import {
   fresh as context,
   launch,
   report,
+  roomHrefs,
+  enterRoom,
+  shownLink,
   waitOpen,
   wants,
 } from './lib/fixture.mjs';
@@ -43,25 +46,18 @@ const CLAIMS = `document.querySelectorAll('.cat-tile[data-state="claimed"]').len
 const ARMED = `!document.querySelector('#cat-card-panel').hidden`;
 
 /**
- * Earn treats the way a visitor does — by tapping through tabs. Never `page.goto`: a full
+ * Earn treats the way a visitor does — by tapping through the rooms. Never `page.goto`: a full
  * document load resets the cat's session state and the found set with it.
  */
 async function armAmmo(page, hops = 4) {
-  const hrefs = await page.evaluate(() =>
-    [...document.querySelectorAll('.tabbar a[href]')]
-      .filter((a) => !a.closest('.tab-flyout') && a.offsetParent !== null)
-      .map((a) => a.getAttribute('href'))
-      .slice(0, 6),
-  );
+  const hrefs = await roomHrefs(page, 6);
   for (const href of hrefs.slice(0, hops)) {
-    await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
-    await page.waitForTimeout(120);
-    await page.locator(`.tabbar a[href="${href}"]`).first().tap();
+    await enterRoom(page, href, { tap: true });
     await page.waitForTimeout(700);
   }
   await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
   await page.waitForTimeout(120);
-  await page.locator('.tabbar a[href="/"], a[href="/"]').first().tap();
+  await page.locator(shownLink('/')).first().tap();
   await page.waitForTimeout(900);
   return page.evaluate(`document.querySelectorAll('#cat-score .cat-paw.got').length`);
 }
@@ -386,7 +382,7 @@ async function findLink(page) {
     const icon = document.querySelector('#cat-card-toggle')?.getBoundingClientRect();
     return {
       icon: icon ? `${Math.round(icon.left)}–${Math.round(icon.right)},${Math.round(icon.top)}–${Math.round(icon.bottom)}` : 'none',
-      buttons: [...document.querySelectorAll('.glass a, .glass button')].map((el) => {
+      buttons: [...document.querySelectorAll('[data-ink-reserve] a, [data-ink-reserve] button')].map((el) => {
         const r = el.getBoundingClientRect();
         const at = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2));
         return { label: el.textContent.trim().slice(0, 16), blocked: !!at?.closest('#cat-card-toggle') };

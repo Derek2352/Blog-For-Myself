@@ -22,9 +22,9 @@ export default function WelcomeNote() {
       <p className="kicker">first visit · a quick map</p>
       <h2 id="welcome-h" className="mt-2 font-display text-section">Glad you’re here.</h2>
       <p className="mt-3 text-body text-muted">
-        Three ways in: each tab mixes big projects with small monthly notes, the timeline runs
-        everything in one line, and the honest reflection at the end of each entry is the part
-        worth staying for.
+        Three ways in: each room under Work mixes big projects with small monthly notes, the
+        timeline runs everything in one line, and the honest reflection at the end of each entry
+        is the part worth staying for.
       </p>
       <div className="mt-5 flex flex-wrap gap-3">
         {/* `autofocus` is set on the node by ref rather than passed as React's `autoFocus`.

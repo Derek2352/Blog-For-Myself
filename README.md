@@ -66,7 +66,7 @@ below for the full workflow (studio, media inbox, photo plan).
 |------|-------|
 | Name, tagline, email, GitHub, LinkedIn, CV path | `src/data/site.ts` |
 | About-page résumé (education, certs, languages, tools) | `src/data/site.ts` → `resume` |
-| Navigation tabs (add / rename / reorder) | `src/data/categories.ts` |
+| Rooms — the categories in the work menu and on the home page (add / rename / reorder) | `src/data/categories.ts` |
 | Named seasons (e.g. "Summer 2026") | `src/data/periods.ts` |
 | Your CV PDF · portrait photo | `public/cv.pdf` · `src/assets/portrait.svg` |
 
@@ -462,7 +462,7 @@ five commits.
   written"** note publicly instead of four empty headings — write the sections and it
   disappears.
 - Press **`/`** anywhere to jump to search. Entry pages **print cleanly** for anyone who
-  PDFs them — nav, tab bar, footer, the page wash, the cat, the reading-progress bar and
+  PDFs them — nav, the work menu, footer, the page wash, the cat, the reading-progress bar and
   the back-to-top button all drop out, leaving the words and the photographs.
   `public/_headers` ships immutable caching for build assets + basic security headers on
   Cloudflare/Netlify.
@@ -600,9 +600,11 @@ with 44×44 reported as the AAA/HIG aspiration), and prose under 12px. It runs n
 Most of that weight was **speculative**. Next's App Router prefetches every `<Link>` that scrolls
 into view, and in a static export each prefetch pulls a whole HTML page — 646 KB of the 952 KB on
 `/tags/`, for pages the reader never opens. The bulk components (`TagChip`, `EntryCard`,
-`TimelineItem`, `LogCard`) and the tab bar now set `prefetch={false}`, which turns off the
-*viewport* prefetch and keeps the one on **hover** — so a desktop reader still gets instant
-navigation the moment they show intent, and a phone, which has no hover, stops paying for a guess.
+`TimelineItem`, `LogCard`) and the work menu now set `prefetch={false}`. In the App Router that
+turns prefetching off for those links entirely, on hover as well as in the viewport, so a page is
+fetched when it is opened: about 46 KB with an ETag behind it, which is not slow, only no longer
+speculative. (This paragraph used to promise a hover prefetch; that is what `false` means in the
+Pages Router, not here.)
 
 Touch sizes are raised under `@media (pointer: coarse)` — the question is what is doing the
 pointing, not how wide the screen is, so a narrow desktop window is unaffected and a mouse never

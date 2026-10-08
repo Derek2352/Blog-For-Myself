@@ -96,8 +96,8 @@ for (const path of PAGES) {
         if (r.right > vw + 1 || r.left < -1) {
           const style = getComputedStyle(el);
           /* Something inside its own scroller is allowed to be wider — that is what the scroller is
-             for: tables, code blocks, the tab strip. */
-          const scroller = el.closest('.overflow-x-auto, .tabbar-wrap, pre, table');
+             for: tables, code blocks. */
+          const scroller = el.closest('.overflow-x-auto, pre, table');
           if (scroller && scroller !== el) continue;
           if (style.position === 'fixed') continue;
           out.wide.push({
@@ -194,7 +194,7 @@ for (const path of PAGES) {
            counted, printed, not gated. Using one selector for both checks means the two cannot
            disagree about what counts as the game. */
         if (el.closest(gameSel)) return true;
-        if (el.closest('.rail, .kicker, figcaption, .tab-group')) return true;
+        if (el.closest('.rail, .kicker, figcaption')) return true;
         return /mono/i.test(getComputedStyle(el).fontFamily);
       };
 

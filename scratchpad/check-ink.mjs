@@ -283,7 +283,7 @@ async function fresh(opts = {}) {
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto(URL, { waitUntil: 'load' });
   await page.waitForTimeout(800);
-  await page.click('a[href="/timeline/"]');
+  await page.click('a[href="/timeline/"]:visible');
   await page.waitForTimeout(800);
   const gone = await page.evaluate(() => !document.querySelector('canvas.ink-wash'));
   ok('canvas is gone after navigating away', gone === true);

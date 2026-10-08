@@ -49,6 +49,9 @@ import {
   press as sharedPress,
   release as sharedRelease,
   report,
+  roomHrefs,
+  enterRoom,
+  shownLink,
   stanceOdds,
   wants,
 } from './lib/fixture.mjs';
@@ -93,18 +96,13 @@ async function lowSpot(page, x = 640) {
   );
 }
 
-/** Collect every treat by walking the tab bar — the patient path to the collar. */
+/** Collect every treat by walking every room — the patient path to the collar. */
 async function collectAll(page) {
-  const hrefs = await page.evaluate(() =>
-    [...document.querySelectorAll('.tabbar a[href]')]
-      .filter((a) => !a.closest('.tab-flyout') && a.offsetParent !== null)
-      .map((a) => a.getAttribute('href')),
-  );
-  for (const href of hrefs) {
-    await page.click(`.tabbar a[href="${href}"]`).catch(() => {});
+  for (const href of await roomHrefs(page)) {
+    await enterRoom(page, href).catch(() => {});
     await page.waitForTimeout(700);
   }
-  await page.click('a[href="/"]').catch(() => {});
+  await page.click(shownLink('/')).catch(() => {});
   await page.waitForTimeout(900);
   return page.evaluate(LEVEL);
 }

@@ -29,6 +29,7 @@ import { SITE_URL, absolute } from '@/lib/site-url';
 import MetadataRail from '../../_ui/MetadataRail';
 import Gallery from '../../_ui/Gallery';
 import VideoEmbed from '../../_ui/VideoEmbed';
+import SectionHead from '@/app/_ui/SectionHead';
 import EntryCard from '../../_ui/EntryCard';
 import TagChip from '../../_ui/TagChip';
 import ReadingAids from '../../_ui/ReadingAids';
@@ -141,7 +142,7 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
         <span className="sr-only" data-pagefind-filter="type">
           Entry
         </span>
-        <header className="max-w-3xl">
+        <header className="entry-head">
           <p className="kicker">
             {category && (
               <Link
@@ -156,10 +157,10 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
             {code}
             {entry.data.draft && <span className="text-signal-text"> · draft</span>}
           </p>
-          <h1 className="mt-2 font-display text-title">
+          <h1 className="mt-4 font-display text-title text-balance">
             {entry.data.title}
           </h1>
-          <p className="mt-4 text-lg leading-relaxed text-muted">{entry.data.summary}</p>
+          <p className="mt-6 max-w-(--measure-lede) text-lede text-muted">{entry.data.summary}</p>
           {/* The `note` is the most personal sentence on the page — the author's own aside, not
               the summary's description of the work — and it was rendered as a small tilde-prefixed
               margin line, at the same weight as a caption. The Next.js drops set theirs as a
@@ -172,7 +173,7 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
               to carry punctuation that is really presentation, and `aria-hidden` keeps a screen
               reader from announcing them around a sentence it is already reading as one. */}
           {entry.data.note && (
-            <blockquote className="entry-note mt-6">
+            <blockquote className="entry-note mt-8">
               <p className="font-display text-quote italic">
                 <span className="text-secondary" aria-hidden="true">
                   “
@@ -211,7 +212,7 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
             />
           </div>
         ) : (
-        <figure className="mt-8">
+        <figure className="mt-12">
           {/* The frame is on this wrapper rather than on the `<figure>` so the credit line can sit
               *outside* the border — a caption inside the frame reads as part of the picture. The
               wrapper is unconditional, and the first version of it was not: it was `display:
@@ -225,7 +226,7 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
               On the frame, not the image, so what flies in is the picture in its window — the same
               shape the card showed it in. */}
           <div
-            className={`frame overflow-hidden${drawn ? '' : ' blurup'}`}
+            className={`frame mat overflow-hidden${drawn ? '' : ' blurup'}`}
             data-drawn={drawn}
             data-vt-target="picture"
           >
@@ -272,14 +273,14 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
                sentences of prose, and in all caps at 0.72rem it read as a warning notice rather than
                as the quiet admission it is meant to be. Mono, muted and right-aligned is the drops'
                own treatment and it was right; the uppercase was mine and it was not. */
-            <figcaption className="rail mt-2 text-right normal-case">{art.credit}</figcaption>
+            <figcaption className="entry-credit">{art.credit}</figcaption>
           )}
         </figure>
         )}
 
         {/* Reflection comes first in the DOM so keyboard/reading order matches the mobile visual
             order (reflection, then rail); lg:order restores the rail to the left column. */}
-        <div className="mt-10 grid gap-10 lg:grid-cols-[16rem_1fr] lg:gap-14">
+        <div className="mt-14 grid gap-10 lg:grid-cols-[15rem_1fr] lg:gap-20">
           {hasReflection ? (
             <div
               className="prose-reflection min-w-0 lg:order-2"
@@ -299,12 +300,9 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
         </div>
 
         {entry.data.gallery.length > 0 && (
-          <section className="mt-16" aria-labelledby="gallery-h">
-            <p className="kicker">Gallery</p>
-            <h2 id="gallery-h" className="mt-1 font-display text-heading">
-              Frames
-            </h2>
-            <div className="mt-5">
+          <section className="mt-section" aria-labelledby="gallery-h">
+            <SectionHead id="gallery-h" kicker="gallery" title="Frames" />
+            <div className="mt-8">
               <Gallery images={entry.data.gallery} id={entry.id} />
             </div>
           </section>
@@ -312,35 +310,29 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
 
         {(prev || next) && (
           <nav
-            className="mt-16 grid gap-3 sm:grid-cols-2"
+            className="entry-pager"
             aria-label={`More in ${category?.label ?? entry.data.category}`}
             data-pagefind-ignore
           >
-            {prev ? (
-              <Link
-                href={entryHref(prev)}
-                data-plane="prev"
-                className="panel group block p-4 transition-colors hover:border-accent"
-              >
-                <p className="rail">← previous · {codes.get(`entries:${prev.id}`) ?? ''}</p>
-                <p className="mt-1 font-display text-lg leading-snug transition-colors group-hover:text-accent">
-                  {prev.data.title}
-                </p>
-              </Link>
-            ) : (
-              <span className="hidden sm:block" />
-            )}
-            {next && (
-              <Link
-                href={entryHref(next)}
-                data-plane="next"
-                className="panel group block p-4 text-right transition-colors hover:border-accent"
-              >
-                <p className="rail">{codes.get(`entries:${next.id}`) ?? ''} · next →</p>
-                <p className="mt-1 font-display text-lg leading-snug transition-colors group-hover:text-accent">
-                  {next.data.title}
-                </p>
-              </Link>
+            {[
+              { e: prev, dir: 'prev' as const },
+              { e: next, dir: 'next' as const },
+            ].map(({ e, dir }) =>
+              e ? (
+                <Link key={dir} href={entryHref(e)} data-plane={dir} className={`pager-link group pager-${dir}`}>
+                  <span className="pager-thumb frame" aria-hidden="true">
+                    <img src={e.data.cover.src} alt="" width={e.data.cover.width} height={e.data.cover.height} loading="lazy" decoding="async" />
+                  </span>
+                  <span className="pager-text">
+                    <span className="rail">
+                      {dir === 'prev' ? `← previous · ${codes.get(`entries:${e.id}`) ?? ''}` : `${codes.get(`entries:${e.id}`) ?? ''} · next →`}
+                    </span>
+                    <span className="pager-title font-display text-heading">{e.data.title}</span>
+                  </span>
+                </Link>
+              ) : (
+                <span key={dir} className="hidden sm:block" />
+              ),
             )}
           </nav>
         )}
@@ -350,16 +342,9 @@ export default async function EntryPage({ params }: { params: Promise<{ slug: st
         />
 
         {related.length > 0 && (
-          <section
-            className="mt-16 border-t border-line pt-10"
-            aria-labelledby="related-h"
-            data-pagefind-ignore
-          >
-            <p className="kicker">Related</p>
-            <h2 id="related-h" className="mt-1 font-display text-heading">
-              Nearby frames
-            </h2>
-            <div className="mt-6 grid gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3" data-io-stagger>
+          <section className="mt-section" aria-labelledby="related-h" data-pagefind-ignore>
+            <SectionHead id="related-h" kicker="related" title="Nearby frames" />
+            <div className="mt-10 grid gap-x-8 gap-y-14 sm:grid-cols-2 lg:grid-cols-3" data-io-stagger>
               {related.map((r) => (
                 <EntryCard key={r.id} entry={r} code={codes.get(`entries:${r.id}`) ?? 'E-000'} />
               ))}

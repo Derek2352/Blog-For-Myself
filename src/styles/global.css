@@ -171,53 +171,12 @@
     box-shadow: var(--elev-sheet), var(--edge-light);
   }
 
-  /* ---- the hero's glass pane ----
-     Reuses the sticky header's idiom (color-mix + backdrop-filter) rather than
-     inventing a second one, but far more transparent: the header sits over page
-     content it should not obscure, this sits over the ink and wants it to read
-     through.
-
-     Applied to the same element that carries `data-ink-reserve`, so the pane and
-     the ink's tone cap are one rectangle by construction rather than two numbers
-     kept in sync by hand. */
-  .glass {
-    position: relative;
-    border-radius: var(--radius-card);
-    padding: 1.5rem 1.625rem;
-    background: color-mix(in srgb, var(--color-ground) 46%, transparent);
-    -webkit-backdrop-filter: blur(18px) saturate(1.15);
-    backdrop-filter: blur(18px) saturate(1.15);
-    /* A hairline, plus a brighter top edge. The lit edge is what actually sells
-       a pane of glass — without it a translucent fill reads as a flat tint. */
-    border: 1px solid color-mix(in srgb, var(--color-line) 70%, transparent);
-    border-top-color: color-mix(in srgb, var(--color-paper-0) 55%, transparent);
-    /* Float — a pane over the page — plus a lit top edge, so the top surface catches light. */
-    box-shadow: var(--elev-float), var(--edge-light);
-  }
-  html.dark .glass {
-    background: color-mix(in srgb, var(--color-ground) 52%, transparent);
-    border-color: color-mix(in srgb, var(--color-ink) 16%, transparent);
-    border-top-color: color-mix(in srgb, var(--color-ink) 30%, transparent);
-  }
-  /* Without backdrop-filter there is no frosting, so the fill has to do the
-     whole job of separating text from ink. */
-  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    .glass { background: color-mix(in srgb, var(--color-ground) 88%, transparent); }
-  }
-  /* The contrast mode forces muted text to full ink and strengthens hairlines.
-     The pane's job there is to get out of the way, not to compete. */
-  html.a11y-contrast .glass {
-    background: var(--color-ground);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-    box-shadow: none;
-  }
-
-  /* covers sit in soft frames, like prints resting on a table */
+  /* A picture's window. The covers are photographs of a set now, and a photograph is shown edge to
+     edge: no border of its own, a print's small corner, and the sunken tone behind it so a picture
+     still loading reads as a slot rather than as a hole in the page. */
   .frame {
-    border: 1px solid var(--color-line);
-    background: var(--color-surface);
-    border-radius: var(--radius-card);
+    background: var(--color-sunken);
+    border-radius: var(--radius-print);
   }
 
   /* ---- the home hero's breathing room, fluid like the type in it ----
@@ -244,7 +203,7 @@
     --hole: var(--color-film-hole);
     --edge: var(--color-signal);
     position: relative;
-    height: calc(var(--film-h) * 1.34);
+    height: calc(var(--film-h) * 1.18);
     overflow: clip;
     pointer-events: none;
     -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
@@ -271,17 +230,13 @@
       inset 0 1px 0 color-mix(in srgb, var(--color-paper-0) 4%, transparent),
       0 0 46px -14px color-mix(in srgb, var(--color-signal) 30%, transparent);
   }
-  .reel-near { --tilt: -2.4deg; --lift: 6%; z-index: 2; }
-  .reel-far {
-    --tilt: 2.2deg;
-    --lift: -22%;
-    z-index: 1;
-    scale: 0.78;
-    opacity: 0.58;
-  }
+  .reel-near { --tilt: -1.6deg; --lift: 0%; z-index: 2; }
+  /* One strip. There were two, the far one crossing behind at a counter-tilt; under a single large
+     headline and a single large picture, two crossing strips were the busiest thing on the screen. */
+  .reel-far { display: none; }
   /* On a wide screen the reel tucks up into the grid's foot, so the near strip sits inside the
      first screen at 1440×900 instead of being cut by its bottom edge. */
-  .reel-foot { margin-top: calc(var(--film-h) * -0.16); }
+  .reel-foot { margin-top: calc(var(--film-h) * 0.15); }
   /* On a phone it runs inside the one-column grid, and breaks out of the column to the window's
      edges. `.hero` clips horizontally, so a 100vw box cannot give the page a sideways scroll on a
      system with a visible scrollbar. */
@@ -382,12 +337,72 @@
   .group:hover .link-draw,
   a:focus-visible .link-draw,
   [aria-current="page"] .link-draw { background-size: 100% 1px; }
+  /* ---- the sign-off (src/app/_chrome/Footer.tsx) ---- */
+  .site-footer {
+    margin-top: var(--spacing-section);
+    border-top: 1px solid var(--color-line);
+    padding-block: clamp(3rem, 2rem + 4vw, 6rem) 1.5rem;
+  }
+  .footer-hello { max-width: 60rem; }
+  .footer-mail {
+    display: inline-block;
+    margin-top: 0.6rem;
+    font-family: var(--font-display);
+    font-size: var(--text-title);
+    line-height: var(--text-title--line-height);
+    letter-spacing: var(--text-title--letter-spacing);
+    color: var(--color-ink);
+    overflow-wrap: anywhere;
+    transition: color var(--dur-quick) ease;
+  }
+  .footer-mail:hover { color: var(--color-accent); }
+  .footer-mail .link-draw { background-size: 0 2px; }
+  .footer-mail:hover .link-draw { background-size: 100% 2px; }
+  /* One line where it fits; where it does not, balanced, so the break lands between phrases
+     rather than inside "AI-creative" at its hyphen. */
+  .footer-tag {
+    margin-top: 1rem;
+    max-width: 44rem;
+    text-wrap: balance;
+    color: var(--color-muted);
+  }
+  .footer-cols {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, max-content));
+    gap: 2.5rem clamp(2.5rem, 1rem + 6vw, 7rem);
+    margin-top: clamp(2.5rem, 1.5rem + 3vw, 4rem);
+  }
+  .footer-nav {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.45rem;
+    font-size: 0.9375rem;
+  }
+  .footer-head {
+    margin-bottom: 0.35rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-label);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
   .footer-nav a {
+    color: var(--color-ink);
     background: linear-gradient(currentColor, currentColor) 0 100% / 0 1px no-repeat;
     background-origin: content-box;
     transition: background-size var(--dur-move) var(--ease-settle), color var(--dur-quick) ease;
   }
   .footer-nav a:hover { background-size: 100% 1px; color: var(--color-accent); }
+  .footer-base {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.5rem 2rem;
+    margin-top: clamp(2.5rem, 1.5rem + 3vw, 4rem);
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--color-line);
+  }
 
   /* ---- a section's rule, with its mark ----
      The hairline under a section head (src/app/_ui/SectionHead.tsx) now starts with a short run of
@@ -404,7 +419,9 @@
     transform-origin: left;
   }
   .section-head::after { right: 0; background: var(--color-line); }
-  .section-head::before { width: 2.5rem; height: 2px; bottom: -0.5px; z-index: 1; background: var(--color-accent); }
+  /* The accent tick that used to start the rule is gone: with a kicker above and a title in the
+     display face, a third marker was one more thing saying "section" than the reader needed. */
+  .section-head::before { display: none; }
 
   /* ---- the sheen ----
      One pass of light across a surface as the cursor arrives — on the primary call to action and on
@@ -439,16 +456,13 @@
    * the paper surface, the amber, the hairline, the mono rail — so it is the same site, hung.
    * ------------------------------------------------------------------ */
 
-  /* Hung: every cover gets a passe-partout, the paper-coloured mat a print sits in behind glass, and
-     a wall shadow that says it is on a wall and not printed on it. A border and not padding, so the
-     image's clip (`overflow: hidden` stops at the padding box) keeps the hover zoom inside the
-     window of the mat instead of spilling over it. */
+  /* Hung: a cover rests on the page with a wall shadow — a tight contact edge and a long soft
+     fall — that says it is on the wall and not printed on it. It used to sit in a passe-partout as
+     well, a paper-coloured mat a centimetre wide, which framed a flat drawing kindly and put a
+     white border round every photograph of the new set; the photographs carry their own ground. */
   .mat {
-    border: clamp(6px, 0.3rem + 0.35vw, 12px) solid var(--color-surface);
-    outline: 1px solid var(--color-line);
     box-shadow: var(--elev-rest);
   }
-  html.dark .mat { outline-color: color-mix(in srgb, var(--color-ink) 12%, transparent); }
 
   /* Lit: a pool of warm light falls on the wall above a work as you come to it — the picture light
      of a gallery. The palette's amber, faint on paper and stronger in the dark theme, which is the
@@ -475,12 +489,38 @@
   }
   html.dark article.card::before { --spot: 0.16; }
 
-  /* Labelled: the line under each work reads as the card on the wall beside it — a hairline above,
-     the date, the role and the catalogue number set in the index rail's voice. */
+  /* Labelled: the line under each work reads as the card on the wall beside it — the date and the
+     role in the index rail's voice, the catalogue number apart on the right. */
   .wall-label {
     border-top: 1px solid var(--color-line);
     padding-top: 0.65rem;
   }
+  .card-label {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+  .card-label-main {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: baseline;
+    gap: 0 0.5rem;
+    min-width: 0;
+  }
+  .card-code { flex: none; color: var(--color-accent); }
+  .card-title { margin-top: 0.45rem; }
+  .card-summary {
+    margin-top: 0.55rem;
+    max-width: var(--measure-lede);
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
+  }
+  .card-summary-full { display: block; -webkit-line-clamp: none; line-clamp: none; }
 
   /* Rooms: "Room III", ahead of a subject's own label, on the way in and on arrival. */
   .room-mark {
@@ -574,13 +614,30 @@
     display: block;
     height: 100%;
   }
-  /* The category page's way on: a neighbour subject, lit in that subject's own hue. */
+  /* The category page's way on: the two neighbouring rooms, as a pair of lines under a hairline —
+     the subject's name at the size of a section, lit in its own hue as the pointer arrives. */
+  .subject-pager {
+    display: grid;
+    gap: 1rem 2rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--color-line);
+  }
+  @media (min-width: 640px) { .subject-pager { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  /* The words line up with the column and the wash bleeds into the gutter, so the bleed is the
+     gutter: `.wrap`'s 1rem on a phone, 1.5rem from 640px. A flat 1.5rem pushed the pager 8px past
+     both edges of a 390px screen and the page scrolled sideways (scratchpad/phone-audit.mjs). */
   .pager {
     position: relative;
     isolation: isolate;
     display: block;
-    padding: 1.25rem 1.5rem 1.4rem;
+    padding: 1.25rem 1rem 1.4rem;
+    margin-inline: -1rem;
+    border-radius: var(--radius-card);
   }
+  @media (min-width: 640px) { .pager { padding-inline: 1.5rem; margin-inline: -1.5rem; } }
+  .pager::before { opacity: 0; transition: opacity var(--dur-move) ease; }
+  .pager:hover::before,
+  .pager:focus-visible::before { opacity: 1; }
   .pager .go-link { color: var(--color-muted); }
   /* The category's own light, from the top corner the prints sit under — the same hue its page is
      washed in (src/lib/wash.ts), a little stronger here because a panel is small. */
@@ -638,10 +695,9 @@
     width: 8.5rem;
     aspect-ratio: 16 / 10;
     overflow: hidden;
-    border: 3px solid var(--color-surface);
-    border-radius: var(--radius-hair);
-    background: var(--color-surface);
-    box-shadow: 0 0 0 1px var(--color-line), var(--elev-lift);
+    border-radius: var(--radius-print);
+    background: var(--color-sunken);
+    box-shadow: var(--elev-lift);
     transform: translate(-50%, -50%) translate(var(--dx, 0px), var(--dy, 0px)) rotate(var(--rot, 0deg));
   }
   .subject-print img {
@@ -657,6 +713,99 @@
   .subject-print[data-i="2"] { z-index: 1; --rot: 7deg; --dx: 2.7rem; --dy: 0.35rem; }
   .subject-sheet[data-count="2"] .subject-print[data-i="0"] { --dx: 1.3rem; }
   .subject-sheet[data-count="2"] .subject-print[data-i="1"] { --dx: -1.5rem; }
+
+  /* ---- the home page: selected work and the rooms ---- */
+  .hero-pane { position: relative; }
+  .featured-grid {
+    display: grid;
+    gap: 3.5rem 2rem;
+  }
+  @media (min-width: 640px) {
+    .featured-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .featured-grid > :first-child { grid-column: 1 / -1; }
+  }
+  @media (min-width: 1024px) {
+    .featured-grid { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 3rem 2.5rem; }
+    .featured-grid > :first-child { grid-column: 1; grid-row: 1 / span 2; }
+  }
+
+  .rooms {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-bottom: 1px solid var(--color-line);
+  }
+  .rooms > li + li { border-top: 1px solid var(--color-line); }
+  .room-row {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    grid-template-columns: 3.5rem minmax(0, 1fr);
+    gap: 0.25rem 1rem;
+    align-items: center;
+    padding-block: clamp(1.5rem, 1rem + 1.6vw, 2.5rem);
+  }
+  /* The room's own light, rising behind the row as the pointer arrives. */
+  .room-row::before {
+    content: "";
+    position: absolute;
+    inset: 0 calc(-1 * clamp(0.5rem, 2vw, 1.5rem));
+    z-index: -1;
+    border-radius: var(--radius-card);
+    background: radial-gradient(70% 140% at 85% 50%, hsl(var(--hue, 32) 46% 58% / calc(var(--wash-a) * 2.2)), transparent 75%);
+    opacity: 0;
+    transition: opacity var(--dur-move) ease;
+  }
+  .room-row:hover::before,
+  .room-row:focus-visible::before { opacity: 1; }
+  /* The room's numeral as a chapter number: the display face's italic, at the title's size, in
+     the faint tone — present enough to count by, quiet enough not to compete with the name. */
+  .room-num {
+    /* On the title's line: the rail above the title is one label line plus the title's margin. */
+    align-self: start;
+    padding-top: calc(var(--text-label) * 1.6 + 0.35rem);
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: var(--text-section);
+    line-height: 1;
+    color: var(--color-faint);
+    transition: color var(--dur-quick) ease;
+  }
+  .room-row:hover .room-num { color: var(--color-accent); }
+  .room-text {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+  }
+  .room-title {
+    margin-top: 0.35rem;
+    color: var(--color-ink);
+    transition: color var(--dur-quick) ease;
+  }
+  .room-row:hover .room-title { color: var(--color-accent); }
+  .room-blurb {
+    margin-top: 0.6rem;
+    max-width: var(--measure-lede);
+    color: var(--color-muted);
+  }
+  .room-prints {
+    grid-column: 1 / -1;
+    width: 100%;
+    height: 9rem;
+    margin-top: 1.25rem;
+  }
+  @media (min-width: 768px) {
+    .room-row { grid-template-columns: 6rem minmax(0, 1fr) 16rem; gap: 0 2rem; }
+    .room-prints { grid-column: auto; margin-top: 0; width: 16rem; height: 9.5rem; }
+  }
+  /* The fan opens as the pointer arrives: the prints behind lean further out. */
+  @media (prefers-reduced-motion: no-preference) {
+    html:not(.a11y-motion) .subject-print { transition: transform var(--dur-paper) var(--ease-settle); }
+    html:not(.a11y-motion) .room-row:hover .subject-print[data-i="1"] { --dx: -3.6rem; --rot: -11deg; }
+    html:not(.a11y-motion) .room-row:hover .subject-print[data-i="2"] { --dx: 3.6rem; --rot: 10deg; }
+    html:not(.a11y-motion) .room-row:hover .subject-print[data-i="0"] { --dy: -0.3rem; --rot: 0deg; }
+  }
 
   /* ---- signature: the index rail (timecode / ticker margin notes) ---- */
   .rail {
@@ -736,6 +885,7 @@
     position: sticky;
     top: 0;
     z-index: 40;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-line) 70%, transparent);
     background: color-mix(in srgb, var(--color-ground) 82%, transparent);
     -webkit-backdrop-filter: blur(12px);
     backdrop-filter: blur(12px);
@@ -839,264 +989,205 @@
     mask-composite: intersect;
   }
 
-  /* category tab strip: two deliberate tiers on wide screens, one scrolling
-     strip on narrow ones (see src/components/TabBar.astro for why). */
-  .tabbar {
+  /* ---- the header: one row ----
+     The name, the work, three places, two switches (src/app/_chrome/Header.tsx). It replaced two
+     tiers of category tabs, which put fourteen links above the first picture; the categories live
+     in the work menu below, and on the home and category pages themselves. */
+  .site-header-row {
     display: flex;
-    gap: 0.25rem;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
+    align-items: center;
+    gap: 1rem;
+    min-height: 4.25rem;
   }
-  .tabbar::-webkit-scrollbar { display: none; }
-  /* Below the tier breakpoint the rows dissolve so every tab is a direct flex
-     child of the scrolling bar again — one strip, exactly as before. */
-  .tabbar-row { display: contents; }
-  .tabbar { --tab-pad: 0.75rem; --tab-size: 0.875rem; }
-  .tab-group > a {
-    padding-inline: var(--tab-pad);
-    padding-block: 0.625rem;
-    font-size: var(--tab-size);
+  /* The name is a link home, so it gets a hand's height: set at line-height 1 it was a 22px-tall
+     target, under WCAG 2.5.8's 24px floor. 44px fits the row with room to spare. */
+  .wordmark {
+    margin-right: auto;
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
+    text-decoration: none;
+    line-height: 1;
   }
-  /* the active-tab underline tracks whatever padding its tier uses */
-  .tab-underline {
-    position: absolute;
-    inset-inline: var(--tab-pad);
-    bottom: 0;
-    height: 2px;
-    background: var(--color-accent);
-    /* Named, so a page transition carries it from the old tab to the new one: the browser animates a
-       named element between its two positions, which is exactly a sliding underline. The Astro site
-       had this (`transition:name="active-tab"`) and lost it with its view transitions; see
-       PageTransitions.tsx for how they came back. */
-    view-transition-name: active-tab;
+  .wordmark-name {
+    font-family: var(--font-display);
+    font-size: var(--text-heading);
+    letter-spacing: var(--text-heading--letter-spacing);
+    transition: color var(--dur-quick) ease;
   }
-  /* Hover: a fainter line of the same shape grows from the middle, so the tab you are pointing at
-     previews where the underline would go. Not on the active tab, which already has the real one. */
-  .tab-group > a::after {
-    content: "";
-    position: absolute;
-    inset-inline: var(--tab-pad);
-    bottom: 0;
-    height: 2px;
-    background: color-mix(in srgb, var(--color-accent) 35%, transparent);
-    transform: scaleX(0);
-    transition: transform var(--dur-move) var(--ease-settle);
+  .wordmark:hover .wordmark-name { color: var(--color-accent); }
+  .site-nav {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.9rem, 0.4rem + 1.4vw, 1.75rem);
+    font-size: 0.9375rem;
   }
-  .tab-group > a:hover::after { transform: scaleX(1); }
-  .tab-group > a[aria-current="page"]::after { display: none; }
+  .site-nav-links { display: contents; }
+  .site-tools {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: 0.25rem;
+  }
+  /* On a phone the row is the name, the menu and the two switches; the places move into the menu,
+     which already lists them. */
+  @media (max-width: 767px) {
+    .site-nav-links { display: none; }
+  }
 
+  /* ---- the work menu ---- */
+  .site-menu { position: static; }
+  .menu-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: 2.25rem;
+    color: var(--color-ink);
+    transition: color var(--dur-quick) ease;
+  }
+  .menu-btn:hover,
+  .site-menu[data-open] .menu-btn { color: var(--color-accent); }
+  .menu-chev { transition: transform var(--dur-brisk) var(--ease-settle); }
+  .site-menu[data-open] .menu-chev { transform: rotate(180deg); }
+  .menu-word-narrow { display: none; }
+  @media (max-width: 767px) {
+    .menu-word-wide { display: none; }
+    .menu-word-narrow { display: inline; }
+  }
+  @media (pointer: coarse) {
+    .menu-btn { min-height: 2.75rem; }
+  }
+
+  /* The panel hangs from the header's foot, full width of the column, so the rooms are laid out
+     like a floor plan rather than squeezed into a dropdown. */
+  .menu-panel {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    z-index: 45;
+    border-top: 1px solid var(--color-line);
+    border-bottom: 1px solid var(--color-line);
+    background: var(--color-surface);
+    box-shadow: var(--elev-float);
+    padding: clamp(1.25rem, 0.8rem + 1.6vw, 2.25rem) max(1rem, calc((100vw - 72rem) / 2 + 1.5rem));
+    max-height: calc(100dvh - 4.25rem);
+    overflow-y: auto;
+  }
+  .menu-panel[hidden] { display: none; }
+  @media (prefers-reduced-motion: no-preference) {
+    .menu-panel:not([hidden]) { animation: menu-in var(--dur-brisk) var(--ease-settle) both; }
+  }
+  @keyframes menu-in {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: none; }
+  }
+  html.page-vt .menu-panel { display: none !important; }
+  .menu-kicker { margin-bottom: 0.9rem; }
+  .menu-rooms {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.35rem 1.5rem;
+  }
   @media (min-width: 768px) {
-    .tabbar {
-      display: block;
-      overflow-x: visible;
-    }
-    .tabbar-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.25rem;
-    }
-    /* Flagship categories lead; the rest read as a quieter second tier. */
-    .tabbar-row-secondary {
-      --tab-pad: 0.625rem;
-      --tab-size: 0.8125rem;
-      margin-top: -0.15rem;
-      padding-bottom: 0.15rem;
-    }
-    .tabbar-row-secondary .tab-group > a { padding-block: 0.4rem; }
+    .menu-rooms { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (min-width: 1100px) {
+    .menu-rooms { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  .menu-room {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 0.55rem;
+    margin-inline: -0.55rem;
+    border-radius: var(--radius-chip);
+    transition: background-color var(--dur-quick) ease;
+  }
+  .menu-room:hover,
+  .menu-room[aria-current="page"] { background: var(--color-sunken); }
+  .menu-thumb {
+    flex: none;
+    width: 5.25rem;
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    border-radius: var(--radius-print);
+    background: var(--color-sunken);
+  }
+  .menu-thumb img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform var(--dur-paper) var(--ease-settle);
+  }
+  .menu-room:hover .menu-thumb img { transform: scale(1.06); }
+  /* The numeral gets a fixed column, wide enough for VII, so every room's name starts on the same
+     line; sized to its numeral, "I" and "VII" set the names off at three different indents. */
+  .menu-room-text {
+    display: grid;
+    grid-template-columns: 1.75rem 1fr;
+    column-gap: 0.6rem;
+    align-items: baseline;
+    min-width: 0;
+  }
+  .menu-numeral {
+    font-family: var(--font-mono);
+    font-size: var(--text-label);
+    letter-spacing: 0.08em;
+    color: var(--color-accent);
+  }
+  .menu-label {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    line-height: 1.15;
+    color: var(--color-ink);
+    transition: color var(--dur-quick) ease;
+  }
+  .menu-room:hover .menu-label { color: var(--color-accent); }
+  .menu-count {
+    grid-column: 2;
+    margin-top: 0.15rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-label);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+  .menu-links {
+    list-style: none;
+    margin: 1.25rem 0 0;
+    padding: 1rem 0 0;
+    border-top: 1px solid var(--color-line);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.75rem;
+  }
+  .menu-links a {
+    display: inline-block;
+    padding-block: 0.35rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-label);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-ink);
+    transition: color var(--dur-quick) ease;
+  }
+  .menu-links a:hover,
+  .menu-links a[aria-current="page"] { color: var(--color-accent); }
+  @media (pointer: coarse) {
+    .menu-links a { padding-block: 0.75rem; }
+    .menu-room { min-height: 3rem; }
   }
 
   /* ---- touch: every navigation target reaches a fingertip ----
      `pointer: coarse` rather than a width breakpoint, because the question is what is doing the
-     pointing, not how wide the screen is. A phone gets the bigger targets; a small desktop window
-     does not, and a mouse is unaffected anywhere — which is why this is safe to apply to the
-     header and the tab bar without redesigning either.
-
-     44px is Apple's HIG figure and roughly an adult fingertip. `scratchpad/phone-audit.mjs`
-     measured the utility nav at 56×28, the primary tabs at 41 and the secondary row at about 34 —
-     so the links a reader most often wants were the smallest things on the page. The padding
-     below is what closes each of those gaps, and the audit is what says whether it still does.
-
-     The utility nav and the tag chips are *not* here: they carry Tailwind utilities for their base
-     padding, which sit in a later layer than this one and win. Their touch sizes are declared in
-     the components, beside the base size — see the note in NavLinks.tsx. */
+     pointing, not how wide the screen is. The footer's links are padded rather than enlarged, so
+     it keeps its quiet voice — what has to grow is the area under the thumb, not the type. */
   @media (pointer: coarse) {
-    .tab-group > a { padding-block: 0.85rem; }
-    .tabbar-row-secondary .tab-group > a { padding-block: 0.78rem; }
-    /* The footer's contact column: 18px tall as plain `.rail` links, which is under even the AA
-       minimum. Padding rather than a bigger font, so the footer keeps its quiet metadata voice —
-       what has to grow is the area under the thumb, not the type. `inline-block` because
-       padding-block does nothing to an inline box's hit area. */
     .footer-nav a { display: inline-block; min-width: 1.5rem; padding-block: 0.4rem; }
-  }
-
-  /* ---- hover flyout: each tab expands to its entries (sub-tabs) ---- */
-  .tab-group { position: relative; }
-  /* Hidden flyouts use display:none (not visibility:hidden) so a right-edge
-     tab's 15rem flyout never sits in layout and pokes past the viewport — that
-     was causing phantom horizontal scroll at tablet widths. The fade-in is
-     restored with a keyframe on show, since display can't transition. */
-  .tab-flyout {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    z-index: 40;
-    padding-top: 6px; /* transparent bridge so the pointer can cross the gap */
-  }
-  .tab-flyout.flip { left: auto; right: 0; }
-  /* Never part of a page transition. A click on a tab is a click on a hovered tab, so its flyout is
-     open at the moment the outgoing page is photographed — and the header's photograph then carried
-     the flyout's overflow and was drawn stretched to more than twice its height, a ghost of the
-     header sliding down the window mid-transition. `page-vt` goes on before the photograph is taken. */
-  html.page-vt .tab-flyout { display: none !important; }
-
-  @media (hover: hover) and (min-width: 768px) {
-    .tab-group:hover > .tab-flyout,
-    .tab-group:focus-within > .tab-flyout {
-      display: block;
-    }
-  }
-  @media (hover: hover) and (min-width: 768px) and (prefers-reduced-motion: no-preference) {
-    .tab-group:hover > .tab-flyout,
-    .tab-group:focus-within > .tab-flyout {
-      animation: flyout-in 0.16s ease both;
-    }
-  }
-  @keyframes flyout-in {
-    from { opacity: 0; transform: translateY(4px); }
-    to { opacity: 1; transform: none; }
-  }
-
-  .tab-flyout-inner {
-    min-width: 15rem;
-    max-width: min(22rem, 92vw);
-    max-height: min(70vh, 30rem);
-    overflow-y: auto;
-    border: 1px solid var(--color-line);
-    border-radius: var(--radius-card);
-    background: var(--color-surface);
-    box-shadow: var(--elev-float);
-    padding: 0.4rem;
-  }
-  .flyout-head {
-    display: block;
-    font-family: var(--font-mono);
-    font-size: calc(var(--text-label) * 0.95);
-    letter-spacing: var(--text-label--letter-spacing);
-    text-transform: uppercase;
-    color: var(--color-accent);
-    padding: 0.45rem 0.6rem 0.5rem;
-    border-bottom: 1px solid var(--color-line);
-  }
-  .flyout-list {
-    list-style: none;
-    margin: 0.3rem 0;
-    padding: 0;
-    display: grid;
-    gap: 0.05rem;
-  }
-  .flyout-list a {
-    display: block;
-    padding: 0.4rem 0.6rem;
-    border-radius: var(--radius-chip);
-    font-size: 0.85rem;
-    line-height: 1.35;
-    color: var(--color-ink);
-    transition: background-color var(--dur-tap), color var(--dur-tap);
-  }
-  .flyout-list a:hover {
-    background: var(--color-accent-soft);
-    color: var(--color-accent);
-  }
-  .flyout-more {
-    display: block;
-    padding: 0.4rem 0.6rem;
-    font-family: var(--font-mono);
-    font-size: calc(var(--text-label) * 0.95);
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--color-muted);
-  }
-  .flyout-more:hover { color: var(--color-accent); }
-
-  /* ---- mobile: the tab strip's scroll edges ----
-
-     At 390px the strip is 358px wide and its content is 1216px, so something is always cut.
-     There was already a fade for the right edge — a 2.4rem `::after` washing `--color-ground`
-     over the text — and two things were wrong with it, measured on `/competitions/` with
-     `scratchpad/tab-edge.mjs`.
-
-     It was too short. The gradient reached full strength 21px in, so the last glyph of
-     "AI & Creative Projects" sat at about a third of the way through and came out smudged
-     rather than dissolved — which reads as a clipped letter, not as "there is more this way".
-
-     And there was no fade at all on the **left**. Scroll the strip and the first visible tab
-     was cut hard against the container. That edge had never been looked at because the audit
-     shoots pages at rest, and at rest the strip is at `scrollLeft: 0`.
-
-     `mask-image` fades the strip's own content rather than painting over it, driven at both
-     edges by `data-more-left` / `data-more-right` from the same scroll listener. The chevron
-     stays, because a fade says "cut off" and an arrow says "scroll", but it loses its own
-     background now that the mask does the fading.
-
-     One thing this comment used to claim and does not: that the opaque wash mismatched the
-     header's translucent pane (`… / 0.82`) once content was behind it. Measured, that never
-     happens — the header is sticky at a negative offset and the strip's top is at -41px by
-     scroll 400, so the bar is only ever on screen near scroll-top, where an opaque
-     `--color-ground` matched exactly. Fading content instead of covering it is still the
-     better mechanism, but it is robustness, not a bug that was fixed. */
-  .tabbar-wrap { position: relative; }
-  @media (max-width: 767px) {
-    /* `[PH 2.75rem]` on the right: wide enough that a whole glyph dissolves inside it rather
-       than being caught halfway, and it clears the chevron's 2.4rem so the arrow sits on
-       already-faded type. The left edge needs less — nothing is being announced there, the
-       fade is only saying the strip continues. */
-    .tabbar {
-      --fade-l: 0px;
-      --fade-r: 0px;
-      -webkit-mask-image: linear-gradient(
-        to right,
-        transparent 0,
-        #000 var(--fade-l),
-        #000 calc(100% - var(--fade-r)),
-        transparent 100%
-      );
-      mask-image: linear-gradient(
-        to right,
-        transparent 0,
-        #000 var(--fade-l),
-        #000 calc(100% - var(--fade-r)),
-        transparent 100%
-      );
-      /* A custom property is not animatable unless it has been registered with a type, so the
-         two `@property` blocks at the foot of this file are what make this line more than a
-         comment — they cannot be nested in a rule, which is why they are not here. Without them
-         the fade would pop on and off at the 8px threshold — most visibly on the right, where
-         reaching the end of the strip would snap the last tab from two-thirds faded to fully
-         opaque. */
-      transition:
-        --fade-l var(--dur-quick) ease,
-        --fade-r var(--dur-quick) ease;
-    }
-    .tabbar[data-more-right] { --fade-r: 2.75rem; }
-    .tabbar[data-more-left] { --fade-l: 1.5rem; }
-
-    .tabbar-wrap[data-more]::after {
-      content: "›";
-      position: absolute;
-      top: 0;
-      right: 0;
-      height: 100%;
-      width: 2.4rem;
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      padding-right: 0.4rem;
-      font-family: var(--font-mono);
-      color: var(--color-muted);
-      pointer-events: none;
-    }
   }
 
   /* ---- reading progress + back-to-top (long entry/log pages) ---- */
@@ -1223,17 +1314,33 @@
     font-size: var(--text-prose);
     line-height: var(--text-prose--line-height);
   }
-  .prose-reflection > * + * { margin-top: 1.1em; }
+  .prose-reflection > * + * { margin-top: 1.15em; }
+  /* The reflection's four parts — what it was, what I did, what I learned, how it felt — are the
+     chapters of the page, so they are numbered like chapters: a small mono figure in the accent
+     above a heading in the display face, upright, at a size between a pull-quote and a section. */
+  .prose-reflection { counter-reset: part; }
   .prose-reflection h2 {
+    counter-increment: part;
     font-family: var(--font-display);
-    font-style: italic;
     font-weight: 400;
     font-size: var(--text-quote);
-    line-height: 1.2;
+    line-height: 1.12;
     letter-spacing: var(--text-quote--letter-spacing);
-    margin-top: 2.4em;
+    margin-top: 2.6em;
+    padding-top: 1.1em;
+    border-top: 1px solid var(--color-line);
     color: var(--color-ink);
   }
+  .prose-reflection h2::before {
+    content: counter(part, decimal-leading-zero);
+    display: block;
+    margin-bottom: 0.7rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-label);
+    letter-spacing: 0.12em;
+    color: var(--color-accent);
+  }
+  .prose-reflection > h2:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
   .prose-reflection h3 {
     font-weight: 600;
     font-size: var(--text-subhead);
@@ -1260,11 +1367,20 @@
   .prose-reflection ol { list-style: decimal; }
   .prose-reflection li + li { margin-top: 0.4em; }
   /* A quotation is a different kind of text, not a link: taxonomy's rule, as on the entry note. */
+  /* A quotation inside a reflection is set as a pull-quote: the display face's italic, bigger than
+     the text around it, hung off a short rule in the secondary green — a voice, not a footnote. */
   .prose-reflection blockquote {
+    margin-block: 2em;
     border-left: 2px solid var(--color-secondary);
-    padding-left: 1em;
-    color: var(--color-muted);
+    padding-left: 1.25em;
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: var(--text-quote);
+    line-height: var(--text-quote--line-height);
+    letter-spacing: var(--text-quote--letter-spacing);
+    color: var(--color-ink);
   }
+  .prose-reflection blockquote p { max-width: var(--measure-quote); }
   .prose-reflection code {
     font-family: var(--font-mono);
     font-size: 0.875em;
@@ -1323,7 +1439,6 @@
   .page-bg,
   .reel,
   header nav,
-  .tabbar,
   footer,
   dialog,
   #site-cat,
@@ -1343,15 +1458,6 @@
     outline: none !important;
     box-shadow: none !important;
     transform: none !important;
-  }
-  /* No ink on paper to frost, so the pane is just a box in the way. */
-  .glass {
-    padding: 0 !important;
-    background: none !important;
-    border: 0 !important;
-    box-shadow: none !important;
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
   }
   .reveal, .reveal-2, .reveal-3, .hero-in, .hero-pane { animation: none !important; opacity: 1 !important; }
   [data-io-reveal],
@@ -1453,11 +1559,6 @@
     transition: transform var(--dur-paper) var(--ease-settle) 0.05s;
   }
 
-  /* ---- page transitions: the underline slides ---- */
-  ::view-transition-group(active-tab) {
-    animation-duration: 0.5s;
-    animation-timing-function: var(--ease-settle);
-  }
 
   /* ---- the theme changes as a circle of light spreading from the switch ----
      src/app/_chrome/ThemeToggle.tsx runs the change inside a view transition and animates the new
@@ -1469,8 +1570,7 @@
     animation: none;
     mix-blend-mode: normal;
   }
-  html.theme-vt body > header,
-  html.theme-vt .tab-underline { view-transition-name: none; }
+  html.theme-vt body > header { view-transition-name: none; }
 
   /* ---- the banner's depth, as the page scrolls away from it ----
      Three layers, three speeds — the thing that makes an illustrated banner feel like a place rather
@@ -1941,22 +2041,6 @@ summary:active,
 .lenis [data-lenis-prevent] { overscroll-behavior: contain; }
 .lenis.lenis-smooth iframe { pointer-events: none; }
 
-/* The tab strip's two mask stops, registered so they can be transitioned.
-   `@property` cannot live inside a rule, which is why these sit apart from the `.tabbar`
-   block in `@layer components` that uses them — see the fade comment there. Typed as
-   `<length>` with an initial of 0, so a browser that never runs the scroll listener (no JS)
-   gets an unmasked strip rather than an invisible one. */
-@property --fade-l {
-  syntax: "<length>";
-  inherits: false;
-  initial-value: 0px;
-}
-@property --fade-r {
-  syntax: "<length>";
-  inherits: false;
-  initial-value: 0px;
-}
-
 /* ------------------------------------------------------------------ *
  * The entry note, as a pull-quote.
  *
@@ -1975,10 +2059,191 @@ summary:active,
     margin: 0;
     max-width: var(--measure-quote);
     border-inline-start: 2px solid var(--color-secondary);
-    padding-inline-start: 1.1rem;
+    padding-inline-start: 1.25rem;
   }
   .entry-note p {
     margin: 0;
     text-wrap: pretty;
   }
+
+  /* ---- the entry page ---- */
+  .entry-head { max-width: 58rem; }
+  .entry-credit {
+    margin-top: 0.75rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-label);
+    letter-spacing: 0.02em;
+    color: var(--color-muted);
+  }
+  .entry-pager {
+    display: grid;
+    gap: 1rem 2rem;
+    margin-top: var(--spacing-section);
+    padding-top: 2rem;
+    border-top: 1px solid var(--color-line);
+  }
+  @media (min-width: 640px) { .entry-pager { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .pager-link {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    padding-block: 0.5rem;
+  }
+  .pager-next { flex-direction: row-reverse; text-align: right; }
+  .pager-thumb {
+    flex: none;
+    width: clamp(6rem, 4rem + 6vw, 9.5rem);
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+  }
+  .pager-thumb img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform var(--dur-paper) var(--ease-settle);
+  }
+  .pager-link:hover .pager-thumb img { transform: scale(1.05); }
+  .pager-text { display: flex; flex-direction: column; gap: 0.45rem; min-width: 0; }
+  .pager-next .pager-text { align-items: flex-end; }
+  .pager-title { transition: color var(--dur-quick) ease; }
+  .pager-link:hover .pager-title { color: var(--color-accent); }
+
+  /* ---- the timeline's rows (src/app/_ui/TimelineItem.tsx) ---- */
+  .timeline-item {
+    display: grid;
+    grid-template-columns: 5.2rem minmax(0, 1fr);
+    gap: 1rem;
+    padding-block: 1.6rem;
+    border-bottom: 1px solid var(--color-line);
+  }
+  .timeline-thumb { display: none; }
+  @media (min-width: 640px) {
+    .timeline-item { grid-template-columns: 6.5rem minmax(0, 1fr) clamp(8rem, 4rem + 9vw, 12.5rem); gap: 1.5rem; }
+    .timeline-thumb {
+      display: block;
+      align-self: start;
+      aspect-ratio: 16 / 10;
+      overflow: hidden;
+    }
+    .timeline-thumb img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform var(--dur-paper) var(--ease-settle);
+    }
+    .timeline-item:hover .timeline-thumb img { transform: scale(1.05); }
+  }
+
+  /* ---- the about page ---- */
+  .about-body .about-lede {
+    font-size: var(--text-lede);
+    line-height: var(--text-lede--line-height);
+    color: var(--color-ink);
+  }
+  .about-school { display: grid; gap: 0.25rem; }
+  .about-school-name {
+    font-family: var(--font-display);
+    font-size: var(--text-heading);
+    line-height: var(--text-heading--line-height);
+  }
+  .prose-reflection .about-badges,
+  .prose-reflection .about-langs,
+  .prose-reflection .about-tools { list-style: none; padding: 0; }
+  .prose-reflection .about-badges li + li,
+  .prose-reflection .about-langs li + li,
+  .prose-reflection .about-tools li + li { margin-top: 0; }
+  .about-badges {
+    display: grid;
+    gap: 0.75rem;
+  }
+  @media (min-width: 640px) { .about-badges { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .about-badges li {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-chip);
+    background: var(--color-surface);
+    font-size: 1rem;
+    line-height: 1.4;
+  }
+  .about-badge-n {
+    flex: none;
+    font-family: var(--font-mono);
+    font-size: var(--text-label);
+    letter-spacing: 0.08em;
+    color: var(--color-accent);
+  }
+  .about-langs li {
+    display: grid;
+    grid-template-columns: minmax(6rem, 9rem) minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 1rem;
+    padding-block: 0.7rem;
+    border-bottom: 1px solid var(--color-line);
+  }
+  .about-lang-name { font-weight: 500; }
+  .about-lang-level { color: var(--color-muted); font-size: var(--text-small); }
+  .about-meter { display: inline-flex; gap: 0.3rem; align-self: center; }
+  .about-meter span {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--color-faint);
+  }
+  .about-meter span[data-on] { background: var(--color-secondary); border-color: var(--color-secondary); }
+  .about-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .about-tools li {
+    padding: 0.35rem 0.85rem;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface);
+    font-size: var(--text-small);
+  }
+
+  /* ---- compact entry rows (the monthly log) ---- */
+  .card-row { border-bottom: 1px solid var(--color-line); }
+  .card-row .card-cover img { transition: transform var(--dur-paper) var(--ease-settle); }
+  .card-row:hover .card-cover img { transform: scale(1.05); }
+
+  /* ---- the tag cloud (/tags/) ---- */
+  .tag-cloud {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.4rem 1.6rem;
+  }
+  .tag-word {
+    display: inline-block;
+    font-family: var(--font-display);
+    font-size: calc(1rem + var(--w, 2) * 0.55rem);
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+    color: var(--color-ink);
+    transition: color var(--dur-quick) ease;
+  }
+  .tag-word:hover { color: var(--color-accent); }
+  .tag-hash { color: var(--color-faint); margin-right: 0.04em; }
+  .tag-word:hover .tag-hash { color: inherit; }
+  .tag-count {
+    margin-left: 0.2em;
+    font-family: var(--font-mono);
+    font-size: var(--text-label);
+    letter-spacing: 0.04em;
+    color: var(--color-accent);
+    vertical-align: super;
+  }
+
+  /* ---- a monthly log, as a row ---- */
+  .log-row { border-bottom: 1px solid var(--color-line); }
 }

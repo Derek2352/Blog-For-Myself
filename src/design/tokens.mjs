@@ -124,7 +124,7 @@ export const ROLES = {
   faint: 'large or decorative text and glyphs only — never body copy',
   line: 'hairlines, frames, ticks',
   'line-strong': 'a rule that carries structure and has to be seen — a divider, a ruler’s ticks. (An input’s border is `faint`, which meets 3:1.)',
-  accent: 'interaction — links, the active tab, focus, the primary action',
+  accent: 'interaction — links, the current page, focus, the primary action',
   'accent-hover': 'the accent under the pointer',
   'accent-ink': 'text on an accent fill',
   'accent-soft': 'an accent wash behind text — a hovered row, a selection',
@@ -268,17 +268,23 @@ export const FONTS = {
  * Each becomes a Tailwind utility (`text-heading`) carrying all three.
  */
 export const TYPE = {
-  display: { size: 'clamp(2.6rem, 1.85rem + 3.2vw, 4.25rem)', leading: 1.02, tracking: '-0.018em', use: 'the banner’s name' },
-  title: { size: 'clamp(2.25rem, 1.7rem + 2.3vw, 3.5rem)', leading: 1.06, tracking: '-0.014em', use: 'a page’s h1' },
-  section: { size: 'clamp(1.75rem, 1.4rem + 1.4vw, 2.5rem)', leading: 1.1, tracking: '-0.01em', use: 'a section’s h2' },
-  quote: { size: 'clamp(1.45rem, 1.25rem + 0.8vw, 1.75rem)', leading: 1.3, tracking: '-0.004em', use: 'a pull-quote, in italic' },
-  turn: { size: 'clamp(1.45rem, 1.12rem + 1.35vw, 2.15rem)', leading: 1.15, tracking: '-0.006em', use: 'the italic turn after a display line' },
-  heading: { size: 'clamp(1.3rem, 1.18rem + 0.45vw, 1.6rem)', leading: 1.16, tracking: '-0.006em', use: 'a card’s or a panel’s title' },
+  /* The display sizes went up a whole step when the covers became photographs. Beside a 16:10
+     still life the old 68px name read as a caption to the picture; the headline has to be the
+     thing that holds the page, the way a magazine cover line does, so it now reaches 7rem on a
+     wide screen and tightens as it grows. */
+  display: { size: 'clamp(3.1rem, 1.6rem + 5.6vw, 7rem)', leading: 0.94, tracking: '-0.028em', use: 'the banner’s name' },
+  title: { size: 'clamp(2.6rem, 1.55rem + 3.9vw, 5rem)', leading: 0.98, tracking: '-0.022em', use: 'a page’s h1' },
+  section: { size: 'clamp(2rem, 1.35rem + 2.4vw, 3.4rem)', leading: 1.02, tracking: '-0.016em', use: 'a section’s h2' },
+  quote: { size: 'clamp(1.5rem, 1.25rem + 1vw, 2.1rem)', leading: 1.25, tracking: '-0.006em', use: 'a pull-quote, in italic' },
+  turn: { size: 'clamp(1.6rem, 1.1rem + 2vw, 2.85rem)', leading: 1.08, tracking: '-0.012em', use: 'the italic turn after a display line' },
+  heading: { size: 'clamp(1.35rem, 1.18rem + 0.6vw, 1.75rem)', leading: 1.12, tracking: '-0.008em', use: 'a card’s or a panel’s title' },
   subhead: { size: '1.125rem', leading: 1.4, tracking: '-0.005em', use: 'a sans heading inside prose' },
-  lede: { size: 'clamp(1.0625rem, 0.98rem + 0.4vw, 1.25rem)', leading: 1.62, tracking: '-0.003em', use: 'the paragraph under a title' },
-  prose: { size: '1.0625rem', leading: 1.8, tracking: '0em', use: 'a reflection, read at length' },
+  lede: { size: 'clamp(1.125rem, 1rem + 0.5vw, 1.4rem)', leading: 1.55, tracking: '-0.006em', use: 'the paragraph under a title' },
+  /* Reading text at 18px: the reflections are long, and at 17px with a 65ch measure the column
+     read as small print beside the bigger headlines. */
+  prose: { size: '1.125rem', leading: 1.75, tracking: '-0.003em', use: 'a reflection, read at length' },
   body: { size: '1rem', leading: 1.65, tracking: '0em', use: 'interface text' },
-  small: { size: '0.875rem', leading: 1.55, tracking: '0.002em', use: 'summaries, captions' },
+  small: { size: '0.9rem', leading: 1.55, tracking: '0em', use: 'summaries, captions' },
   label: { size: '0.72rem', leading: 1.6, tracking: '0.06em', use: 'the index rail — dates, codes, kinds (mono, capitals)' },
   micro: { size: '0.625rem', leading: 1.4, tracking: '0.1em', use: 'edge print on the reel, ticks' },
 };
@@ -312,6 +318,9 @@ export const SPACE = {
 /** Corners: one per kind of object, softest on the biggest. */
 export const RADIUS = {
   hair: '2px',
+  /* A photograph's corner: just enough that a print does not look cut with a guillotine, little
+     enough that it still reads as a picture rather than a button. */
+  print: '0.375rem',
   chip: '0.5rem',
   card: '0.875rem',
   pane: '1.25rem',

@@ -16,7 +16,7 @@
  *   created at all — no event listeners, no animation frame loop.
  * - **Reduced motion**, from the OS or from the site's own toggle. A glide is motion, and a reader
  *   who asked for less gets the page moving exactly as far as they scroll, when they scroll.
- * - **Inside things that scroll on their own** — a tab's flyout list, the cat's card, a dialog — which
+ * - **Inside things that scroll on their own** — the work menu's panel, the cat's card, a dialog — which
  *   keep their native scroll (`prevent`, and `allowNestedScroll` for anything else that can).
  *
  * Keyboard, scrollbar and in-page anchor scrolling are left native; Lenis follows them rather than
@@ -29,7 +29,7 @@ import { motionReduced } from '@/lib/a11y-prefs';
 import { remeasureScroll, setSmoothScroll, settleScroll } from '@/lib/smooth-scroll';
 
 /** Elements whose own scrolling must not be taken over. */
-const OWN_SCROLL = '[data-lenis-prevent], .tab-flyout, #cat-card-panel, dialog, [role="dialog"]';
+const OWN_SCROLL = '[data-lenis-prevent], .menu-panel, #cat-card-panel, dialog, [role="dialog"]';
 
 export default function SmoothScroll() {
   const pathname = usePathname();

@@ -66,8 +66,9 @@ export default function ColophonPage() {
             <p>
               That’s the one deliberately bold element. Everything else stays comfortable on
               purpose: warm paper tones, soft corners, generous space. Motion exists to connect
-              rather than decorate — pages glide instead of reloading, the tab underline marks where
-              you are, and the previous/next arrows send a small paper plane ahead of you. And an
+              rather than decorate — pages glide instead of reloading, the picture you click carries
+              across into the page it opens, and the previous/next arrows send a small paper plane
+              ahead of you. And an
               ink-silhouette cat wanders the bottom edge of every page — it walks, pauses, slips out
               of the room and back, scampers if you tap it, and treats your pointer as a mouse:
               bring it down to the floor and the cat will give chase and pounce. All of it stands
@@ -121,12 +122,12 @@ export default function ColophonPage() {
         <section className="mt-12" aria-labelledby="washes-h">
           <p className="kicker">light</p>
           <h2 id="washes-h" className="mt-1 font-display text-heading">
-            One warm light, tab by tab
+            One warm light, room by room
           </h2>
           <p className="mt-3 max-w-prose text-sm leading-relaxed text-muted">
-            Each tab carries a single soft wash at the top of the page — the same afternoon light,
+            Each room carries a single soft wash at the top of the page — the same afternoon light,
             shifted a few degrees in temperature. It&apos;s declared in the same data file that
-            defines the tab, and a new tab picks its own automatically. Hues stay inside a
+            defines the room, and a new room picks its own automatically. Hues stay inside a
             deliberately narrow warm band (amber through terracotta to wine): earlier versions
             ranged into violet, cyan and green, which read as a colour cast fighting the paper.
             There used to be a patterned texture layer here too — page pattern, patterned cards and

@@ -229,13 +229,13 @@ export default async function CategoryPage({
 
             Not shown on an empty category, which already offers every populated one above. */}
         {pager && (
-          <nav className="mt-section grid gap-4 sm:grid-cols-2" aria-label="Other subjects">
+          <nav className="subject-pager mt-section" aria-label="Other subjects">
             {pager.map(({ dir, c }) => (
               <Link
                 key={dir}
                 href={categoryHref(c.slug)}
                 prefetch={false}
-                className={`pager panel lift group ${dir === 'next' ? 'sm:col-start-2 sm:text-right' : ''}`}
+                className={`pager group ${dir === 'next' ? 'sm:col-start-2 sm:text-right' : ''}`}
                 style={{ ['--hue' as string]: String(resolveWash(c).hue) }}
               >
                 <span className="go-link">
@@ -252,7 +252,7 @@ export default async function CategoryPage({
                   )}
                 </span>
                 <span
-                  className="mt-1 block font-display text-heading transition-colors group-hover:text-accent"
+                  className="mt-2 block font-display text-section transition-colors group-hover:text-accent"
                   data-vt="word"
                 >
                   {c.label}

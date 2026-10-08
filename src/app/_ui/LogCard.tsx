@@ -23,9 +23,9 @@ export default function LogCard({
   const category = categoryBySlug(log.data.category);
 
   return (
-    <article className="panel flex gap-3 p-3">
+    <article className="log-row flex gap-5 py-4">
       {log.data.image && (
-        <div className="size-14 shrink-0 overflow-hidden rounded-(--radius-chip) border border-line">
+        <div className="frame size-16 shrink-0 overflow-hidden">
           <img
             src={log.data.image.src}
             alt=""
@@ -44,7 +44,7 @@ export default function LogCard({
           {showCategory && category && <span>{category.label}</span>}
           {log.data.draft && <span className="text-signal-text">draft</span>}
         </p>
-        <h3 className="mt-1 text-body font-medium">
+        <h3 className="mt-1 font-display text-heading">
           {href ? (
             <Link href={href} prefetch={false} className="transition-colors hover:text-accent">
               {log.data.title}
@@ -53,7 +53,7 @@ export default function LogCard({
             log.data.title
           )}
         </h3>
-        {log.data.summary && <p className="mt-0.5 text-sm text-muted">{log.data.summary}</p>}
+        {log.data.summary && <p className="mt-1 text-small text-muted">{log.data.summary}</p>}
         {log.data.link && (
           <a
             href={log.data.link}

@@ -14,6 +14,23 @@ export const metadata: Metadata = {
   alternates: { canonical: '/about/' },
 };
 
+/**
+ * How a language line reads as a level, out of five, from its own words ("Cantonese — native",
+ * "English — fluent (IELTS 7.5)"). The words stay on the page — the dots are a reading aid beside
+ * them, not a replacement — so a line whose level is not one of these simply gets no dots.
+ */
+const LEVELS: [RegExp, number][] = [
+  [/\bnative\b/i, 5],
+  [/\bfluent\b/i, 4],
+  [/\b(upper[- ])?intermediate\b/i, 3],
+  [/\b(elementary|basic)\b/i, 1],
+];
+function language(line: string) {
+  const [name, rest = ''] = line.split(/\s+—\s+/);
+  const level = LEVELS.find(([re]) => re.test(rest))?.[1];
+  return { name, rest, level };
+}
+
 export default async function AboutPage() {
   const linkedin: string = site.linkedin;
   const { education, certifications, languages, tools } = resume;
@@ -37,14 +54,15 @@ export default async function AboutPage() {
         <header className="max-w-3xl">
           <p className="kicker">about</p>
           <PageTitle tail="properly.">Nice to meet you,</PageTitle>
-          <p className="mt-3 text-lg leading-relaxed text-muted">
-            {site.name} — {site.tagline}.
+          <p className="mt-5 text-balance text-lede text-muted">
+            {/* The separator stays with the word before it, so a wrap never opens a line on "·". */}
+            {site.name} — {site.tagline.replace(/ · /g, '\u00a0· ')}.
           </p>
         </header>
 
-        <div className="mt-10 grid gap-12 lg:grid-cols-[1fr_18rem] lg:gap-16">
-          <div className="prose-reflection min-w-0">
-            <p>
+        <div className="mt-12 grid gap-12 lg:grid-cols-[1fr_19rem] lg:gap-20">
+          <div className="prose-reflection about-body min-w-0">
+            <p className="about-lede">
               I’m an undergraduate in Financial Analysis and FinTech at the Hang Seng University of
               Hong Kong, and I’m also the person who stays up rendering AI-animated film frames and
               sorting photographs from the last study trip. Two registers, one habit: reading
@@ -64,32 +82,52 @@ export default async function AboutPage() {
             </p>
 
             <h2>Education</h2>
-            <p>
-              {education.school}
-              <br />
-              {education.degree}
-              <br />
-              <span className="rail">
+            <div className="about-school">
+              <p className="about-school-name">{education.school}</p>
+              <p>{education.degree}</p>
+              <p className="rail">
                 {education.dates} · {education.gpa}
-              </span>
-            </p>
+              </p>
+            </div>
 
             <h2>Certifications</h2>
-            <ul>
-              {certifications.map((c) => (
-                <li key={c}>{c}</li>
+            <ol className="about-badges">
+              {certifications.map((c, i) => (
+                <li key={c}>
+                  <span className="about-badge-n" aria-hidden="true">
+                    {String(i + 1).padStart(2, '0')}
+                  </span>
+                  {c}
+                </li>
               ))}
-            </ul>
+            </ol>
 
             <h2>Languages</h2>
-            <ul>
-              {languages.map((l) => (
-                <li key={l}>{l}</li>
-              ))}
+            <ul className="about-langs">
+              {languages.map((l) => {
+                const { name, rest, level } = language(l);
+                return (
+                  <li key={l}>
+                    <span className="about-lang-name">{name}</span>
+                    <span className="about-lang-level">{rest}</span>
+                    {level && (
+                      <span className="about-meter" aria-hidden="true">
+                        {[1, 2, 3, 4, 5].map((n) => (
+                          <span key={n} data-on={n <= level ? '' : undefined} />
+                        ))}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
 
             <h2>Tools</h2>
-            <p>{tools.join(' · ')}</p>
+            <ul className="about-tools">
+              {tools.map((t) => (
+                <li key={t}>{t}</li>
+              ))}
+            </ul>
 
             <h2>Say hello</h2>
             <p>
@@ -111,8 +149,8 @@ export default async function AboutPage() {
             </p>
           </div>
 
-          <aside className="self-start lg:sticky lg:top-6">
-            <figure className="frame overflow-hidden" data-drawn={portraitDrawn}>
+          <aside className="self-start lg:sticky lg:top-24">
+            <figure className="frame mat overflow-hidden" data-drawn={portraitDrawn}>
               <img
                 src={portrait.src}
                 alt="Portrait of Derek Yung (placeholder — photo coming)"
@@ -136,11 +174,7 @@ export default async function AboutPage() {
                 <dd className="mt-1">AI-animated film · photography · writing</dd>
               </div>
             </dl>
-            <a
-              href={site.cvPath}
-              download
-              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-(--radius-chip) bg-accent px-4 py-2.5 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90"
-            >
+            <a href={site.cvPath} download className="cta cta-primary mt-5 w-full justify-center">
               Download CV (PDF)
             </a>
             <p className="rail mt-2 text-center">the short version, for printers</p>

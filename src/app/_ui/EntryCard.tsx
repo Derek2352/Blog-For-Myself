@@ -36,6 +36,8 @@ export interface EntryCardProps {
   showCategory?: boolean;
   /** Eager-load the cover (above-the-fold cards only). */
   eager?: boolean;
+  /** The lead card of a set: a larger title, and the whole summary rather than three lines. */
+  feature?: boolean;
 }
 
 export default function EntryCard({
@@ -44,6 +46,7 @@ export default function EntryCard({
   compact = false,
   showCategory = false,
   eager = false,
+  feature = false,
 }: EntryCardProps) {
   const href = entryHref(entry);
   const category = categoryBySlug(entry.data.category);
@@ -60,10 +63,10 @@ export default function EntryCard({
 
   if (compact) {
     return (
-      <article className="card panel group transition-colors hover:border-muted">
-        <Link href={href} prefetch={false} className="flex items-center gap-4 p-3">
+      <article className="card card-row group">
+        <Link href={href} prefetch={false} className="flex items-center gap-5 py-4">
           <div
-            className="card-cover h-16 w-24 shrink-0 overflow-hidden rounded-(--radius-chip) border border-line"
+            className="card-cover frame h-20 w-32 shrink-0 overflow-hidden"
             data-drawn={drawn}
             data-vt="picture"
           >
@@ -85,7 +88,7 @@ export default function EntryCard({
               <span aria-hidden="true">{code}</span>
             </p>
             <h3
-              className="mt-0.5 font-display text-lg leading-snug transition-colors group-hover:text-accent"
+              className="mt-1 font-display text-heading transition-colors group-hover:text-accent"
               data-vt="word"
             >
               {entry.data.title}
@@ -100,7 +103,7 @@ export default function EntryCard({
   return (
     /* min-w-0: the meta line below never wraps, so without it a grid track sized `1fr` grows to
        fit the longest role and the card pushes past the viewport on a phone. */
-    <article className="card lift group min-w-0">
+    <article className={`card lift group min-w-0${feature ? ' card-feature' : ''}`}>
       <Link href={href} prefetch={false} className="block">
         <div className="frame mat card-cover overflow-hidden" data-drawn={drawn} data-vt="picture">
           <img
@@ -112,38 +115,35 @@ export default function EntryCard({
             loading={eager ? 'eager' : 'lazy'}
           />
         </div>
-        {/* One line, always. This used to wrap, and a role long enough to push the code onto a
-            second row dropped that card's title below its neighbours' — three cards side by side
-            with three different title baselines. Now the role is the only shrinkable part: date
-            and code hold their place, and the role gets whatever is left before it ellipsizes
-            (the full string stays in the title attribute). */}
-        <p className="rail wall-label mt-3 flex flex-nowrap items-baseline gap-x-2">
-          <span className="shrink-0">{range}</span>
-          {entry.data.role && (
-            <>
-              <span aria-hidden="true" className="shrink-0">
-                ·
-              </span>
-              <span className="min-w-0 truncate" title={entry.data.role}>
-                {entry.data.role}
-              </span>
-            </>
-          )}
-          {entry.data.draft && <span className="shrink-0 text-signal-text">· draft</span>}
-          <span aria-hidden="true" className="shrink-0">
-            ·
+        {/* The label under a print, in the order a reader asks: what is it, when, what was I —
+            then the catalogue number, set apart on the right where a gallery puts it. One line
+            always; the role is the only part that gives way (the full string in `title`). */}
+        <p className="rail card-label">
+          <span className="card-label-main">
+            <span className="shrink-0">{range}</span>
+            {entry.data.role && (
+              <>
+                <span aria-hidden="true" className="shrink-0">
+                  ·
+                </span>
+                <span className="min-w-0 truncate" title={entry.data.role}>
+                  {entry.data.role}
+                </span>
+              </>
+            )}
+            {entry.data.draft && <span className="shrink-0 text-signal-text">· draft</span>}
           </span>
-          <span aria-hidden="true" className="shrink-0">
+          <span aria-hidden="true" className="card-code">
             {code}
           </span>
         </p>
         <h3
-          className="mt-1.5 font-display text-heading transition-colors group-hover:text-accent"
+          className={`card-title font-display transition-colors group-hover:text-accent ${feature ? 'text-section' : 'text-heading'}`}
           data-vt="word"
         >
           <span className="link-draw">{entry.data.title}</span>
         </h3>
-        <p className="mt-1.5 text-sm leading-relaxed text-muted">{entry.data.summary}</p>
+        <p className={`card-summary text-small text-muted${feature ? ' card-summary-full' : ''}`}>{entry.data.summary}</p>
         {showCategory && category && <p className="rail mt-2 text-secondary">{category.label}</p>}
       </Link>
     </article>
