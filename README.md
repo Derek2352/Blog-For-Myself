@@ -95,9 +95,9 @@ npm test           # 36 unit tests
 
 Pick a host in [**Deploy**](#deploy). The repo already carries the config for Cloud Run (Google AI
 Studio), Cloudflare, Netlify and Vercel, so importing it is the whole job. If the site will not live
-at `https://derekyung.ai.studio`, set `SITE_URL` to the new origin in that host's build settings —
-canonical links, share cards, the sitemap, the feed and `robots.txt` all follow it. On the
-git-connected hosts every push then redeploys.
+at `https://blog-for-myself.mingyinyunggg.workers.dev`, set `SITE_URL` to the new origin in that
+host's build settings — canonical links, share cards, the sitemap, the feed and `robots.txt` all
+follow it. On the git-connected hosts every push then redeploys.
 
 ---
 
@@ -677,10 +677,10 @@ The same files make it zero-config, and pushes here deploy. On Cloudflare's impo
 command field is blank, enter `npm run build` — the button fills it in from `package.json`, the
 import may not.
 
-**The address.** `SITE_URL` defaults to `https://derekyung.ai.studio`. On whichever host *is* the
-site, set it in the build environment to that host's origin (`https://….workers.dev`,
-`https://….netlify.app`, a custom domain). On a mirror, leave it alone so the canonical links keep
-pointing home. A value that is not a bare origin fails the build.
+**The address.** `SITE_URL` defaults to `https://blog-for-myself.mingyinyunggg.workers.dev`, where
+the site is live. If it moves (another host, a custom domain), set `SITE_URL` in the new host's build
+environment to that origin, or change the default in `src/lib/site-url.ts`. On a mirror, leave it
+alone so the canonical links keep pointing home. A value that is not a bare origin fails the build.
 
 Not set up, on purpose:
 

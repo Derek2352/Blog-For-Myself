@@ -6,11 +6,14 @@
  * mode if any of them disagree with where the site actually lives is a quiet one: they point at a
  * host that does not serve it, and nothing says so.
  *
- * The default is the AI Studio deployment. A build for another host sets `SITE_URL` in that host's
- * build environment (Cloudflare, Netlify and Vercel all have a field for it) — but only on the host
- * that *is* the site. A mirror should leave it alone, so its canonical links keep pointing home.
+ * The default is where the site lives: the Cloudflare Workers deployment. It used to be the AI Studio
+ * deployment, https://derekyung.ai.studio, and when that stopped serving the site this was the quiet
+ * failure above, exactly: every canonical link, share card, sitemap entry and feed link on the live
+ * site pointed at a Google 404. A build for another host sets `SITE_URL` in that host's build
+ * environment (Cloudflare, Netlify and Vercel all have a field for it) — but only on the host that
+ * *is* the site. A mirror should leave it alone, so its canonical links keep pointing home.
  */
-const DEFAULT = 'https://derekyung.ai.studio';
+const DEFAULT = 'https://blog-for-myself.mingyinyunggg.workers.dev';
 
 /**
  * An origin, checked. A bad value fails the build here rather than shipping a sitemap full of

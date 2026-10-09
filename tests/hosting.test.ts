@@ -57,9 +57,9 @@ describe('every host is told the same thing', () => {
 });
 
 describe('SITE_URL', () => {
-  it('defaults to the AI Studio deployment', () => {
-    expect(siteOrigin(undefined)).toBe('https://derekyung.ai.studio');
-    expect(siteOrigin('')).toBe('https://derekyung.ai.studio');
+  it('defaults to the live deployment, on Cloudflare Workers', () => {
+    expect(siteOrigin(undefined)).toBe('https://blog-for-myself.mingyinyunggg.workers.dev');
+    expect(siteOrigin('')).toBe('https://blog-for-myself.mingyinyunggg.workers.dev');
   });
 
   it('takes an origin from the build environment, trailing slash or not', () => {
