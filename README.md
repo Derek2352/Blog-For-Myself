@@ -517,8 +517,10 @@ five commits.
   Confirm details, add photos, set `draft: false` to publish. The Mentorship & Career tab
   therefore only shows in dev until you publish something in it.
 - All covers are generated placeholders — replace `images/cover.svg` with real photography
-  (keep the `cover:` path in sync). Also replace `src/assets/portrait.svg` and
-  `public/cv.pdf` (the CV download button points there).
+  (keep the `cover:` path in sync). Also replace `src/assets/portrait.svg`.
+- `public/cv.pdf` is the real CV (the download button points there). It is published **without the
+  phone number**: the September 2026 CV's "Phone: … |" was redacted out of the text layer before it
+  was committed, leaving the email where it stood. Do the same with the next one.
 
 ## Design notes
 
